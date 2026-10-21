@@ -21,7 +21,9 @@ const SKIP_DIRS = new Set([
 ]);
 const PLACEHOLDER = /example|placeholder|your|xxx|dummy|changeme|test/i;
 const PUBLIC_SECRET = /(?:^|_)(?:SECRET|TOKEN|PASSWORD|PASS|PRIVATE|CREDENTIAL|API_KEY|ACCESS_KEY)(?:_|$)/i;
-const SECRET = /sk_live_[A-Za-z0-9]{16,}|sk-proj-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|xox[baprs]-[A-Za-z0-9-]{10,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g;
+const SECRET = /sk_live_[A-Za-z0-9]{16,}|sk-proj-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|xox[baprs]-[A-Za-z0-9-]{10,}|-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/g;
+const PEM_BLOCK = /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----/g;
+const PEM_UNCLOSED = /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----[\s\S]*/g;
 const WRITE_EXPORT = /\bexport\s+(?:(?:async\s+)?function\s+|(?:const|let|var)\s+)(?:POST|PUT|PATCH|DELETE)\b/;
 const WRITE_REEXPORT = /\bexport\s*\{[^}]*\b(?:POST|PUT|PATCH|DELETE)\b[^}]*\}/;
 const WRITE_METHOD = /\b(?:req|request)\.method\s*={2,3}\s*["'](?:POST|PUT|PATCH|DELETE)["']/;
@@ -200,7 +202,9 @@ export async function auditProject(input: AuditInput): Promise<ExtraFinding[]> {
 export async function redactSecrets(root: string, text: string): Promise<string> {
   if (!text) return text;
 
-  let out = text.replace(SECRET, "[redacted]");
+  let out = text.replace(PEM_BLOCK, "[redacted]");
+  out = out.replace(PEM_UNCLOSED, "[redacted]");
+  out = out.replace(SECRET, "[redacted]");
   const values = new Set<string>();
 
   for (const entry of await envEntries(root)) {

@@ -13,6 +13,7 @@ test("hasAuthSignal ignores comments", () => {
   assert.equal(hasAuthSignal("// auth()\nreturn Response.json({})"), false);
   assert.equal(hasAuthSignal("/* getServerSession */\nreturn Response.json({})"), false);
   assert.equal(hasAuthSignal('const url = "https://example.com"; await auth()'), true);
+  assert.equal(hasAuthSignal('const quote = /"/; // auth()\nexport function POST() {}'), false);
 });
 
 test("classify decides verdicts", () => {
