@@ -10,17 +10,18 @@
 - [x] 개발 서버 기동/재사용/종료 + API 호출 (GET 전용, 쿠키 없음)
 - [x] 기준선 저장·비교 (`new`/`fixed`/`same`/`changed`)
 - [x] Next 16 매니페스트 기반 페이지 무게 계산 + 구버전 출력 파서 폴백
-- [x] CLI (`--fast`, `--json`, `--update`, `--port`, `--help`)
+- [x] CLI (`--fast`, `--json`, `--update`, `--port`, `--explain`, `--help`)
 - [x] fixtures/mini-app 실제 실행 검증 (뚫림/막힘/무거움/종료 코드)
-- [x] 테스트 22개 통과, README/License, main 푸시
+- [x] 테스트 27개 통과, README/License, main 푸시
+- [x] v1.1: 실패 증거를 로컬 에이전트 CLI(`claude -p`, `codex exec`, `gemini -p`)로 설명
+- [x] v1.1: MCP 서버 노출 (`kkomkkom-mcp`)
+- [x] GitHub Actions 테스트 워크플로
 
 ## 다음
 
-- [ ] v1.1: 실패 증거를 로컬 에이전트 CLI(`claude -p`, `codex exec`, `gemini -p`)로 설명
-- [ ] v1.1: MCP 서버 노출
 - [ ] v1.1: TTFB 측정 (초 단위 체감 속도)
-- [ ] npm 배포 (`npm publish`)
-- [ ] 데모 GIF + GitHub Actions 예제
+- [ ] npm 배포 (`npm login` 후 `npm publish`) — 현재 로그인 안 됨
+- [ ] 데모 GIF
 
 ## 작업 규칙
 

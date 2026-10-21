@@ -26,11 +26,12 @@ Node 20 이상. Next.js 프로젝트 루트에서 실행하세요.
 ## 사용법
 
 ```bash
-kkomkkom               # 인증 검사 + 빌드/무게 검사
-kkomkkom --fast        # 인증 검사만 (빌드 생략)
-kkomkkom --json        # JSON 출력
-kkomkkom --port 3100   # 개발 서버 포트 지정
-kkomkkom --update      # --fast 결과를 기준선에 반영
+kkomkkom                    # 인증 검사 + 빌드/무게 검사
+kkomkkom --fast             # 인증 검사만 (빌드 생략)
+kkomkkom --json             # JSON 출력
+kkomkkom --explain          # 실패 원인을 로컬 AI CLI로 설명
+kkomkkom --port 3100        # 개발 서버 포트 지정
+kkomkkom --update           # --fast 결과를 기준선에 반영
 ```
 
 결과는 `.kkomkkom/baseline.json`에 저장됩니다. 이 파일을 git에 올리면 팀원도 같은 기준으로 비교합니다.
@@ -44,6 +45,43 @@ API 라우트를 로그인 없이 호출합니다. 401/403이면 잠긴 것으�
 **무거워진 페이지**
 
 `next build`가 만든 매니페스트에서 라우트별 JS 전송량을 계산해 지난 실행과 비교합니다. 기본 기준은 **+15% 그리고 +30KB**를 동시에 넘을 때입니다.
+
+## AI가 원인을 설명해주게 하기
+
+`--explain`을 붙이면 설치된 AI CLI를 찾아 실패 원인을 설명합니다.
+
+```bash
+kkomkkom --explain
+kkomkkom --explain --explain-with claude
+```
+
+`claude`, `codex`, `gemini` 순서로 찾습니다. 구독만 있으면 API 키 없이 동작합니다. 아무것도 없으면 붙여넣기용 프롬프트를 출력합니다.
+
+## MCP로 붙이기
+
+Claude Code, Cursor 같은 에이전트가 직접 검사를 호출하게 할 수 있습니다.
+
+```json
+{
+  "mcpServers": {
+    "kkomkkom": {
+      "command": "npx",
+      "args": ["-y", "-p", "kkomkkom", "kkomkkom-mcp"]
+    }
+  }
+}
+```
+
+도구 이름은 `kkomkkom`이고, `projectPath`와 `fast`를 받습니다.
+
+## 커밋 전에 자동으로 돌리기
+
+```yaml
+# .github/workflows/kkomkkom.yml
+- run: npx kkomkkom --fast
+```
+
+안 잠긴 API가 있으면 종료 코드가 1이라 워크플로가 실패합니다.
 
 ## 안전 규칙
 
