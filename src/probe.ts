@@ -26,10 +26,16 @@ function detailFor(verdict: Verdict): MessageKey {
   }
 }
 
-async function followsToLoginPage(baseUrl: string, location: string): Promise<boolean> {
+async function followsToLoginPage(
+  requestUrl: string,
+  baseUrl: string,
+  location: string,
+): Promise<boolean> {
+  if (!location) return false;
+
   let target: URL;
   try {
-    target = new URL(location, baseUrl);
+    target = new URL(location, requestUrl);
   } catch {
     return false;
   }
@@ -54,7 +60,12 @@ async function followsToLoginPage(baseUrl: string, location: string): Promise<bo
     if (res.status >= 300 && res.status < 400) {
       const next = res.headers.get("location");
       if (!next) return false;
-      const nextUrl = new URL(next, url);
+      let nextUrl: URL;
+      try {
+        nextUrl = new URL(next, url);
+      } catch {
+        return false;
+      }
       if (nextUrl.origin !== base.origin) return false;
       url = nextUrl;
       continue;
@@ -101,7 +112,7 @@ async function probeOne(baseUrl: string, route: RouteInfo, config: Config): Prom
   const redirect = res.status >= 300 && res.status < 400;
   const location = redirect ? (res.headers.get("location") ?? "") : "";
   let verdict = classify(res.status, hasAuthSignal(route.source));
-  if (redirect) verdict = (await followsToLoginPage(baseUrl, location)) ? "locked" : "check";
+  if (redirect) verdict = (await followsToLoginPage(url, baseUrl, location)) ? "locked" : "check";
 
   if (verdict === "exposed" || verdict === "check") {
     const body = (await res.text().catch(() => "")).slice(0, 2048);
