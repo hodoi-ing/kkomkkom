@@ -75,7 +75,11 @@ async function main() {
         await cp(join(FIXTURE, entry), join(work, entry), { recursive: true });
       }
     }
-    await symlink(join(FIXTURE, "node_modules"), join(work, "node_modules"), "dir");
+    await symlink(
+      join(FIXTURE, "node_modules"),
+      join(work, "node_modules"),
+      process.platform === "win32" ? "junction" : "dir",
+    );
 
     const ko = await runCli(["--json", "--lang", "ko"], work);
     let report = null;
