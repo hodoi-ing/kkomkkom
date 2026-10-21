@@ -17,7 +17,7 @@ export function hasAuthSignal(source: string): boolean {
 
 export function classify(status: number, hasSignal: boolean): Verdict {
   if (status === 401 || status === 403) return "locked";
-  if (status >= 300 && status < 400) return "locked";
+  if (status >= 300 && status < 400) return "check";
   if (status >= 500) return "error";
   if (status === 404 || status === 405) return "unknown";
   if (status >= 200 && status < 300) return hasSignal ? "exposed" : "check";

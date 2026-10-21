@@ -38,6 +38,12 @@ async function withServer(run) {
       case "/api/html-error":
         res.writeHead(200, { "content-type": "text/html" });
         return res.end("<html><body>Application error</body></html>");
+      case "/api/redirect-login":
+        res.writeHead(302, { location: "/login?next=/api/redirect-login" });
+        return res.end();
+      case "/api/redirect-data":
+        res.writeHead(307, { location: "/api/public" });
+        return res.end();
       case "/api/orders/42":
         return json(200, { id: 42 });
       default:
@@ -62,6 +68,8 @@ test("probeRoutes classifies each response", async () => {
       apiRoute("/api/secret", "const user = await auth()"),
       apiRoute("/api/boom", ""),
       apiRoute("/api/html-error", "const user = await auth()"),
+      apiRoute("/api/redirect-login"),
+      apiRoute("/api/redirect-data"),
       apiRoute("/api/unknown"),
     ];
     const findings = await probeRoutes(baseUrl, routes, config());
@@ -72,6 +80,10 @@ test("probeRoutes classifies each response", async () => {
     assert.equal(byPath["/api/secret"].verdict, "locked");
     assert.equal(byPath["/api/boom"].verdict, "error");
     assert.equal(byPath["/api/html-error"].verdict, "error");
+    assert.equal(byPath["/api/redirect-login"].verdict, "locked");
+    assert.equal(byPath["/api/redirect-login"].detailKey, "detailLockedRedirect");
+    assert.equal(byPath["/api/redirect-data"].verdict, "check");
+    assert.equal(byPath["/api/redirect-data"].detailKey, "detailRedirect");
     assert.equal(byPath["/api/unknown"].verdict, "unknown");
   });
 });

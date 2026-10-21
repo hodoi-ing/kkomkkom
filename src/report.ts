@@ -71,13 +71,16 @@ export function renderReport(diff: Diff, options: ReportOptions): string {
     lines.push("");
   }
 
-  if (exposed.length > 0) {
-    const shown = newExposed.length > 0 ? newExposed : exposed;
-    const title = newExposed.length > 0
-      ? t(lang, "newExposedTitle", { count: newExposed.length })
-      : t(lang, "exposedTitle", { count: exposed.length });
-    lines.push(paint(title, RED, color));
-    lines.push(...list(shown));
+  if (newExposed.length > 0) {
+    lines.push(paint(t(lang, "newExposedTitle", { count: newExposed.length }), RED, color));
+    lines.push(...list(newExposed));
+    lines.push("");
+  }
+
+  const stillExposed = exposed.filter((route) => route.state !== "new");
+  if (stillExposed.length > 0) {
+    lines.push(paint(t(lang, "exposedTitle", { count: stillExposed.length }), RED, color));
+    lines.push(...list(stillExposed));
     lines.push("");
   }
 

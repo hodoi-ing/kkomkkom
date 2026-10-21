@@ -8,6 +8,10 @@ export interface DevServer {
   stop: () => Promise<void>;
 }
 
+export interface DevServerOptions {
+  reuse?: boolean;
+}
+
 export function isPortOpen(port: number, host = "127.0.0.1"): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = createConnection({ port, host });
@@ -59,11 +63,15 @@ async function looksLikeNext(url: string): Promise<boolean> {
   }
 }
 
-export async function startDevServer(root: string, port: number): Promise<DevServer> {
+export async function startDevServer(
+  root: string,
+  port: number,
+  options: DevServerOptions = {},
+): Promise<DevServer> {
   const url = `http://127.0.0.1:${port}`;
 
   if (await isPortOpen(port)) {
-    if (!(await looksLikeNext(url))) {
+    if (!options.reuse || !(await looksLikeNext(url))) {
       throw new KkomkkomError("errPortInUse", { port });
     }
     return { url, owned: false, stop: async () => {} };

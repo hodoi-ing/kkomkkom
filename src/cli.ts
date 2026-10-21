@@ -22,13 +22,14 @@ Usage
   kkomkkom --explain-with claude
   kkomkkom --update           save a --fast result as the baseline
   kkomkkom --port 3100        dev server port
+  kkomkkom --reuse            use a Next server already running on the port
   kkomkkom --lang ko          report language: en, ko, ja, zh, es
   kkomkkom --strict           exit 1 on warnings too
 
 Exit codes
   0  nothing blocking
-  1  deploy-blocking problem (or any warning with --strict)
-  2  the check itself failed
+  1  deploy-blocking problem (open API, build failure, or any warning with --strict)
+  2  the check could not run (project, port, or config error)
 
 Config
   kkomkkom.config.json in the project root changes behavior.
@@ -40,10 +41,11 @@ Config
   kkomkkom --explain          문제 원인을 로컬 AI CLI로 설명
   kkomkkom --update           --fast 결과를 기준선에 반영
   kkomkkom --port 3100        개발 서버 포트 지정
+  kkomkkom --reuse            이미 실행 중인 Next 서버 재사용 (프로젝트 확인 안 함)
   kkomkkom --lang ko          보고서 언어: en, ko, ja, zh, es
   kkomkkom --strict           경고만 있어도 종료 코드 1
 
-  종료 코드: 0 문제 없음 / 1 배포 중단 또는 --strict 경고 / 2 검사 실패
+  종료 코드: 0 문제 없음 / 1 배포를 막는 문제(노출·빌드 실패·--strict 경고) / 2 검사를 시작·완료하지 못함(프로젝트·포트·설정 오류)
 `;
 
 let activeLang: Lang = resolveLang();
@@ -55,6 +57,7 @@ async function main(): Promise<number> {
       json: { type: "boolean", default: false },
       update: { type: "boolean", default: false },
       strict: { type: "boolean", default: false },
+      reuse: { type: "boolean", default: false },
       explain: { type: "boolean", default: false },
       "explain-with": { type: "string" },
       lang: { type: "string" },
@@ -92,6 +95,7 @@ async function main(): Promise<number> {
     update: values.update,
     port,
     strict: values.strict,
+    reuse: values.reuse,
   });
 
   const hasIssues =
