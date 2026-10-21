@@ -47,6 +47,14 @@ async function withServer(run) {
         );
       case "/api/auth/export":
         return json(200, { privateData: "visible" });
+      case "/api/login":
+        return json(200, { privateData: "visible" });
+      case "/api/start":
+        res.writeHead(307, { location: "login" });
+        return res.end();
+      case "/api/redirect-empty":
+        res.writeHead(302);
+        return res.end();
       case "/api/redirect-login":
         res.writeHead(302, { location: "/login?next=/api/redirect-login" });
         return res.end();
@@ -83,6 +91,8 @@ test("probeRoutes classifies each response", async () => {
       apiRoute("/api/redirect-login"),
       apiRoute("/api/redirect-data"),
       apiRoute("/api/redirect-auth-data"),
+      apiRoute("/api/start"),
+      apiRoute("/api/redirect-empty"),
       apiRoute("/api/unknown"),
     ];
     const findings = await probeRoutes(baseUrl, routes, config());
@@ -99,6 +109,9 @@ test("probeRoutes classifies each response", async () => {
     assert.equal(byPath["/api/redirect-data"].detailKey, "detailRedirect");
     assert.equal(byPath["/api/redirect-auth-data"].verdict, "check");
     assert.equal(byPath["/api/redirect-auth-data"].detailKey, "detailRedirect");
+    assert.equal(byPath["/api/start"].verdict, "check");
+    assert.equal(byPath["/api/start"].detailKey, "detailRedirect");
+    assert.equal(byPath["/api/redirect-empty"].verdict, "check");
     assert.equal(byPath["/api/unknown"].verdict, "unknown");
   });
 });
