@@ -9,10 +9,10 @@ function fillParams(path: string, params: Record<string, string> | undefined): s
   return path.replace(/\[\.{0,3}([^\]]+)\]/g, (match, key: string) => params?.[key] ?? match);
 }
 
-function detailFor(verdict: Verdict, status: number): MessageKey {
+function detailFor(verdict: Verdict): MessageKey {
   switch (verdict) {
     case "locked":
-      return status >= 300 && status < 400 ? "detailLockedRedirect" : "detailLocked";
+      return "detailLocked";
     case "exposed":
       return "detailExposed";
     case "check":
@@ -21,6 +21,17 @@ function detailFor(verdict: Verdict, status: number): MessageKey {
       return "detailError";
     default:
       return "detailUnknown";
+  }
+}
+
+const LOGIN_PATH = /\/(login|log-in|signin|sign-in|signout|sign-out|auth|sso|session)(\/|$|\?)/i;
+
+function isLoginRedirect(location: string): boolean {
+  if (!location) return false;
+  try {
+    return LOGIN_PATH.test(new URL(location, "http://127.0.0.1").pathname);
+  } catch {
+    return LOGIN_PATH.test(location);
   }
 }
 
@@ -47,7 +58,10 @@ async function probeOne(baseUrl: string, route: RouteInfo, config: Config): Prom
     return { path: route.path, verdict: "unknown", detailKey: "detailTimeout" };
   }
 
+  const redirect = res.status >= 300 && res.status < 400;
+  const location = redirect ? (res.headers.get("location") ?? "") : "";
   let verdict = classify(res.status, hasAuthSignal(route.source));
+  if (redirect) verdict = isLoginRedirect(location) ? "locked" : "check";
 
   if (verdict === "exposed" || verdict === "check") {
     const body = (await res.text().catch(() => "")).slice(0, 2048);
@@ -58,12 +72,20 @@ async function probeOne(baseUrl: string, route: RouteInfo, config: Config): Prom
     }
   }
 
+  const detailKey = redirect
+    ? verdict === "locked"
+      ? "detailLockedRedirect"
+      : "detailRedirect"
+    : detailFor(verdict);
+
   return {
     path: route.path,
     verdict,
     status: res.status,
-    detailKey: detailFor(verdict, res.status),
-    detailVars: { status: res.status },
+    detailKey,
+    detailVars: redirect
+      ? { status: res.status, location: location.slice(0, 80) || "?" }
+      : { status: res.status },
   };
 }
 

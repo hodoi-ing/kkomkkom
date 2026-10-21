@@ -104,6 +104,13 @@ async function main() {
       ja.stderr || ja.stdout,
     );
 
+    const update = await runCli(["--json", "--update"], work);
+    check(
+      "first --fast --update writes a baseline",
+      update.status === 1 && existsSync(join(work, ".kkomkkom", "baseline.json")),
+      update.stderr || update.stdout,
+    );
+
     await writeFile(
       join(work, "kkomkkom.config.json"),
       JSON.stringify({ ignoreRoutes: ["/api/leak", "/api/orders/*"] }),

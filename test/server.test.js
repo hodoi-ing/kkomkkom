@@ -17,9 +17,13 @@ async function serve(body, run) {
   }
 }
 
-test("reuses a running Next.js server", async () => {
+test("reuses a running Next.js server only when asked", async () => {
   await serve('<script src="/_next/static/chunk.js"></script>', async (port) => {
-    const server = await startDevServer("/tmp", port);
+    await assert.rejects(
+      () => startDevServer("/tmp", port),
+      (error) => error.key === "errPortInUse",
+    );
+    const server = await startDevServer("/tmp", port, { reuse: true });
     assert.equal(server.owned, false);
     await server.stop();
   });
@@ -27,9 +31,11 @@ test("reuses a running Next.js server", async () => {
 
 test("refuses a port used by another program", async () => {
   await serve("<html>hello</html>", async (port) => {
-    await assert.rejects(
-      () => startDevServer("/tmp", port),
-      (error) => error.key === "errPortInUse" && error.vars.port === port,
-    );
+    for (const reuse of [false, true]) {
+      await assert.rejects(
+        () => startDevServer("/tmp", port, { reuse }),
+        (error) => error.key === "errPortInUse" && error.vars.port === port,
+      );
+    }
   });
 });

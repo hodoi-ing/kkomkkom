@@ -77,6 +77,36 @@ test("a warning that was already there is still shown", () => {
   assert.doesNotMatch(out, /Safe to deploy/);
 });
 
+test("new and existing exposed routes are both listed", () => {
+  const diff = {
+    firstRun: false,
+    routes: [
+      {
+        path: "/api/a",
+        from: "exposed",
+        to: "exposed",
+        state: "same",
+        detailKey: "detailExposed",
+        detailVars: { status: 200 },
+      },
+      {
+        path: "/api/b",
+        from: undefined,
+        to: "exposed",
+        state: "new",
+        detailKey: "detailExposed",
+        detailVars: { status: 200 },
+      },
+    ],
+    pages: [],
+  };
+  const out = renderReport(diff, { lang: "en", color: false });
+  assert.match(out, /Newly open doors: 1/);
+  assert.match(out, /Open doors: 1/);
+  assert.match(out, /\/api\/a/);
+  assert.match(out, /\/api\/b/);
+});
+
 test("a failed build never says it is safe to deploy", () => {
   const out = renderReport(
     { firstRun: false, routes: [], pages: [] },

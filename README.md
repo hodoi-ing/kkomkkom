@@ -39,12 +39,13 @@ kkomkkom --fast             # 인증 검사만 (빌드 생략)
 kkomkkom --json             # JSON 출력
 kkomkkom --explain          # 실패 원인을 로컬 AI CLI로 설명
 kkomkkom --port 3100        # 개발 서버 포트 지정
+kkomkkom --reuse            # 이미 실행 중인 Next 서버 재사용
 kkomkkom --update           # --fast 결과를 기준선에 반영
 kkomkkom --lang ko          # 보고서 언어 (en, ko, ja, zh, es)
 kkomkkom --strict           # 경고만 있어도 종료 코드 1
 ```
 
-종료 코드는 `0` 문제 없음, `1` 배포를 막는 문제(또는 `--strict`에서 경고), `2` 검사 자체가 실패입니다.
+종료 코드는 `0` 문제 없음, `1` 배포를 막는 문제(노출·빌드 실패·`--strict` 경고), `2` 검사를 시작하거나 끝내지 못함(프로젝트·포트·설정 오류)입니다.
 
 결과는 `.kkomkkom/baseline.json`에 저장됩니다. 이 파일을 git에 올리면 팀원도 같은 기준으로 비교합니다.
 
@@ -114,7 +115,7 @@ Claude Code, Cursor 같은 에이전트가 직접 검사를 호출하게 할 수
 }
 ```
 
-도구 이름은 `kkomkkom`이고, `projectPath`, `fast`, `strict`, `lang`을 받습니다.
+도구 이름은 `kkomkkom`이고, `projectPath`, `fast`, `strict`, `reuse`, `lang`을 받습니다.
 
 ## 커밋 전에 자동으로 돌리기
 
@@ -131,6 +132,8 @@ Claude Code, Cursor 같은 에이전트가 직접 검사를 호출하게 할 수
 - 쿠키와 인증 헤더를 보내지 않습니다.
 - `localhost`만 검사합니다.
 - 우리가 띄운 개발 서버만 종료합니다.
+- 포트가 비어 있으면 직접 서버를 띄웁니다. 이미 떠 있는 서버를 쓰려면 `--reuse`를 명시해야 하며, 이때 그 서버가 같은 프로젝트인지 확인하지는 않습니다. 다른 프로젝트의 서버라면 결과가 틀릴 수 있습니다.
+- 리다이렉트(3xx)는 자동으로 따라가지 않습니다. 로그인 페이지로 가면 잠긴 것으로, 그 외에는 확인이 필요한 경고로 표시합니다.
 
 ## 한계
 

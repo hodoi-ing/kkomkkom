@@ -13,6 +13,7 @@ export interface RunOptions {
   update?: boolean;
   port?: number;
   strict?: boolean;
+  reuse?: boolean;
 }
 
 export interface RunResult {
@@ -31,7 +32,7 @@ export async function runCheck(options: RunOptions): Promise<RunResult> {
     throw new KkomkkomError("errNoRoutes");
   }
 
-  const server = await startDevServer(options.root, port);
+  const server = await startDevServer(options.root, port, { reuse: options.reuse });
   let findings;
   try {
     findings = await probeRoutes(server.url, routes, config);
@@ -57,8 +58,8 @@ export async function runCheck(options: RunOptions): Promise<RunResult> {
 
   if (!options.fast && !buildFailed) {
     await saveBaseline(options.root, buildBaseline(findings, pages));
-  } else if (options.fast && options.update && previous) {
-    await saveBaseline(options.root, buildBaseline(findings, previous.pages));
+  } else if (options.fast && options.update) {
+    await saveBaseline(options.root, buildBaseline(findings, previous?.pages ?? {}));
   }
 
   const exposed = diff.routes.filter((route) => route.to === "exposed").length;

@@ -21,6 +21,7 @@ const TOOL = {
       projectPath: { type: "string", description: "Next.js project path (default: current folder)" },
       fast: { type: "boolean", description: "Auth check only, skip the build" },
       strict: { type: "boolean", description: "Treat warnings as failures" },
+      reuse: { type: "boolean", description: "Use a Next server already running on the port" },
       lang: { type: "string", description: "Report language: en, ko, ja, zh, es" },
     },
   },
@@ -30,11 +31,22 @@ function send(message: unknown): void {
   process.stdout.write(JSON.stringify(message) + "\n");
 }
 
-async function callTool(args: { projectPath?: string; fast?: boolean; strict?: boolean; lang?: string }) {
+async function callTool(args: {
+  projectPath?: string;
+  fast?: boolean;
+  strict?: boolean;
+  reuse?: boolean;
+  lang?: string;
+}) {
   const cwd = args.projectPath ? resolve(args.projectPath) : process.cwd();
   const root = await findProjectRoot(cwd);
   const lang = resolveLang(args.lang);
-  const result = await runCheck({ root, fast: args.fast === true, strict: args.strict === true });
+  const result = await runCheck({
+    root,
+    fast: args.fast === true,
+    strict: args.strict === true,
+    reuse: args.reuse === true,
+  });
   const text = renderReport(result.diff, {
     lang,
     color: false,
@@ -85,7 +97,13 @@ rl.on("line", async (line) => {
   if (method === "tools/call" && params?.name === TOOL.name) {
     try {
       const result = await callTool(
-        (params.arguments as { projectPath?: string; fast?: boolean; strict?: boolean; lang?: string }) ?? {},
+        (params.arguments as {
+          projectPath?: string;
+          fast?: boolean;
+          strict?: boolean;
+          reuse?: boolean;
+          lang?: string;
+        }) ?? {},
       );
       send({ jsonrpc: "2.0", id, result });
     } catch (error) {

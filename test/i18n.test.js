@@ -43,7 +43,7 @@ test("t fills placeholders", () => {
 });
 
 test("every language has every message with no unfilled placeholders", () => {
-  const vars = { count: 1, status: 200, port: 3100, log: "log", lang: "xx", provider: "claude" };
+  const vars = { count: 1, status: 200, port: 3100, log: "log", lang: "xx", provider: "claude", location: "?" };
   for (const lang of LANGS) {
     for (const key of MESSAGE_KEYS) {
       const text = t(lang, key, vars);

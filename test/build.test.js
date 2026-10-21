@@ -63,3 +63,23 @@ test("measurePages sums shared and route-specific chunks", async () => {
   assert.equal(pages["/checkout"].firstLoadJs, 1500);
   await rm(root, { recursive: true, force: true });
 });
+
+test("measurePages finds chunks written without the /_next prefix", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kkomkkom-build-"));
+  await mkdir(join(root, ".next", "static", "chunks"), { recursive: true });
+  await mkdir(join(root, ".next", "server", "app", "checkout"), { recursive: true });
+  await writeFile(join(root, ".next", "static", "chunks", "shared.js"), "x".repeat(1000));
+  await writeFile(join(root, ".next", "static", "chunks", "route.js"), "x".repeat(500));
+  await writeFile(
+    join(root, ".next", "build-manifest.json"),
+    JSON.stringify({ rootMainFiles: ["static/chunks/shared.js"], polyfillFiles: [] }),
+  );
+  await writeFile(
+    join(root, ".next", "server", "app", "checkout", "page_client-reference-manifest.js"),
+    'globalThis.x = ["static/chunks/route.js"];',
+  );
+
+  const pages = await measurePages(root);
+  assert.equal(pages["/checkout"].firstLoadJs, 1500);
+  await rm(root, { recursive: true, force: true });
+});

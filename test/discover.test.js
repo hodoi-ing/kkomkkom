@@ -45,6 +45,29 @@ test("discoverRoutes maps app and pages routes", async () => {
   await rm(root, { recursive: true, force: true });
 });
 
+test("discoverRoutes supports src/app and src/pages", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kkomkkom-src-"));
+  await writeFile(join(root, "package.json"), JSON.stringify({ dependencies: { next: "16.0.0" } }));
+  const files = {
+    "src/app/api/leak/route.ts": "export async function GET() { return Response.json({}) }",
+    "src/app/dashboard/page.tsx": "export default function Page() { return null }",
+    "src/pages/api/legacy.ts": "export default function handler() {}",
+    "src/pages/index.tsx": "export default function Page() { return null }",
+  };
+  for (const [path, body] of Object.entries(files)) {
+    const full = join(root, path);
+    await mkdir(join(full, ".."), { recursive: true });
+    await writeFile(full, body);
+  }
+
+  const paths = (await discoverRoutes(root)).map((route) => `${route.kind}:${route.path}`);
+  assert.ok(paths.includes("api:/api/leak"));
+  assert.ok(paths.includes("page:/dashboard"));
+  assert.ok(paths.includes("api:/api/legacy"));
+  assert.ok(paths.includes("page:/"));
+  await rm(root, { recursive: true, force: true });
+});
+
 test("discoverRoutes marks dynamic routes", async () => {
   const root = await fixture();
   const routes = await discoverRoutes(root);

@@ -1,5 +1,5 @@
 import { readdir, readFile } from "node:fs/promises";
-import { basename, dirname, join, relative, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { KkomkkomError } from "./errors.js";
 import type { RouteInfo } from "./types.js";
 
@@ -45,14 +45,19 @@ function segments(from: string, to: string): string[] {
   return relative(from, to).split(sep).filter(Boolean);
 }
 
-function appPath(root: string, file: string): string {
-  const segs = segments(join(root, "app"), dirname(file))
+function isInside(dir: string, file: string): boolean {
+  const rel = relative(dir, file);
+  return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+}
+
+function appPath(appRoot: string, file: string): string {
+  const segs = segments(appRoot, dirname(file))
     .filter((s) => !s.startsWith("(") && !s.startsWith("@"));
   return "/" + segs.join("/");
 }
 
-function pagesPath(root: string, file: string): string {
-  const segs = segments(join(root, "pages"), dirname(file));
+function pagesPath(pagesRoot: string, file: string): string {
+  const segs = segments(pagesRoot, dirname(file));
   const name = basename(file).replace(SOURCE_FILE, "");
   if (name !== "index") segs.push(name);
   return "/" + segs.join("/");
@@ -63,33 +68,35 @@ function isDynamic(path: string): boolean {
 }
 
 export async function discoverRoutes(root: string): Promise<RouteInfo[]> {
+  const appRoots = [join(root, "app"), join(root, "src", "app")];
+  const pagesRoots = [join(root, "pages"), join(root, "src", "pages")];
+
   const files: string[] = [];
-  await walk(join(root, "app"), files);
-  await walk(join(root, "pages"), files);
+  for (const dir of [...appRoots, ...pagesRoots]) await walk(dir, files);
 
   const routes: RouteInfo[] = [];
   for (const file of files) {
-    const inApp = !relative(join(root, "app"), file).startsWith("..");
-    const inPages = !relative(join(root, "pages"), file).startsWith("..");
+    const appRoot = appRoots.find((dir) => isInside(dir, file));
+    const pagesRoot = pagesRoots.find((dir) => isInside(dir, file));
     const name = basename(file);
 
     let kind: "api" | "page" | null = null;
     let path = "";
 
-    if (inApp && ROUTE_FILE.test(name)) {
+    if (appRoot && ROUTE_FILE.test(name)) {
       kind = "api";
-      path = appPath(root, file);
-    } else if (inApp && PAGE_FILE.test(name)) {
+      path = appPath(appRoot, file);
+    } else if (appRoot && PAGE_FILE.test(name)) {
       kind = "page";
-      path = appPath(root, file);
-    } else if (inPages && file.includes(`${sep}api${sep}`) && SOURCE_FILE.test(name)) {
+      path = appPath(appRoot, file);
+    } else if (pagesRoot && file.includes(`${sep}api${sep}`) && SOURCE_FILE.test(name)) {
       kind = "api";
-      path = pagesPath(root, file);
-    } else if (inPages && !file.includes(`${sep}api${sep}`) && SOURCE_FILE.test(name)) {
+      path = pagesPath(pagesRoot, file);
+    } else if (pagesRoot && !file.includes(`${sep}api${sep}`) && SOURCE_FILE.test(name)) {
       const base = name.replace(SOURCE_FILE, "");
       if (base.startsWith("_")) continue;
       kind = "page";
-      path = pagesPath(root, file);
+      path = pagesPath(pagesRoot, file);
     }
 
     if (!kind) continue;

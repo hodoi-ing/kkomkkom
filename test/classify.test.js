@@ -12,7 +12,7 @@ test("hasAuthSignal detects common Next.js auth calls", () => {
 test("classify decides verdicts", () => {
   assert.equal(classify(401, false), "locked");
   assert.equal(classify(403, false), "locked");
-  assert.equal(classify(307, false), "locked");
+  assert.equal(classify(307, false), "check");
   assert.equal(classify(200, true), "exposed");
   assert.equal(classify(200, false), "check");
   assert.equal(classify(404, false), "unknown");

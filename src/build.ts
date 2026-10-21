@@ -5,7 +5,7 @@ import type { PageWeight } from "./types.js";
 
 const BOX = /[┌├└│─┐┘┴┬╭╮╰╯]/g;
 const ICONS = new Set(["○", "ƒ", "λ", "●", "◐", "◍", "◌"]);
-const CHUNK = /\/_next\/(static\/chunks\/[^"']+\.js)/g;
+const CHUNK = /(static\/chunks\/[^"']+\.js)/g;
 
 function toBytes(value: string, unit: string): number {
   const n = Number.parseFloat(value);
@@ -37,7 +37,7 @@ export function parseFirstLoadJs(output: string): Record<string, PageWeight> {
 }
 
 async function sizeOf(root: string, chunk: string): Promise<number> {
-  const file = join(root, ".next", chunk.replace(/^\/+/, ""));
+  const file = join(root, ".next", chunk.replace(/^\/_next\//, "").replace(/^\/+/, ""));
   const info = await stat(file).catch(() => null);
   return info?.size ?? 0;
 }
