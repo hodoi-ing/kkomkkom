@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
+import type { Dirent } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { extname, join, relative, sep } from "node:path";
-import { hasAuthSignal, matchesGlob } from "./classify.js";
+import { hasAuthSignal, matchesGlob, stripComments } from "./classify.js";
 import type { Config, ExtraFinding, RouteInfo } from "./types.js";
 
 export interface AuditInput {
@@ -26,6 +27,37 @@ const WRITE_REEXPORT = /\bexport\s*\{[^}]*\b(?:POST|PUT|PATCH|DELETE)\b[^}]*\}/;
 const WRITE_METHOD = /\b(?:req|request)\.method\s*={2,3}\s*["'](?:POST|PUT|PATCH|DELETE)["']/;
 const WRITE_CASE = /\bcase\s*["'](?:POST|PUT|PATCH|DELETE)["']\s*:/;
 
+function isEnvEntry(entry: Dirent): boolean {
+  return (
+    (entry.isFile() || entry.isSymbolicLink()) &&
+    entry.name.startsWith(".env") &&
+    !ENV_EXAMPLES.has(entry.name) &&
+    !/\.(?:example|sample|template)$/.test(entry.name)
+  );
+}
+
+async function envEntries(root: string): Promise<Dirent[]> {
+  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+  return entries.filter(isEnvEntry);
+}
+
+function envPairs(content: string): Array<{ key: string; value: string }> {
+  const pairs: Array<{ key: string; value: string }> = [];
+  for (const line of content.split(/\r?\n/)) {
+    const match = line.trim().match(/^(?:export\s+)?([A-Za-z_][\w]*)\s*=\s*(.*)$/);
+    if (!match) continue;
+    const key = match[1];
+    let value = match[2].trim();
+    if (value.startsWith('"') || value.startsWith("'")) {
+      value = value.match(/^(["'])(.*?)\1/)?.[2] ?? "";
+    } else {
+      value = value.split("#", 1)[0].trim();
+    }
+    pairs.push({ key, value });
+  }
+  return pairs;
+}
+
 function git(root: string, args: string[]): Promise<{ code: number | null; stdout: string }> {
   return new Promise((resolve) => {
     execFile("git", ["-C", root, ...args], { timeout: 5000 }, (error, stdout) => {
@@ -47,12 +79,7 @@ async function scanSources(dir: string, files: string[]): Promise<void> {
 async function auditSecrets(root: string): Promise<ExtraFinding[]> {
   const findings: ExtraFinding[] = [];
   const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
-  const envFiles = entries.filter((entry) =>
-    (entry.isFile() || entry.isSymbolicLink()) &&
-    entry.name.startsWith(".env") &&
-    !ENV_EXAMPLES.has(entry.name) &&
-    !/\.(?:example|sample|template)$/.test(entry.name),
-  );
+  const envFiles = entries.filter(isEnvEntry);
   const repo = await git(root, ["rev-parse", "--is-inside-work-tree"]);
   const inGit = repo.code === 0 && repo.stdout.trim() === "true";
   const publicKeys = new Set<string>();
@@ -74,16 +101,7 @@ async function auditSecrets(root: string): Promise<ExtraFinding[]> {
     }
 
     const content = await readFile(join(root, file), "utf8").catch(() => "");
-    for (const line of content.split(/\r?\n/)) {
-      const match = line.trim().match(/^(?:export\s+)?([A-Za-z_][\w]*)\s*=\s*(.*)$/);
-      if (!match) continue;
-      const key = match[1];
-      let value = match[2].trim();
-      if (value.startsWith('"') || value.startsWith("'")) {
-        value = value.match(/^(["'])(.*?)\1/)?.[2] ?? "";
-      } else {
-        value = value.split("#", 1)[0].trim();
-      }
+    for (const { key, value } of envPairs(content)) {
       if (key.startsWith("NEXT_PUBLIC_") && PUBLIC_SECRET.test(key) &&
           value.trim() !== "" && !PLACEHOLDER.test(value)) publicKeys.add(key);
     }
@@ -115,11 +133,13 @@ async function auditSecrets(root: string): Promise<ExtraFinding[]> {
 }
 
 function auditWrites(routes: RouteInfo[], config: Config): ExtraFinding[] {
-  return routes.filter((route) => route.kind === "api" &&
-    !config.ignoreRoutes.some((pattern) => matchesGlob(route.path, pattern)) &&
-    !hasAuthSignal(route.source) &&
-    [WRITE_EXPORT, WRITE_REEXPORT, WRITE_METHOD, WRITE_CASE].some((pattern) => pattern.test(route.source)),
-  ).map((route) => ({ id: `write-no-auth:${route.path}`, severity: "warning",
+  return routes.filter((route) => {
+    if (route.kind !== "api") return false;
+    if (config.ignoreRoutes.some((pattern) => matchesGlob(route.path, pattern))) return false;
+    const source = stripComments(route.source);
+    return !hasAuthSignal(source) &&
+      [WRITE_EXPORT, WRITE_REEXPORT, WRITE_METHOD, WRITE_CASE].some((pattern) => pattern.test(source));
+  }).map((route) => ({ id: `write-no-auth:${route.path}`, severity: "warning",
     messageKey: "extraWriteNoAuth", messageVars: { path: route.path } }));
 }
 
@@ -175,4 +195,26 @@ export async function auditProject(input: AuditInput): Promise<ExtraFinding[]> {
   const rank = { critical: 0, warning: 1, info: 2 };
   return [...new Map(findings.map((finding) => [finding.id, finding])).values()]
     .sort((a, b) => rank[a.severity] - rank[b.severity] || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+export async function redactSecrets(root: string, text: string): Promise<string> {
+  if (!text) return text;
+
+  let out = text.replace(SECRET, "[redacted]");
+  const values = new Set<string>();
+
+  for (const entry of await envEntries(root)) {
+    const content = await readFile(join(root, entry.name), "utf8").catch(() => "");
+    for (const { value } of envPairs(content)) {
+      if (value.length < 8) continue;
+      if (/^(?:true|false|null|undefined|localhost|development|production|test)$/i.test(value)) continue;
+      values.add(value);
+    }
+  }
+
+  // Longer values first so a short value cannot split a longer secret.
+  for (const value of [...values].sort((a, b) => b.length - a.length)) {
+    out = out.split(value).join("[redacted]");
+  }
+  return out;
 }

@@ -9,6 +9,12 @@ test("hasAuthSignal detects common Next.js auth calls", () => {
   assert.equal(hasAuthSignal("return Response.json({ ok: true })"), false);
 });
 
+test("hasAuthSignal ignores comments", () => {
+  assert.equal(hasAuthSignal("// auth()\nreturn Response.json({})"), false);
+  assert.equal(hasAuthSignal("/* getServerSession */\nreturn Response.json({})"), false);
+  assert.equal(hasAuthSignal('const url = "https://example.com"; await auth()'), true);
+});
+
 test("classify decides verdicts", () => {
   assert.equal(classify(401, false), "locked");
   assert.equal(classify(403, false), "locked");

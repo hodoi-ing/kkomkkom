@@ -6,7 +6,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { auditProject } from "../dist/audit.js";
+import { auditProject, redactSecrets } from "../dist/audit.js";
 
 const exec = promisify(execFile);
 const fakeKey = "sk_live_" + "FAKE0123456789".repeat(3);
@@ -167,6 +167,29 @@ test("write API with auth(), GET-only and ignored writes do not warn", async (t)
     route("/api/read", "export function GET() {}"),
     route("/api/webhooks/event", "export const POST = handler"),
   ], { ignoreRoutes: ["/api/webhooks/*"] })), []);
+});
+
+test("comments do not create or hide write APIs", async (t) => {
+  const root = await fixture(t);
+  assert.deepEqual(await auditProject(input(root, [
+    route("/api/comment-only", "// export { POST }\nexport function GET() {}"),
+    route("/api/hidden-write", "// auth()\nexport function POST() {}"),
+  ])), [{
+    id: "write-no-auth:/api/hidden-write", severity: "warning", messageKey: "extraWriteNoAuth",
+    messageVars: { path: "/api/hidden-write" },
+  }]);
+});
+
+test("redactSecrets hides env values and high-confidence keys", async (t) => {
+  const root = await fixture(t, {
+    ".env": "API_TOKEN=super-secret-value",
+    ".env.local": "OTHER_TOKEN=another-secret-value",
+  });
+  const out = await redactSecrets(root, `failed: API_TOKEN=super-secret-value ${fakeKey} OTHER_TOKEN=another-secret-value`);
+  assert.ok(!out.includes("super-secret-value"));
+  assert.ok(!out.includes("another-secret-value"));
+  assert.ok(!out.includes(fakeKey));
+  assert.match(out, /\[redacted\]/);
 });
 
 for (const [status, body, expected] of [

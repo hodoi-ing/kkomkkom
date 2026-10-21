@@ -61,6 +61,11 @@ async function withServer(run) {
       case "/api/redirect-data":
         res.writeHead(307, { location: "/api/public" });
         return res.end();
+      case "/api/redirect-query":
+        res.writeHead(307, { location: "/api/public?token=TOP_SECRET" });
+        return res.end();
+      case "/api/public":
+        return json(200, { ok: true });
       case "/api/redirect-auth-data":
         res.writeHead(307, { location: "/api/auth/export" });
         return res.end();
@@ -90,6 +95,7 @@ test("probeRoutes classifies each response", async () => {
       apiRoute("/api/html-error", "const user = await auth()"),
       apiRoute("/api/redirect-login"),
       apiRoute("/api/redirect-data"),
+      apiRoute("/api/redirect-query"),
       apiRoute("/api/redirect-auth-data"),
       apiRoute("/api/start"),
       apiRoute("/api/redirect-empty"),
@@ -107,6 +113,10 @@ test("probeRoutes classifies each response", async () => {
     assert.equal(byPath["/api/redirect-login"].detailKey, "detailLockedRedirect");
     assert.equal(byPath["/api/redirect-data"].verdict, "check");
     assert.equal(byPath["/api/redirect-data"].detailKey, "detailRedirect");
+    assert.equal(byPath["/api/redirect-query"].verdict, "check");
+    assert.equal(byPath["/api/redirect-query"].detailKey, "detailRedirect");
+    assert.equal(byPath["/api/redirect-query"].detailVars.location, "/api/public");
+    assert.ok(!JSON.stringify(byPath["/api/redirect-query"]).includes("TOP_SECRET"));
     assert.equal(byPath["/api/redirect-auth-data"].verdict, "check");
     assert.equal(byPath["/api/redirect-auth-data"].detailKey, "detailRedirect");
     assert.equal(byPath["/api/start"].verdict, "check");

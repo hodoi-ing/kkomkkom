@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createConnection } from "node:net";
+import { redactSecrets } from "./audit.js";
 import { KkomkkomError } from "./errors.js";
 
 export interface DevServer {
@@ -91,7 +92,9 @@ export async function startDevServer(
   const ready = await waitForHttp(url, 60_000);
   if (!ready) {
     stopChild(child);
-    throw new KkomkkomError("errDevTimeout", { log: log.slice(-1500) });
+    throw new KkomkkomError("errDevTimeout", {
+      log: await redactSecrets(root, log.slice(-1500)).catch(() => ""),
+    });
   }
 
   return {

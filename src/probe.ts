@@ -11,6 +11,12 @@ function fillParams(path: string, params: Record<string, string> | undefined): s
   return path.replace(/\[\.{0,3}([^\]]+)\]/g, (match, key: string) => params?.[key] ?? match);
 }
 
+function safeLocation(location: string): string {
+  const withoutQuery = location.split(/[?#]/, 1)[0];
+  const withoutUserInfo = withoutQuery.replace(/\/\/[^/]*@/, "//");
+  return withoutUserInfo.slice(0, 80) || "?";
+}
+
 function detailFor(verdict: Verdict): MessageKey {
   switch (verdict) {
     case "locked":
@@ -135,7 +141,7 @@ async function probeOne(baseUrl: string, route: RouteInfo, config: Config): Prom
     status: res.status,
     detailKey,
     detailVars: redirect
-      ? { status: res.status, location: location.slice(0, 80) || "?" }
+      ? { status: res.status, location: safeLocation(location) }
       : { status: res.status },
   };
 }

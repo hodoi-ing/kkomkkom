@@ -28,7 +28,9 @@
 - [x] v1.3: 쓰기 API 인증 점검 (POST/PUT/PATCH/DELETE 정적 신호, 실제 요청 없음)
 - [x] v1.3: GPT 세션이 별도 worktree에서 `src/audit.ts` + 테스트 35개 구현, main에 병합
 - [x] v1.3: 보고서·종료 코드·JSON `extra`·MCP·`--explain` 통합
-- [x] v1.3: 단위 테스트 82개 + `npm run verify` 17개 통과
+- [x] v1.3: 단위 테스트 85개 + `npm run verify` 17개 통과
+- [x] GPT 최종 검증 FAIL 4건 수정: 빌드/개발 로그 비밀값 가림, 리다이렉트 쿼리 제거, 주석 오판, --fast 문구
+- [x] 수정 후 단위 테스트 85개 + `npm run verify` 17개 재통과
 
 ## 다음
 

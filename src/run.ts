@@ -1,4 +1,4 @@
-import { auditProject } from "./audit.js";
+import { auditProject, redactSecrets } from "./audit.js";
 import { runBuild } from "./build.js";
 import { buildBaseline, diffBaseline, loadBaseline, saveBaseline } from "./baseline.js";
 import { loadConfig } from "./config.js";
@@ -57,7 +57,7 @@ export async function runCheck(options: RunOptions): Promise<RunResult> {
     pages = build.pages;
     if (!build.ok) {
       buildFailed = true;
-      buildTail = build.output;
+      buildTail = await redactSecrets(options.root, build.output).catch(() => "");
     }
   }
 
