@@ -32,7 +32,11 @@ kkomkkom --json             # JSON 출력
 kkomkkom --explain          # 실패 원인을 로컬 AI CLI로 설명
 kkomkkom --port 3100        # 개발 서버 포트 지정
 kkomkkom --update           # --fast 결과를 기준선에 반영
+kkomkkom --lang ko          # 보고서 언어 (en, ko, ja, zh, es)
+kkomkkom --strict           # 경고만 있어도 종료 코드 1
 ```
+
+종료 코드는 `0` 문제 없음, `1` 배포를 막는 문제(또는 `--strict`에서 경고), `2` 검사 자체가 실패입니다.
 
 결과는 `.kkomkkom/baseline.json`에 저장됩니다. 이 파일을 git에 올리면 팀원도 같은 기준으로 비교합니다.
 
@@ -45,6 +49,36 @@ API 라우트를 로그인 없이 호출합니다. 401/403이면 잠긴 것으�
 **무거워진 페이지**
 
 `next build`가 만든 매니페스트에서 라우트별 JS 전송량을 계산해 지난 실행과 비교합니다. 기본 기준은 **+15% 그리고 +30KB**를 동시에 넘을 때입니다.
+
+## 위험 등급과 배포 중단
+
+결과 맨 위에 지금 배포해도 되는지 큰 글씨로 알려줍니다.
+
+| 등급 | 무엇 | 보고서 | 종료 코드 |
+|---|---|---|---|
+| 🔴 critical | 로그인 없이 열린 API | ⛔ 배포를 멈추세요 | 1 |
+| 🟡 warning | 확인이 필요한 API, 서버 오류, 무거워진 페이지 | ⚠️ 배포 전에 확인하세요 | 0 (`--strict`면 1) |
+| ⚪ info | 잠긴 문, 공개 목록, 확인 불가 | 목록에만 표시 | 0 |
+
+```
+⛔ 배포를 멈추세요 — 문제 1개가 있습니다.
+
+🔴 뚫린 문 1개
+  /api/leak  로그인 없이 데이터가 그대로 나옵니다 (200)
+```
+
+CI에서 경고도 막고 싶으면 `kkomkkom --fast --strict`를 쓰세요.
+
+## 언어
+
+보고서는 영어·한국어·일본어·중국어·스페인어로 나옵니다.
+
+```bash
+kkomkkom --lang ja
+KKOMKKOM_LANG=es kkomkkom
+```
+
+`--lang` > `KKOMKKOM_LANG` > `LC_ALL` > `LANG` 순서로 고르고, 아무것도 없으면 영어입니다. AI 설명(`--explain`)도 같은 언어로 요청합니다.
 
 ## AI가 원인을 설명해주게 하기
 
@@ -72,16 +106,16 @@ Claude Code, Cursor 같은 에이전트가 직접 검사를 호출하게 할 수
 }
 ```
 
-도구 이름은 `kkomkkom`이고, `projectPath`와 `fast`를 받습니다.
+도구 이름은 `kkomkkom`이고, `projectPath`, `fast`, `strict`, `lang`을 받습니다.
 
 ## 커밋 전에 자동으로 돌리기
 
 ```yaml
 # .github/workflows/kkomkkom.yml
-- run: npx kkomkkom --fast
+- run: npx kkomkkom --fast --strict
 ```
 
-안 잠긴 API가 있으면 종료 코드가 1이라 워크플로가 실패합니다.
+안 잠긴 API가 있으면 종료 코드가 1이라 워크플로가 실패합니다. `--strict`를 붙이면 경고도 실패로 봅니다.
 
 ## 안전 규칙
 

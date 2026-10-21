@@ -8,8 +8,8 @@ import { buildPrompt, explain } from "../dist/explain.js";
 const diff = {
   firstRun: false,
   routes: [
-    { path: "/api/users", from: undefined, to: "exposed", state: "new", detail: "로그인 없이 데이터가 그대로 나옵니다 (200)" },
-    { path: "/api/health", from: "locked", to: "locked", state: "same", detail: "막힘 (401)" },
+    { path: "/api/users", from: undefined, to: "exposed", state: "new", detailKey: "detailExposed", detailVars: { status: 200 } },
+    { path: "/api/health", from: "locked", to: "locked", state: "same", detailKey: "detailLocked", detailVars: { status: 401 } },
   ],
   pages: [{ path: "/checkout", from: 180_000, to: 420_000, deltaBytes: 240_000, deltaPercent: 133, heavy: true }],
 };
@@ -21,10 +21,10 @@ test("buildPrompt includes only problems", () => {
   assert.doesNotMatch(prompt, /\/api\/health/);
 });
 
-test("buildPrompt asks for Korean and marks guesses", () => {
-  const prompt = buildPrompt(diff);
-  assert.match(prompt, /한국어/);
-  assert.match(prompt, /추측/);
+test("buildPrompt asks for the report language and marks guesses", () => {
+  const prompt = buildPrompt(diff, "ko");
+  assert.match(prompt, /Korean/);
+  assert.match(prompt, /guess/);
 });
 
 test("explain falls back to an installed provider and returns its text", { skip: process.platform === "win32" }, async () => {

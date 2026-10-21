@@ -1,12 +1,15 @@
+import { t, type Lang } from "./i18n.js";
 import type { Diff, RouteDiff } from "./types.js";
 
 export interface ReportOptions {
+  lang: Lang;
   color: boolean;
   buildFailed?: boolean;
   buildTail?: string;
 }
 
 const DIM = "\u001b[2m";
+const BOLD = "\u001b[1m";
 const RED = "\u001b[31m";
 const YELLOW = "\u001b[33m";
 const GREEN = "\u001b[32m";
@@ -21,67 +24,86 @@ function kb(bytes: number): string {
   return `${Math.round(bytes / 100) / 10}KB`;
 }
 
-function list(items: RouteDiff[]): string[] {
-  const width = Math.max(...items.map((item) => item.path.length));
-  return items.map((item) => `  ${item.path.padEnd(width)}  ${item.detail}`);
-}
-
 export function renderReport(diff: Diff, options: ReportOptions): string {
-  const { color } = options;
+  const { color, lang } = options;
   const lines: string[] = [];
+
   const exposed = diff.routes.filter((route) => route.to === "exposed");
   const newExposed = exposed.filter((route) => route.state === "new");
   const fixed = diff.routes.filter((route) => route.state === "fixed");
-  const check = diff.routes.filter((route) => route.to === "check" && route.state !== "same");
+  const check = diff.routes.filter((route) => route.to === "check");
   const errors = diff.routes.filter((route) => route.to === "error");
   const unknown = diff.routes.filter((route) => route.to === "unknown");
   const heavy = diff.pages.filter((page) => page.heavy);
 
+  const warnings = check.length + errors.length + heavy.length;
+
+  const list = (items: RouteDiff[]): string[] => {
+    const width = Math.max(...items.map((item) => item.path.length));
+    return items.map(
+      (item) => `  ${item.path.padEnd(width)}  ${t(lang, item.detailKey, item.detailVars)}`,
+    );
+  };
+
   if (options.buildFailed) {
-    lines.push(paint("🏗️  빌드가 실패했습니다", RED, color));
+    lines.push(paint(t(lang, "buildFailedTitle"), RED, color));
     const tail = (options.buildTail ?? "").trim().split("\n").slice(-12);
     for (const line of tail) lines.push(`  ${line}`);
     lines.push("");
   }
 
-  lines.push(paint("꼼꼼 — 커밋 전 점검", DIM, color));
+  lines.push(paint(t(lang, "reportTitle"), DIM, color));
   lines.push("");
 
+  if (exposed.length > 0) {
+    lines.push(paint(t(lang, "stopBanner", { count: exposed.length }), BOLD + RED, color));
+    lines.push("");
+  } else if (warnings > 0) {
+    lines.push(paint(t(lang, "warnBanner", { count: warnings }), YELLOW, color));
+    lines.push("");
+  } else if (!options.buildFailed) {
+    lines.push(paint(t(lang, "okBanner"), GREEN, color));
+    lines.push("");
+  }
+
   if (diff.firstRun) {
-    lines.push("첫 실행이라 전체를 보여줍니다. 이 상태를 기준으로 저장합니다.");
+    lines.push(t(lang, "firstRunNote"));
     lines.push("");
   }
 
   if (exposed.length > 0) {
-    const title = newExposed.length > 0 ? `🔴 새로 뚫린 문 ${newExposed.length}개` : `🔴 뚫린 문 ${exposed.length}개`;
+    const shown = newExposed.length > 0 ? newExposed : exposed;
+    const title = newExposed.length > 0
+      ? t(lang, "newExposedTitle", { count: newExposed.length })
+      : t(lang, "exposedTitle", { count: exposed.length });
     lines.push(paint(title, RED, color));
-    lines.push(...list(newExposed.length > 0 ? newExposed : exposed));
+    lines.push(...list(shown));
     lines.push("");
   }
 
   if (check.length > 0) {
-    lines.push(paint(`🟡 확인이 필요한 문 ${check.length}개`, YELLOW, color));
+    lines.push(paint(t(lang, "checkTitle", { count: check.length }), YELLOW, color));
     lines.push(...list(check));
     lines.push("");
   }
 
   if (errors.length > 0) {
-    lines.push(paint(`⚠️  서버 오류가 나는 문 ${errors.length}개`, YELLOW, color));
+    lines.push(paint(t(lang, "errorTitle", { count: errors.length }), YELLOW, color));
     lines.push(...list(errors));
     lines.push("");
   }
 
   if (fixed.length > 0) {
-    lines.push(paint(`🟢 막힌 문 ${fixed.length}개`, GREEN, color));
+    lines.push(paint(t(lang, "fixedTitle", { count: fixed.length }), GREEN, color));
     lines.push(...list(fixed));
     lines.push("");
   }
 
   if (heavy.length > 0) {
-    lines.push(paint(`🐢 무거워진 페이지 ${heavy.length}개`, YELLOW, color));
+    lines.push(paint(t(lang, "heavyTitle", { count: heavy.length }), YELLOW, color));
     const width = Math.max(...heavy.map((page) => page.path.length));
     for (const page of heavy) {
-      const from = page.from === undefined ? "기준 없음" : kb(page.from);
+      const from = page.from === undefined ? "-" : kb(page.from);
       const delta = page.deltaBytes >= 0 ? `+${kb(page.deltaBytes)}` : `-${kb(-page.deltaBytes)}`;
       const percent = page.from ? `, ${page.deltaPercent >= 0 ? "+" : ""}${Math.round(page.deltaPercent)}%` : "";
       lines.push(`  ${page.path.padEnd(width)}  ${from} → ${kb(page.to)} (${delta}${percent})`);
@@ -90,20 +112,17 @@ export function renderReport(diff: Diff, options: ReportOptions): string {
   }
 
   if (unknown.length > 0) {
-    lines.push(paint(`⚪ 확인하지 못한 문 ${unknown.length}개`, DIM, color));
-    for (const route of unknown) lines.push(paint(`  ${route.path}  ${route.detail}`, DIM, color));
+    lines.push(paint(t(lang, "unknownTitle", { count: unknown.length }), DIM, color));
+    for (const route of unknown) {
+      lines.push(paint(`  ${route.path}  ${t(lang, route.detailKey, route.detailVars)}`, DIM, color));
+    }
     lines.push("");
   }
 
-  if (!diff.firstRun) {
-    if (exposed.length === 0 && heavy.length === 0 && errors.length === 0) {
-      lines.push(paint("✅ 지난번과 달라진 문제가 없습니다.", GREEN, color));
-    } else {
-      const same = diff.routes.filter((route) => route.state === "same").length;
-      lines.push(paint(`   나머지 ${same}개는 지난번과 같습니다.`, DIM, color));
-    }
+  if (!diff.firstRun && exposed.length === 0 && warnings === 0) {
+    const same = diff.routes.filter((route) => route.state === "same").length;
+    if (same > 0) lines.push(paint(t(lang, "restSame", { count: same }), DIM, color));
   }
 
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd();
 }
-

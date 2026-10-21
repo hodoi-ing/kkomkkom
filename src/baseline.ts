@@ -54,7 +54,14 @@ export function diffBaseline(
     else if (from === "exposed" && finding.verdict === "locked") state = "fixed";
     else state = "changed";
 
-    return { path: finding.path, from, to: finding.verdict, state, detail: finding.detail };
+    return {
+      path: finding.path,
+      from,
+      to: finding.verdict,
+      state,
+      detailKey: finding.detailKey,
+      detailVars: finding.detailVars,
+    };
   });
 
   const changedPages: WeightChange[] = Object.entries(pages)

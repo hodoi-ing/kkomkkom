@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { basename, dirname, join, relative, sep } from "node:path";
+import { KkomkkomError } from "./errors.js";
 import type { RouteInfo } from "./types.js";
 
 const ROUTE_FILE = /^route\.(ts|tsx|js|jsx|mjs)$/;
@@ -19,7 +20,7 @@ export async function findProjectRoot(cwd: string): Promise<string> {
     }
     const parent = dirname(dir);
     if (parent === dir) {
-      throw new Error("Next.js 프로젝트를 찾지 못했습니다. package.json에 next가 있는 폴더에서 실행해주세요.");
+      throw new KkomkkomError("errNotNext");
     }
     dir = parent;
   }

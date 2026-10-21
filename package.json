@@ -1,7 +1,7 @@
 {
   "name": "kkomkkom",
   "version": "0.1.0",
-  "description": "Next.js 커밋 전 점검 — 안 잠긴 API 문과 무거워진 페이지를 찾습니다",
+  "description": "Pre-commit check for Next.js: find API routes open without auth and pages that got heavier",
   "type": "module",
   "bin": {
     "kkomkkom": "dist/cli.js",
