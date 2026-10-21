@@ -4,6 +4,8 @@ import type { Config, Finding, RouteInfo, Verdict } from "./types.js";
 
 const TIMEOUT_MS = 8_000;
 const CONCURRENCY = 5;
+const REDIRECT_TIMEOUT_MS = 3_000;
+const MAX_REDIRECT_HOPS = 3;
 
 function fillParams(path: string, params: Record<string, string> | undefined): string {
   return path.replace(/\[\.{0,3}([^\]]+)\]/g, (match, key: string) => params?.[key] ?? match);
@@ -24,15 +26,53 @@ function detailFor(verdict: Verdict): MessageKey {
   }
 }
 
-const LOGIN_PATH = /\/(login|log-in|signin|sign-in|signout|sign-out|auth|sso|session)(\/|$|\?)/i;
-
-function isLoginRedirect(location: string): boolean {
-  if (!location) return false;
+async function followsToLoginPage(baseUrl: string, location: string): Promise<boolean> {
+  let target: URL;
   try {
-    return LOGIN_PATH.test(new URL(location, "http://127.0.0.1").pathname);
+    target = new URL(location, baseUrl);
   } catch {
-    return LOGIN_PATH.test(location);
+    return false;
   }
+
+  const base = new URL(baseUrl);
+  if (target.origin !== base.origin) return false;
+
+  let url = target;
+  for (let hop = 0; hop < MAX_REDIRECT_HOPS; hop += 1) {
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "GET",
+        redirect: "manual",
+        signal: AbortSignal.timeout(REDIRECT_TIMEOUT_MS),
+        headers: { "user-agent": "kkomkkom/0.1" },
+      });
+    } catch {
+      return false;
+    }
+
+    if (res.status >= 300 && res.status < 400) {
+      const next = res.headers.get("location");
+      if (!next) return false;
+      const nextUrl = new URL(next, url);
+      if (nextUrl.origin !== base.origin) return false;
+      url = nextUrl;
+      continue;
+    }
+
+    if (res.status === 401 || res.status === 403) return true;
+    if (res.status < 200 || res.status >= 300) return false;
+
+    const type = res.headers.get("content-type") ?? "";
+    if (!type.includes("text/html")) return false;
+
+    const body = (await res.text().catch(() => "")).slice(0, 8192).toLowerCase();
+    return (
+      /<input[^>]+type=["']?password/.test(body) ||
+      /<form[^>]+action=["'][^"']*(login|signin|sign-in|auth)/.test(body)
+    );
+  }
+  return false;
 }
 
 async function probeOne(baseUrl: string, route: RouteInfo, config: Config): Promise<Finding> {
@@ -61,7 +101,7 @@ async function probeOne(baseUrl: string, route: RouteInfo, config: Config): Prom
   const redirect = res.status >= 300 && res.status < 400;
   const location = redirect ? (res.headers.get("location") ?? "") : "";
   let verdict = classify(res.status, hasAuthSignal(route.source));
-  if (redirect) verdict = isLoginRedirect(location) ? "locked" : "check";
+  if (redirect) verdict = (await followsToLoginPage(baseUrl, location)) ? "locked" : "check";
 
   if (verdict === "exposed" || verdict === "check") {
     const body = (await res.text().catch(() => "")).slice(0, 2048);
