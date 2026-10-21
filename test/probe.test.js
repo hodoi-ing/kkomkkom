@@ -26,7 +26,9 @@ async function withServer(run) {
       res.end(JSON.stringify(body));
     };
 
-    switch (req.url) {
+    const { pathname } = new URL(req.url, "http://127.0.0.1");
+
+    switch (pathname) {
       case "/api/leak":
         return json(200, { email: "a@b.c" });
       case "/api/open":
@@ -38,11 +40,21 @@ async function withServer(run) {
       case "/api/html-error":
         res.writeHead(200, { "content-type": "text/html" });
         return res.end("<html><body>Application error</body></html>");
+      case "/login":
+        res.writeHead(200, { "content-type": "text/html" });
+        return res.end(
+          '<!doctype html><form action="/login" method="post"><input type="password" name="password"></form>',
+        );
+      case "/api/auth/export":
+        return json(200, { privateData: "visible" });
       case "/api/redirect-login":
         res.writeHead(302, { location: "/login?next=/api/redirect-login" });
         return res.end();
       case "/api/redirect-data":
         res.writeHead(307, { location: "/api/public" });
+        return res.end();
+      case "/api/redirect-auth-data":
+        res.writeHead(307, { location: "/api/auth/export" });
         return res.end();
       case "/api/orders/42":
         return json(200, { id: 42 });
@@ -70,6 +82,7 @@ test("probeRoutes classifies each response", async () => {
       apiRoute("/api/html-error", "const user = await auth()"),
       apiRoute("/api/redirect-login"),
       apiRoute("/api/redirect-data"),
+      apiRoute("/api/redirect-auth-data"),
       apiRoute("/api/unknown"),
     ];
     const findings = await probeRoutes(baseUrl, routes, config());
@@ -84,6 +97,8 @@ test("probeRoutes classifies each response", async () => {
     assert.equal(byPath["/api/redirect-login"].detailKey, "detailLockedRedirect");
     assert.equal(byPath["/api/redirect-data"].verdict, "check");
     assert.equal(byPath["/api/redirect-data"].detailKey, "detailRedirect");
+    assert.equal(byPath["/api/redirect-auth-data"].verdict, "check");
+    assert.equal(byPath["/api/redirect-auth-data"].detailKey, "detailRedirect");
     assert.equal(byPath["/api/unknown"].verdict, "unknown");
   });
 });
