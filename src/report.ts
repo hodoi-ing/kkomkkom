@@ -1,11 +1,12 @@
 import { t, type Lang } from "./i18n.js";
-import type { Diff, RouteDiff } from "./types.js";
+import type { Diff, ExtraFinding, RouteDiff } from "./types.js";
 
 export interface ReportOptions {
   lang: Lang;
   color: boolean;
   buildFailed?: boolean;
   buildTail?: string;
+  extras?: ExtraFinding[];
 }
 
 const DIM = "\u001b[2m";
@@ -35,8 +36,12 @@ export function renderReport(diff: Diff, options: ReportOptions): string {
   const errors = diff.routes.filter((route) => route.to === "error");
   const unknown = diff.routes.filter((route) => route.to === "unknown");
   const heavy = diff.pages.filter((page) => page.heavy);
+  const extras = options.extras ?? [];
+  const criticalExtras = extras.filter((extra) => extra.severity === "critical").length;
+  const extraWarnings = extras.filter((extra) => extra.severity === "warning").length;
 
-  const warnings = check.length + errors.length + heavy.length;
+  const critical = exposed.length + criticalExtras;
+  const warnings = check.length + errors.length + heavy.length + extraWarnings;
 
   const list = (items: RouteDiff[]): string[] => {
     const width = Math.max(...items.map((item) => item.path.length));
@@ -55,8 +60,8 @@ export function renderReport(diff: Diff, options: ReportOptions): string {
   lines.push(paint(t(lang, "reportTitle"), DIM, color));
   lines.push("");
 
-  if (exposed.length > 0) {
-    lines.push(paint(t(lang, "stopBanner", { count: exposed.length }), BOLD + RED, color));
+  if (critical > 0) {
+    lines.push(paint(t(lang, "stopBanner", { count: critical }), BOLD + RED, color));
     lines.push("");
   } else if (warnings > 0) {
     lines.push(paint(t(lang, "warnBanner", { count: warnings }), YELLOW, color));
@@ -122,7 +127,17 @@ export function renderReport(diff: Diff, options: ReportOptions): string {
     lines.push("");
   }
 
-  if (!diff.firstRun && exposed.length === 0 && warnings === 0) {
+  if (extras.length > 0) {
+    lines.push(paint(t(lang, "extraTitle", { count: extras.length }), BOLD, color));
+    for (const extra of extras) {
+      const tone = extra.severity === "critical" ? RED : extra.severity === "warning" ? YELLOW : DIM;
+      const icon = extra.severity === "critical" ? "🔴" : extra.severity === "warning" ? "🟡" : "⚪";
+      lines.push(paint(`  ${icon} ${t(lang, extra.messageKey, extra.messageVars)}`, tone, color));
+    }
+    lines.push("");
+  }
+
+  if (!diff.firstRun && critical === 0 && warnings === 0) {
     const same = diff.routes.filter((route) => route.state === "same").length;
     if (same > 0) lines.push(paint(t(lang, "restSame", { count: same }), DIM, color));
   }

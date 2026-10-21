@@ -115,3 +115,66 @@ test("a failed build never says it is safe to deploy", () => {
   assert.match(out, /The build failed/);
   assert.doesNotMatch(out, /Safe to deploy/);
 });
+
+test("a critical project check stops the deploy", () => {
+  const out = renderReport(
+    { firstRun: false, routes: [], pages: [] },
+    {
+      lang: "ko",
+      color: false,
+      extras: [
+        {
+          id: "env-tracked:.env",
+          severity: "critical",
+          messageKey: "extraEnvTracked",
+          messageVars: { file: ".env" },
+        },
+      ],
+    },
+  );
+  assert.match(out, /배포를 멈추세요/);
+  assert.match(out, /프로젝트 점검 1개/);
+  assert.match(out, /\.env이\(가\) git에 올라가 있습니다/);
+  assert.doesNotMatch(out, /배포해도 좋습니다/);
+});
+
+test("a warning project check uses the warning banner", () => {
+  const out = renderReport(
+    { firstRun: false, routes: [], pages: [] },
+    {
+      lang: "en",
+      color: false,
+      extras: [
+        {
+          id: "write-no-auth:/api/orders",
+          severity: "warning",
+          messageKey: "extraWriteNoAuth",
+          messageVars: { path: "/api/orders" },
+        },
+      ],
+    },
+  );
+  assert.match(out, /Check before deploy — 1 warning/);
+  assert.match(out, /\/api\/orders handles writes without an auth check/);
+  assert.doesNotMatch(out, /Stop the deploy/);
+});
+
+test("an info project check is shown without blocking", () => {
+  const out = renderReport(
+    { firstRun: false, routes: [], pages: [] },
+    {
+      lang: "en",
+      color: false,
+      extras: [
+        {
+          id: "page-timeout:/slow",
+          severity: "info",
+          messageKey: "extraPageTimeout",
+          messageVars: { path: "/slow", seconds: 8 },
+        },
+      ],
+    },
+  );
+  assert.match(out, /Safe to deploy/);
+  assert.match(out, /\/slow could not be checked \(8s timeout or connection failed\)/);
+});

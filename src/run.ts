@@ -1,3 +1,4 @@
+import { auditProject } from "./audit.js";
 import { runBuild } from "./build.js";
 import { buildBaseline, diffBaseline, loadBaseline, saveBaseline } from "./baseline.js";
 import { loadConfig } from "./config.js";
@@ -5,7 +6,7 @@ import { discoverRoutes } from "./discover.js";
 import { probeRoutes } from "./probe.js";
 import { startDevServer } from "./server.js";
 import { KkomkkomError } from "./errors.js";
-import type { Diff } from "./types.js";
+import type { Diff, ExtraFinding, Finding } from "./types.js";
 
 export interface RunOptions {
   root: string;
@@ -18,6 +19,7 @@ export interface RunOptions {
 
 export interface RunResult {
   diff: Diff;
+  extras: ExtraFinding[];
   buildFailed: boolean;
   buildTail: string;
   exitCode: number;
@@ -33,9 +35,16 @@ export async function runCheck(options: RunOptions): Promise<RunResult> {
   }
 
   const server = await startDevServer(options.root, port, { reuse: options.reuse });
-  let findings;
+  let findings: Finding[];
+  let extras: ExtraFinding[] = [];
   try {
     findings = await probeRoutes(server.url, routes, config);
+    extras = await auditProject({
+      root: options.root,
+      baseUrl: server.url,
+      routes,
+      config,
+    });
   } finally {
     await server.stop();
   }
@@ -63,9 +72,14 @@ export async function runCheck(options: RunOptions): Promise<RunResult> {
   }
 
   const exposed = diff.routes.filter((route) => route.to === "exposed").length;
+  const criticalExtras = extras.filter((extra) => extra.severity === "critical").length;
   const warnings =
     diff.routes.filter((route) => route.to === "check" || route.to === "error").length +
-    diff.pages.filter((page) => page.heavy).length;
-  const exitCode = buildFailed || exposed > 0 || (options.strict === true && warnings > 0) ? 1 : 0;
-  return { diff, buildFailed, buildTail, exitCode };
+    diff.pages.filter((page) => page.heavy).length +
+    extras.filter((extra) => extra.severity === "warning").length;
+  const exitCode =
+    buildFailed || exposed > 0 || criticalExtras > 0 || (options.strict === true && warnings > 0)
+      ? 1
+      : 0;
+  return { diff, extras, buildFailed, buildTail, exitCode };
 }

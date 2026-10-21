@@ -14,7 +14,7 @@ const pkg = require("../package.json") as { version: string };
 const TOOL = {
   name: "kkomkkom",
   description:
-    "Check a Next.js app for API routes reachable without auth and pages that got much heavier. Use it before committing.",
+    "Check a Next.js app for API routes reachable without auth, exposed secrets, page errors, write APIs without auth, and pages that got much heavier. Use it before committing.",
   inputSchema: {
     type: "object",
     properties: {
@@ -52,6 +52,7 @@ async function callTool(args: {
     color: false,
     buildFailed: result.buildFailed,
     buildTail: result.buildTail,
+    extras: result.extras,
   });
   return { content: [{ type: "text", text }], isError: result.exitCode !== 0 };
 }

@@ -15,8 +15,8 @@ const pkg = require("../package.json") as { version: string };
 const USAGE = `kkomkkom — pre-commit check for Next.js
 
 Usage
-  kkomkkom                    check auth + page weight
-  kkomkkom --fast             auth check only (skip build)
+  kkomkkom                    check auth, secrets, pages + page weight
+  kkomkkom --fast             skip the build (all checks still run)
   kkomkkom --json             machine-readable JSON
   kkomkkom --explain          explain problems with a local AI CLI
   kkomkkom --explain-with claude
@@ -28,15 +28,15 @@ Usage
 
 Exit codes
   0  nothing blocking
-  1  deploy-blocking problem (open API, build failure, or any warning with --strict)
+  1  deploy-blocking problem (open API, exposed secret, build failure, or any warning with --strict)
   2  the check could not run (project, port, or config error)
 
 Config
   kkomkkom.config.json in the project root changes behavior.
 
 꼼꼼 — Next.js 커밋 전 점검
-  kkomkkom                    인증 검사 + 페이지 무게 검사
-  kkomkkom --fast             인증 검사만 (빌드 생략)
+  kkomkkom                    API 인증·비밀키·페이지 오류·페이지 무게 검사
+  kkomkkom --fast             빌드만 생략 (나머지 검사는 모두 실행)
   kkomkkom --json             기계가 읽는 JSON 출력
   kkomkkom --explain          문제 원인을 로컬 AI CLI로 설명
   kkomkkom --update           --fast 결과를 기준선에 반영
@@ -45,7 +45,7 @@ Config
   kkomkkom --lang ko          보고서 언어: en, ko, ja, zh, es
   kkomkkom --strict           경고만 있어도 종료 코드 1
 
-  종료 코드: 0 문제 없음 / 1 배포를 막는 문제(노출·빌드 실패·--strict 경고) / 2 검사를 시작·완료하지 못함(프로젝트·포트·설정 오류)
+  종료 코드: 0 문제 없음 / 1 배포를 막는 문제(API 노출·비밀키 노출·빌드 실패·--strict 경고) / 2 검사를 시작·완료하지 못함(프로젝트·포트·설정 오류)
 `;
 
 let activeLang: Lang = resolveLang();
@@ -101,14 +101,18 @@ async function main(): Promise<number> {
   const hasIssues =
     result.diff.routes.some(
       (route) => route.to === "exposed" || route.to === "check" || route.to === "error",
-    ) || result.diff.pages.some((page) => page.heavy);
+    ) || result.diff.pages.some((page) => page.heavy) || result.extras.length > 0;
   const shouldExplain = values.explain && hasIssues;
 
   let explanation: { provider: string; text: string } | null = null;
   let prompt = "";
   if (shouldExplain) {
-    explanation = await explain(result.diff, { prefer: values["explain-with"], lang });
-    if (!explanation) prompt = buildPrompt(result.diff, lang);
+    explanation = await explain(result.diff, {
+      prefer: values["explain-with"],
+      lang,
+      extras: result.extras,
+    });
+    if (!explanation) prompt = buildPrompt(result.diff, lang, result.extras);
   }
 
   if (values.json) {
@@ -124,6 +128,11 @@ async function main(): Promise<number> {
           detail: t(lang, route.detailKey, route.detailVars),
         })),
       },
+      extra: result.extras.map((extra) => ({
+        id: extra.id,
+        severity: extra.severity,
+        message: t(lang, extra.messageKey, extra.messageVars),
+      })),
       explanation,
     };
     console.log(JSON.stringify(payload, null, 2));
@@ -134,6 +143,7 @@ async function main(): Promise<number> {
         color: Boolean(process.stdout.isTTY) && !process.env.NO_COLOR,
         buildFailed: result.buildFailed,
         buildTail: result.buildTail,
+        extras: result.extras,
       }),
     );
 

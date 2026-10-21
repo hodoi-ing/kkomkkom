@@ -23,9 +23,17 @@
 - [x] GPT 세션 독립 검증 1차: FAIL, 7건 발견 → 3xx 오판·서버 재사용·src 라우트·빌드 청크·첫 --update·노출 목록 수정
 - [x] GPT 세션 독립 검증 2차: 남은 1건(로그인 리다이렉트 판정) 수정 — 목적지가 실제 로그인 화면(비밀번호 폼/401/403)인지 확인
 - [x] GPT 세션 독립 검증 3차: 상대 경로 Location을 요청 URL 기준으로 해석하도록 수정
+- [x] v1.3: 비밀키 점검 (git에 올라간 `.env`, `.gitignore` 누락, `NEXT_PUBLIC_` 비밀 이름, 소스 하드코딩 키)
+- [x] v1.3: 페이지 스모크 (5xx·Next 오류 화면, 8초 타임아웃, GET 전용)
+- [x] v1.3: 쓰기 API 인증 점검 (POST/PUT/PATCH/DELETE 정적 신호, 실제 요청 없음)
+- [x] v1.3: GPT 세션이 별도 worktree에서 `src/audit.ts` + 테스트 35개 구현, main에 병합
+- [x] v1.3: 보고서·종료 코드·JSON `extra`·MCP·`--explain` 통합
+- [x] v1.3: 단위 테스트 82개 + `npm run verify` 17개 통과
 
 ## 다음
 
+- [ ] GPT 세션에 최종 diff 독립 검증 요청
+- [ ] push 후 GitHub Actions (Node 20/22/24 + e2e) 확인
 - [ ] v1.1: TTFB 측정 (초 단위 체감 속도)
 - [ ] npm 배포 — 보류 (사용자 결정: 저장소 비공개 유지, 2026-10-21)
 - [ ] 데모 GIF

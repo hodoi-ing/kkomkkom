@@ -19,8 +19,8 @@ const SKIP_DIRS = new Set([
   "test", "tests", "__tests__", "__mocks__",
 ]);
 const PLACEHOLDER = /example|placeholder|your|xxx|dummy|changeme|test/i;
-const PUBLIC_SECRET = /SECRET|TOKEN|PASSWORD|PASS|PRIVATE|CREDENTIAL|API_KEY|ACCESS_KEY/i;
-const SECRET = /sk_live_[A-Za-z0-9]{16,}|sk-proj-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g;
+const PUBLIC_SECRET = /(?:^|_)(?:SECRET|TOKEN|PASSWORD|PASS|PRIVATE|CREDENTIAL|API_KEY|ACCESS_KEY)(?:_|$)/i;
+const SECRET = /sk_live_[A-Za-z0-9]{16,}|sk-proj-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|xox[baprs]-[A-Za-z0-9-]{10,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g;
 const WRITE_EXPORT = /\bexport\s+(?:(?:async\s+)?function\s+|(?:const|let|var)\s+)(?:POST|PUT|PATCH|DELETE)\b/;
 const WRITE_REEXPORT = /\bexport\s*\{[^}]*\b(?:POST|PUT|PATCH|DELETE)\b[^}]*\}/;
 const WRITE_METHOD = /\b(?:req|request)\.method\s*={2,3}\s*["'](?:POST|PUT|PATCH|DELETE)["']/;
@@ -37,7 +37,7 @@ function git(root: string, args: string[]): Promise<{ code: number | null; stdou
 async function scanSources(dir: string, files: string[]): Promise<void> {
   const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
   for (const entry of entries) {
-    if (SKIP_DIRS.has(entry.name)) continue;
+    if (entry.name.startsWith(".") || SKIP_DIRS.has(entry.name)) continue;
     const path = join(dir, entry.name);
     if (entry.isDirectory()) await scanSources(path, files);
     else if (entry.isFile() && SOURCE_EXTENSIONS.has(extname(entry.name))) files.push(path);
@@ -48,7 +48,10 @@ async function auditSecrets(root: string): Promise<ExtraFinding[]> {
   const findings: ExtraFinding[] = [];
   const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
   const envFiles = entries.filter((entry) =>
-    (entry.isFile() || entry.isSymbolicLink()) && entry.name.startsWith(".env") && !ENV_EXAMPLES.has(entry.name),
+    (entry.isFile() || entry.isSymbolicLink()) &&
+    entry.name.startsWith(".env") &&
+    !ENV_EXAMPLES.has(entry.name) &&
+    !/\.(?:example|sample|template)$/.test(entry.name),
   );
   const repo = await git(root, ["rev-parse", "--is-inside-work-tree"]);
   const inGit = repo.code === 0 && repo.stdout.trim() === "true";
