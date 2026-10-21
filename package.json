@@ -4,7 +4,8 @@
   "description": "Next.js 커밋 전 점검 — 안 잠긴 API 문과 무거워진 페이지를 찾습니다",
   "type": "module",
   "bin": {
-    "kkomkkom": "dist/cli.js"
+    "kkomkkom": "dist/cli.js",
+    "kkomkkom-mcp": "dist/mcp.js"
   },
   "files": [
     "dist"
@@ -24,6 +25,14 @@
     "checkup",
     "cli"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hodoi-ing/kkomkkom.git"
+  },
+  "homepage": "https://github.com/hodoi-ing/kkomkkom#readme",
+  "bugs": {
+    "url": "https://github.com/hodoi-ing/kkomkkom/issues"
+  },
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^22.10.0",
