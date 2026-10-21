@@ -63,3 +63,12 @@ export interface Diff {
 }
 
 export type Severity = "critical" | "warning" | "info";
+
+export type ExtraSeverity = "critical" | "warning" | "info";
+
+export interface ExtraFinding {
+  id: string;
+  severity: ExtraSeverity;
+  messageKey: MessageKey;
+  messageVars?: Record<string, string | number>;
+}
