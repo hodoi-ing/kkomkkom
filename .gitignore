@@ -2,5 +2,6 @@ node_modules/
 dist/
 .next/
 .kkomkkom/
+.verify-*/
 *.log
 .DS_Store

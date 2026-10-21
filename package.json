@@ -16,6 +16,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test test/*.test.js",
+    "verify": "node scripts/verify.mjs",
     "prepublishOnly": "npm run build",
     "prepack": "npm run build"
   },
