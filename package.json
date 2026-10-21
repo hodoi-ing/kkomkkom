@@ -1,0 +1,32 @@
+{
+  "name": "kkomkkom",
+  "version": "0.1.0",
+  "description": "Next.js 커밋 전 점검 — 안 잠긴 API 문과 무거워진 페이지를 찾습니다",
+  "type": "module",
+  "bin": {
+    "kkomkkom": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test test/*.test.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "nextjs",
+    "security",
+    "api",
+    "checkup",
+    "cli"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}
