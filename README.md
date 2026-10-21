@@ -150,7 +150,8 @@ Claude Code, Cursor 같은 에이전트가 직접 검사를 호출하게 할 수
 
 ```bash
 npm install
-npm test
+npm test          # 빌드 + 단위 테스트
+npm run verify    # 빌드 + 단위 테스트 + 실제 Next 앱 e2e (수동 확인 없이 한 번에)
 npm run build
 node dist/cli.js --port 3199 --fast   # fixtures/mini-app 에서
 ```

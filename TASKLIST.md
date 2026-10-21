@@ -19,6 +19,7 @@
 - [x] v1.2: 위험 등급(critical/warning/info) + "배포를 멈추세요" 배너 + `--strict` 종료 코드
 - [x] v1.2: 다국어 보고서 (en/ko/ja/zh/es) + `--lang`, 환경변수 자동 감지, AI 설명도 같은 언어
 - [x] v1.2: 테스트 39개 통과, 실제 fixture에서 ja/zh/ko + strict 종료 코드 검증
+- [x] 자동 검증: `npm run verify` (빌드 + 단위 테스트 40개 + 실제 Next 앱 e2e) + CI e2e 잡
 
 ## 다음
 
