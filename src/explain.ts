@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { t, type Lang } from "./i18n.js";
-import type { Diff } from "./types.js";
+import type { Diff, ExtraFinding } from "./types.js";
 
 const TIMEOUT_MS = 90_000;
 
@@ -24,7 +24,7 @@ export const PROVIDERS: Provider[] = [
   { name: "gemini", command: "gemini", args: (prompt) => ["-p", prompt] },
 ];
 
-export function buildPrompt(diff: Diff, lang: Lang = "en"): string {
+export function buildPrompt(diff: Diff, lang: Lang = "en", extras: ExtraFinding[] = []): string {
   const exposed = diff.routes.filter((route) => route.to === "exposed");
   const errors = diff.routes.filter((route) => route.to === "error");
   const heavy = diff.pages.filter((page) => page.heavy);
@@ -51,6 +51,12 @@ export function buildPrompt(diff: Diff, lang: Lang = "en"): string {
       const from = page.from === undefined ? "no baseline" : `${Math.round(page.from / 1000)}KB`;
       lines.push(`- ${page.path}: ${from} -> ${Math.round(page.to / 1000)}KB (+${Math.round(page.deltaPercent)}%)`);
     }
+    lines.push("");
+  }
+  if (extras.length > 0) {
+    lines.push("[Project checks]");
+    for (const extra of extras) lines.push(`- ${t(lang, extra.messageKey, extra.messageVars)}`);
+    lines.push("");
   }
 
   return lines.join("\n").trim();
@@ -85,9 +91,9 @@ function runProvider(provider: Provider, prompt: string): Promise<string | null>
 
 export async function explain(
   diff: Diff,
-  options: { prefer?: string; lang?: Lang } = {},
+  options: { prefer?: string; lang?: Lang; extras?: ExtraFinding[] } = {},
 ): Promise<{ provider: string; text: string } | null> {
-  const prompt = buildPrompt(diff, options.lang ?? "en");
+  const prompt = buildPrompt(diff, options.lang ?? "en", options.extras ?? []);
   const ordered = options.prefer
     ? [...PROVIDERS.filter((p) => p.name === options.prefer), ...PROVIDERS.filter((p) => p.name !== options.prefer)]
     : PROVIDERS;

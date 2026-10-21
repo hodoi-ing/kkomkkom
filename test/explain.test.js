@@ -27,6 +27,19 @@ test("buildPrompt asks for the report language and marks guesses", () => {
   assert.match(prompt, /guess/);
 });
 
+test("buildPrompt includes project checks", () => {
+  const prompt = buildPrompt({ firstRun: false, routes: [], pages: [] }, "en", [
+    {
+      id: "env-tracked:.env",
+      severity: "critical",
+      messageKey: "extraEnvTracked",
+      messageVars: { file: ".env" },
+    },
+  ]);
+  assert.match(prompt, /\[Project checks\]/);
+  assert.match(prompt, /\.env is tracked by git/);
+});
+
 test("explain falls back to an installed provider and returns its text", { skip: process.platform === "win32" }, async () => {
   const dir = await mkdtemp(join(tmpdir(), "kkomkkom-explain-"));
   const bin = join(dir, "claude");

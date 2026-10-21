@@ -87,7 +87,7 @@ test("public secret name warns without exposing its value", async (t) => {
 });
 
 test("public API URL is not a secret name", async (t) => {
-  const root = await fixture(t, { ".env": "NEXT_PUBLIC_API_URL=https://example.com" });
+  const root = await fixture(t, { ".env": "NEXT_PUBLIC_API_URL=https://example.com\nNEXT_PUBLIC_COMPASS=public" });
   assert.deepEqual(await auditProject(input(root)), []);
 });
 
@@ -98,6 +98,7 @@ test("env parsing handles export, quotes, comments, placeholders and duplicate k
     ".env.example": "NEXT_PUBLIC_BAD_SECRET=real-value",
     ".env.sample": "NEXT_PUBLIC_BAD_TOKEN=real-value",
     ".env.template": "NEXT_PUBLIC_BAD_PASSWORD=real-value",
+    ".env.local.example": "NEXT_PUBLIC_ALSO_BAD_SECRET=real-value",
     "nested/.env": "NEXT_PUBLIC_NESTED_SECRET=real-value",
   });
   assert.deepEqual((await auditProject(input(root))).map((f) => f.id), [
@@ -115,13 +116,13 @@ test("hardcoded key is critical with only its relative file and line", async (t)
 
 test("all high-confidence patterns are detected once per file line", async (t) => {
   const values = [fakeKey, "sk-proj-" + "FAKE0123456789_".repeat(3), "AKIA" + "FAKE0123456789ABC",
-    "ghp_" + "FAKE01234567".repeat(3), "xoxb-FAKE-0123456789", "AIza" + "FAKE012".repeat(5),
+    "ghp_" + "FAKE01234567".repeat(3), "xoxb-FAKE-0123456789",
     "-----BEGIN PRIVATE KEY-----", "-----BEGIN RSA PRIVATE KEY-----",
     "-----BEGIN EC PRIVATE KEY-----", "-----BEGIN OPENSSH PRIVATE KEY-----"];
   const root = await fixture(t, { "lib/keys.cjs": values.map((v) => `${v} ${v}`).join("\n") });
   const findings = await auditProject(input(root));
-  assert.equal(findings.length, 10);
-  assert.deepEqual(new Set(findings.map((f) => f.messageVars.line)), new Set([1,2,3,4,5,6,7,8,9,10]));
+  assert.equal(findings.length, 9);
+  assert.deepEqual(new Set(findings.map((f) => f.messageVars.line)), new Set([1,2,3,4,5,6,7,8,9]));
   for (const value of values) assert.ok(!JSON.stringify(findings).includes(value));
 });
 

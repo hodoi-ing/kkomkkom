@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { cp, mkdtemp, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -91,6 +91,7 @@ async function main() {
     const leak = report?.diff?.routes?.find((route) => route.path === "/api/leak");
     check("real app: an open API exits 1", ko.status === 1, ko.stderr || ko.stdout);
     check("real app: the open API is critical", leak?.severity === "critical", ko.stdout);
+    check("real app: JSON includes an extra array", Array.isArray(report?.extra), ko.stdout);
     check(
       "real app: detail follows --lang ko",
       /데이터가 그대로/.test(leak?.detail ?? ""),
@@ -129,6 +130,45 @@ async function main() {
       strict.status === 1 && strict.stdout.includes("Revisa antes de desplegar"),
       strict.stderr || strict.stdout,
     );
+
+    await mkdir(join(work, "app", "broken"), { recursive: true });
+    await writeFile(
+      join(work, "app", "broken", "page.tsx"),
+      'export default function Broken() { throw new Error("boom"); }\n',
+    );
+    await mkdir(join(work, "app", "api", "write"), { recursive: true });
+    await writeFile(
+      join(work, "app", "api", "write", "route.ts"),
+      "export async function POST() { return Response.json({ ok: true }); }\n",
+    );
+    await writeFile(join(work, "lib", "leaked.ts"), 'export const key = "sk_live_FAKE0123456789ABCDEF";\n');
+    await writeFile(join(work, ".env.local"), "NEXT_PUBLIC_API_SECRET=real-value\n");
+
+    const extras = await runCli(["--json", "--lang", "ko"], work);
+    let extrasReport = null;
+    try {
+      extrasReport = JSON.parse(extras.stdout);
+    } catch {
+      // reported below
+    }
+    const extraIds = new Set((extrasReport?.extra ?? []).map((item) => item.id));
+    check("real app: a hardcoded secret stops the deploy", extras.status === 1 && extraIds.has("hardcoded-secret:lib/leaked.ts:1"), extras.stderr || extras.stdout);
+    check("real app: a public secret warns", extraIds.has("public-secret:NEXT_PUBLIC_API_SECRET"), extras.stdout);
+    check("real app: a write API without auth warns", extraIds.has("write-no-auth:/api/write"), extras.stdout);
+    check("real app: a broken page warns", extraIds.has("page-error:/broken"), extras.stdout);
+    const hardcoded = (extrasReport?.extra ?? []).find((item) => item.id.startsWith("hardcoded-secret:"));
+    check("real app: extra detail follows --lang ko", /비밀키로 보이는 값/.test(hardcoded?.message ?? ""), extras.stdout);
+
+    await rm(join(work, "lib", "leaked.ts"), { force: true });
+    await rm(join(work, ".env.local"), { force: true });
+    await writeFile(
+      join(work, "kkomkkom.config.json"),
+      JSON.stringify({ ignoreRoutes: ["/api/leak", "/api/orders/*", "/api/health"] }),
+    );
+    const warnExtras = await runCli(["--json", "--lang", "en"], work);
+    check("real app: warning-only project checks exit 0", warnExtras.status === 0, warnExtras.stderr || warnExtras.stdout);
+    const strictExtras = await runCli(["--json", "--lang", "en", "--strict"], work);
+    check("real app: --strict applies to project-check warnings", strictExtras.status === 1, strictExtras.stderr || strictExtras.stdout);
   } finally {
     await rm(work, { recursive: true, force: true });
   }
