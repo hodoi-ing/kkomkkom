@@ -1,0 +1,256 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { mkdtemp, mkdir, writeFile, rm, symlink } from "node:fs/promises";
+import { createServer } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
+import { auditProject } from "../dist/audit.js";
+
+const exec = promisify(execFile);
+const fakeKey = "sk_live_" + "FAKE0123456789".repeat(3);
+
+async function fixture(t, files = {}, git = false) {
+  const root = await mkdtemp(join(tmpdir(), "kkomkkom-audit-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  for (const [path, content] of Object.entries(files)) {
+    await mkdir(join(root, path, ".."), { recursive: true });
+    await writeFile(join(root, path), content);
+  }
+  if (git) await exec("git", ["-C", root, "init", "-q"]);
+  return root;
+}
+
+function input(root, routes = [], config = {}, baseUrl = "http://127.0.0.1:1") {
+  return {
+    root, baseUrl, routes,
+    config: { ignoreRoutes: [], sampleParams: {}, port: 3100,
+      thresholds: { jsPercent: 15, jsBytes: 30000 }, ...config },
+  };
+}
+
+function route(path, source = "", kind = "api", dynamic = false) {
+  return { path, source, kind, dynamic, file: "" };
+}
+
+async function serve(t, handler) {
+  const server = createServer(handler);
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => {
+    server.closeAllConnections();
+    server.close(resolve);
+  }));
+  return `http://127.0.0.1:${server.address().port}`;
+}
+
+test("tracked .env is critical without a duplicate not-ignored warning", async (t) => {
+  const root = await fixture(t, { ".env": "VALUE=hidden" }, true);
+  for (const [key, value] of [["user.email", "audit@example.invalid"], ["user.name", "Audit Test"]]) {
+    await exec("git", ["-C", root, "config", key, value]);
+  }
+  await exec("git", ["-C", root, "add", ".env"]);
+  await exec("git", ["-C", root, "-c", "core.hooksPath=/dev/null", "commit", "-qm", "fixture"]);
+  assert.deepEqual(await auditProject(input(root)), [{
+    id: "env-tracked:.env", severity: "critical", messageKey: "extraEnvTracked", messageVars: { file: ".env" },
+  }]);
+});
+
+test("untracked non-ignored .env.local warns", async (t) => {
+  const root = await fixture(t, { ".env.local": "VALUE=hidden" }, true);
+  assert.deepEqual(await auditProject(input(root)), [{
+    id: "env-not-ignored:.env.local", severity: "warning", messageKey: "extraEnvNotIgnored",
+    messageVars: { file: ".env.local" },
+  }]);
+});
+
+test("tracked .env symlink is checked and its secret names are parsed", { skip: process.platform === "win32" }, async (t) => {
+  const root = await fixture(t, { "secrets.txt": "NEXT_PUBLIC_API_SECRET=real-value" }, true);
+  await symlink("secrets.txt", join(root, ".env"));
+  await exec("git", ["-C", root, "add", ".env"]);
+  const findings = await auditProject(input(root));
+  assert.deepEqual(findings.map((f) => f.id), ["env-tracked:.env", "public-secret:NEXT_PUBLIC_API_SECRET"]);
+  assert.ok(!JSON.stringify(findings).includes("real-value"));
+});
+
+test("ignored .env.local has no git finding", async (t) => {
+  const root = await fixture(t, { ".env.local": "VALUE=hidden", ".gitignore": ".env*\n" }, true);
+  assert.deepEqual(await auditProject(input(root)), []);
+});
+
+test("public secret name warns without exposing its value", async (t) => {
+  const root = await fixture(t, { ".env": "NEXT_PUBLIC_API_SECRET=real-value" });
+  const findings = await auditProject(input(root));
+  assert.deepEqual(findings, [{ id: "public-secret:NEXT_PUBLIC_API_SECRET", severity: "warning",
+    messageKey: "extraPublicSecret", messageVars: { key: "NEXT_PUBLIC_API_SECRET" } }]);
+  assert.ok(!JSON.stringify(findings).includes("real-value"));
+});
+
+test("public API URL is not a secret name", async (t) => {
+  const root = await fixture(t, { ".env": "NEXT_PUBLIC_API_URL=https://example.com" });
+  assert.deepEqual(await auditProject(input(root)), []);
+});
+
+test("env parsing handles export, quotes, comments, placeholders and duplicate keys", async (t) => {
+  const root = await fixture(t, {
+    ".env": ' # NEXT_PUBLIC_TOKEN=commented\n export NEXT_PUBLIC_API_SECRET = "real#value" # comment\nNEXT_PUBLIC_PASSWORD=\'\'\nNEXT_PUBLIC_TOKEN=your-token\nNEXT_PUBLIC_PRIVATE= # empty\n',
+    ".env.local": 'NEXT_PUBLIC_API_SECRET=another-value\nNEXT_PUBLIC_ACCESS_KEY=valid-value # comment',
+    ".env.example": "NEXT_PUBLIC_BAD_SECRET=real-value",
+    ".env.sample": "NEXT_PUBLIC_BAD_TOKEN=real-value",
+    ".env.template": "NEXT_PUBLIC_BAD_PASSWORD=real-value",
+    "nested/.env": "NEXT_PUBLIC_NESTED_SECRET=real-value",
+  });
+  assert.deepEqual((await auditProject(input(root))).map((f) => f.id), [
+    "public-secret:NEXT_PUBLIC_ACCESS_KEY", "public-secret:NEXT_PUBLIC_API_SECRET",
+  ]);
+});
+
+test("hardcoded key is critical with only its relative file and line", async (t) => {
+  const root = await fixture(t, { "src/lib/x.ts": `// fixture\nconst key = '${fakeKey}';` });
+  const findings = await auditProject(input(root));
+  assert.deepEqual(findings, [{ id: "hardcoded-secret:src/lib/x.ts:2", severity: "critical",
+    messageKey: "extraHardcodedSecret", messageVars: { file: "src/lib/x.ts", line: 2 } }]);
+  assert.ok(!JSON.stringify(findings).includes(fakeKey));
+});
+
+test("all high-confidence patterns are detected once per file line", async (t) => {
+  const values = [fakeKey, "sk-proj-" + "FAKE0123456789_".repeat(3), "AKIA" + "FAKE0123456789ABC",
+    "ghp_" + "FAKE01234567".repeat(3), "xoxb-FAKE-0123456789", "AIza" + "FAKE012".repeat(5),
+    "-----BEGIN PRIVATE KEY-----", "-----BEGIN RSA PRIVATE KEY-----",
+    "-----BEGIN EC PRIVATE KEY-----", "-----BEGIN OPENSSH PRIVATE KEY-----"];
+  const root = await fixture(t, { "lib/keys.cjs": values.map((v) => `${v} ${v}`).join("\n") });
+  const findings = await auditProject(input(root));
+  assert.equal(findings.length, 10);
+  assert.deepEqual(new Set(findings.map((f) => f.messageVars.line)), new Set([1,2,3,4,5,6,7,8,9,10]));
+  for (const value of values) assert.ok(!JSON.stringify(findings).includes(value));
+});
+
+test("source scans skip placeholders, excluded directories, non-source and symlinks", async (t) => {
+  const root = await fixture(t, {
+    "src/keys.ts": 'const key="sk_live_' + "example".repeat(5) + '";',
+    "src/fixtures/leak.ts": fakeKey, "src/test/leak.ts": fakeKey,
+    "src/node_modules/leak.js": fakeKey, "src/.next/leak.js": fakeKey,
+    "src/readme.md": fakeKey, "other/leak.ts": fakeKey,
+  });
+  await symlink(join(root, "other"), join(root, "src", "linked"),
+    process.platform === "win32" ? "junction" : "dir");
+  assert.deepEqual(await auditProject(input(root)), []);
+});
+
+test("root config and middleware sources are scanned", async (t) => {
+  const root = await fixture(t, { "next.config.mjs": fakeKey, "middleware.ts": fakeKey });
+  assert.deepEqual((await auditProject(input(root))).map((f) => f.id), [
+    "hardcoded-secret:middleware.ts:1", "hardcoded-secret:next.config.mjs:1",
+  ]);
+});
+
+for (const source of [
+  "export async function POST() {}", "export function PUT() {}", "export const PATCH = () => {}",
+  "export let DELETE = () => {}", "export { POST }", "export { POST as handler }",
+  'if (req.method === "POST") {}', "if (request.method == 'PATCH') {}",
+  'switch (req.method) { case "DELETE": break; }',
+]) {
+  test(`write API without auth warns: ${source}`, async (t) => {
+    const root = await fixture(t);
+    assert.deepEqual(await auditProject(input(root, [route("/api/orders", source)])), [{
+      id: "write-no-auth:/api/orders", severity: "warning", messageKey: "extraWriteNoAuth",
+      messageVars: { path: "/api/orders" },
+    }]);
+  });
+}
+
+test("write API with auth(), GET-only and ignored writes do not warn", async (t) => {
+  const root = await fixture(t);
+  assert.deepEqual(await auditProject(input(root, [
+    route("/api/authenticated", "export async function POST(){ auth() }"),
+    route("/api/read", "export function GET() {}"),
+    route("/api/webhooks/event", "export const POST = handler"),
+  ], { ignoreRoutes: ["/api/webhooks/*"] })), []);
+});
+
+for (const [status, body, expected] of [
+  [500, "failure", "extraPageError"], [200, "__next_error__", "extraPageError"],
+  [201, "APPLICATION ERROR", "extraPageError"], [200, "Internal Server Error", "extraPageError"],
+  [200, "normal page", null], [302, "__next_error__", null], [404, "failure", null],
+  [200, "x".repeat(8192) + "__next_error__", null],
+]) {
+  test(`page smoke ${status}, ${expected ?? "no finding"}, body length ${body.length}`, async (t) => {
+    const root = await fixture(t);
+    const base = await serve(t, (req, res) => {
+      assert.equal(req.method, "GET");
+      assert.equal(req.headers.cookie, undefined);
+      assert.equal(req.headers.authorization, undefined);
+      assert.equal(req.headers["user-agent"], "kkomkkom/0.1");
+      res.writeHead(status, { location: "/must-not-follow" });
+      res.end(body);
+    });
+    const findings = await auditProject(input(root, [route("/checkout", "", "page")], {}, base));
+    assert.deepEqual(findings, expected ? [{ id: "page-error:/checkout", severity: "warning",
+      messageKey: expected, messageVars: { path: "/checkout", status } }] : []);
+  });
+}
+
+test("page smoke skips ignored and unsampled routes, fills dynamic and catch-all params", async (t) => {
+  const root = await fixture(t);
+  const seen = [];
+  const base = await serve(t, (req, res) => { seen.push(req.url); res.end("OK"); });
+  const routes = [route("/ignored", "", "page"), route("/missing/[id]", "", "page", true),
+    route("/orders/[id]", "", "page", true), route("/docs/[...slug]", "", "page", true)];
+  assert.deepEqual(await auditProject(input(root, routes, { ignoreRoutes: ["/ignored"],
+    sampleParams: { "/orders/[id]": { id: "42" }, "/docs/[...slug]": { slug: "a/b" } } }, base)), []);
+  assert.deepEqual(seen.sort(), ["/docs/a/b", "/orders/42"]);
+});
+
+test("page connection failure becomes info, not an exception", async (t) => {
+  const root = await fixture(t);
+  const base = await serve(t, (req) => req.socket.destroy());
+  assert.deepEqual(await auditProject(input(root, [route("/slow", "", "page")], {}, base)), [{
+    id: "page-timeout:/slow", severity: "info", messageKey: "extraPageTimeout",
+    messageVars: { path: "/slow", seconds: 8 },
+  }]);
+});
+
+test("page smoke uses five workers and never exceeds five active requests", async (t) => {
+  const root = await fixture(t);
+  let active = 0, peak = 0, count = 0;
+  const base = await serve(t, (_req, res) => {
+    active += 1; count += 1; peak = Math.max(peak, active);
+    setTimeout(() => { active -= 1; res.end("OK"); }, 30);
+  });
+  const routes = Array.from({ length: 12 }, (_, i) => route(`/page-${i}`, "", "page"));
+  assert.deepEqual(await auditProject(input(root, routes, {}, base)), []);
+  assert.equal(count, 12);
+  assert.equal(peak, 5);
+});
+
+test("findings are deduplicated and sorted by severity then id", async (t) => {
+  const root = await fixture(t, { "src/z.ts": fakeKey, ".env": "NEXT_PUBLIC_TOKEN=real-value" });
+  const base = await serve(t, (req) => req.socket.destroy());
+  const routes = [route("/z", "export function POST(){}"), route("/a", "export function PUT(){}"),
+    route("/z", "export function POST(){}"), route("/slow", "", "page")];
+  assert.deepEqual((await auditProject(input(root, routes, {}, base))).map((f) => f.id), [
+    "hardcoded-secret:src/z.ts:1", "public-secret:NEXT_PUBLIC_TOKEN", "write-no-auth:/a",
+    "write-no-auth:/z", "page-timeout:/slow",
+  ]);
+});
+
+test("missing root and unreadable file entries do not throw", async (t) => {
+  const root = await fixture(t);
+  await mkdir(join(root, ".env.local"));
+  assert.deepEqual(await auditProject(input(root)), []);
+  assert.deepEqual(await auditProject(input(join(root, "missing"))), []);
+});
+
+test("missing git skips only git checks and still detects secret names", async (t) => {
+  const root = await fixture(t, { ".env": "NEXT_PUBLIC_API_SECRET=real-value" }, true);
+  const moduleUrl = new URL("../dist/audit.js", import.meta.url).href;
+  const script = `import { auditProject } from ${JSON.stringify(moduleUrl)};
+    const findings = await auditProject(${JSON.stringify(input(root))});
+    console.log(JSON.stringify(findings));`;
+  const { stdout, stderr } = await exec(process.execPath, ["--input-type=module", "-e", script], {
+    env: { ...process.env, PATH: root },
+  });
+  assert.equal(stderr, "");
+  assert.ok(!stdout.includes("real-value"));
+  assert.deepEqual(JSON.parse(stdout).map((f) => f.id), ["public-secret:NEXT_PUBLIC_API_SECRET"]);
+});
