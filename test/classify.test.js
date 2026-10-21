@@ -14,6 +14,13 @@ test("hasAuthSignal ignores comments", () => {
   assert.equal(hasAuthSignal("/* getServerSession */\nreturn Response.json({})"), false);
   assert.equal(hasAuthSignal('const url = "https://example.com"; await auth()'), true);
   assert.equal(hasAuthSignal('const quote = /"/; // auth()\nexport function POST() {}'), false);
+  assert.equal(hasAuthSignal('const quote = () => /"/; // auth()\nexport function POST() {}'), false);
+  assert.equal(hasAuthSignal('if (ok) /"/; // auth()\nexport function POST() {}'), false);
+  assert.equal(hasAuthSignal('const x = (a + b) / 2; // auth()\nexport function POST() {}'), false);
+  assert.equal(hasAuthSignal('const half = await Promise.resolve(4).catch(() => 0) / 2; // auth()\nexport function POST() {}'), false);
+  assert.equal(hasAuthSignal('const half = await Promise.resolve(4). catch(() => 0) / 2; // auth()\nexport function POST() {}'), false);
+  assert.equal(hasAuthSignal('const half = await Promise.resolve(4). /* fallback */ catch(() => 0) / 2; // auth()\nexport function POST() {}'), false);
+  assert.equal(hasAuthSignal('if (ok) /* fallback */ /"/; // auth()\nexport function POST() {}'), false);
 });
 
 test("classify decides verdicts", () => {

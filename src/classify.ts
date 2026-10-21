@@ -14,14 +14,18 @@ const AUTH_SIGNALS = [
 export function stripComments(source: string): string {
   let out = "";
   let mode: "code" | "single" | "double" | "template" | "line" | "block" = "code";
+  let lastClosedParenControl = false;
+  const parens: boolean[] = [];
 
-  const regexStart = (index: number): boolean => {
-    let i = index - 1;
-    while (i >= 0 && /\s/.test(source[i])) i -= 1;
+  const regexStart = (): boolean => {
+    let i = out.length - 1;
+    while (i >= 0 && /\s/.test(out[i])) i -= 1;
     if (i < 0) return true;
-    if ("=([{,;:!&|?".includes(source[i])) return true;
-    const before = source.slice(Math.max(0, i - 8), i + 1);
-    return /\b(?:return|case|typeof|instanceof|in|of|new|delete|void|yield|await)$/.test(before);
+    if ("=([{,;:!&|?".includes(out[i])) return true;
+    if (out[i] === ">" && out[i - 1] === "=") return true;
+    if (out[i] === ")" && lastClosedParenControl) return true;
+    const before = out.slice(Math.max(0, i - 8), i + 1);
+    return /\b(?:return|case|typeof|instanceof|in|of|new|delete|void|yield|await|throw|else|do)$/.test(before);
   };
 
   for (let i = 0; i < source.length; i += 1) {
@@ -41,7 +45,7 @@ export function stripComments(source: string): string {
         i += 1;
         continue;
       }
-      if (char === "/" && next !== "/" && next !== "*" && regexStart(i)) {
+      if (char === "/" && next !== "/" && next !== "*" && regexStart()) {
         out += char;
         i += 1;
         let inClass = false;
@@ -58,6 +62,25 @@ export function stripComments(source: string): string {
           else if (c === "/" && !inClass) break;
           i += 1;
         }
+        continue;
+      }
+      if (char === "(") {
+        let j = out.length - 1;
+        while (j >= 0 && /\s/.test(out[j])) j -= 1;
+        const end = j + 1;
+        while (j >= 0 && /[A-Za-z]/.test(out[j])) j -= 1;
+        const word = out.slice(j + 1, end);
+        while (j >= 0 && /\s/.test(out[j])) j -= 1;
+        const control = /^(?:if|while|for|with|switch|catch)$/.test(word) &&
+          !/[.?#_$0-9]/.test(j >= 0 ? out[j] : "");
+        parens.push(control);
+        lastClosedParenControl = false;
+        out += char;
+        continue;
+      }
+      if (char === ")") {
+        lastClosedParenControl = parens.pop() ?? false;
+        out += char;
         continue;
       }
       if (char === "'") mode = "single";

@@ -183,11 +183,43 @@ test("comments do not create or hide write APIs", async (t) => {
 test("regex literals do not turn comments into auth", async (t) => {
   const root = await fixture(t);
   assert.deepEqual(await auditProject(input(root, [
+    route("/api/if-regex-comment", 'if (ok) /"/; // auth()\nexport function POST() {}'),
+    route("/api/method-division-comment", 'const half = await Promise.resolve(4).catch(() => 0) / 2; // auth()\nexport function POST() {}'),
     route("/api/regex-comment", 'const quote = /"/; // auth()\nexport function POST() {}'),
   ])), [{
+    id: "write-no-auth:/api/if-regex-comment", severity: "warning", messageKey: "extraWriteNoAuth",
+    messageVars: { path: "/api/if-regex-comment" },
+  }, {
+    id: "write-no-auth:/api/method-division-comment", severity: "warning", messageKey: "extraWriteNoAuth",
+    messageVars: { path: "/api/method-division-comment" },
+  }, {
     id: "write-no-auth:/api/regex-comment", severity: "warning", messageKey: "extraWriteNoAuth",
     messageVars: { path: "/api/regex-comment" },
   }]);
+});
+
+test("arrow function regexes do not turn comments into auth", async (t) => {
+  const root = await fixture(t);
+  assert.deepEqual(await auditProject(input(root, [
+    route("/api/arrow-regex-comment", 'const quote = () => /"/; // auth()\nexport function POST() {}'),
+  ])), [{
+    id: "write-no-auth:/api/arrow-regex-comment", severity: "warning", messageKey: "extraWriteNoAuth",
+    messageVars: { path: "/api/arrow-regex-comment" },
+  }]);
+});
+
+test("whitespace or comments around a method name do not break division", async (t) => {
+  const root = await fixture(t);
+  const source = (separator) =>
+    `const half = await Promise.resolve(4).${separator}catch(() => 0) / 2; // auth()\nexport function POST() {}`;
+  const findings = await auditProject(input(root, [
+    route("/api/space", source(" ")),
+    route("/api/comment", source(" /* fallback */ ")),
+  ]));
+  assert.deepEqual(findings.map((finding) => finding.id), [
+    "write-no-auth:/api/comment",
+    "write-no-auth:/api/space",
+  ]);
 });
 
 test("redactSecrets hides env values and high-confidence keys", async (t) => {
