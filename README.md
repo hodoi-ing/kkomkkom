@@ -19,11 +19,17 @@ AI가 만든 코드가 진짜 도는지 AI에게 다시 묻는 대신, 실제로
 
 ## 설치
 
+아직 npm에 공개하지 않았습니다. 지금은 저장소를 받아서 씁니다.
+
 ```bash
-npx kkomkkom
+git clone https://github.com/hodoi-ing/kkomkkom.git
+cd kkomkkom
+npm install
+npm run build
+npm link          # 이 컴퓨터에서 kkomkkom 명령 사용
 ```
 
-Node 20 이상. Next.js 프로젝트 루트에서 실행하세요.
+Node 20 이상. 검사할 Next.js 프로젝트 루트에서 실행하세요. npm에 공개한 뒤에는 `npx kkomkkom` 한 줄로 설치할 수 있습니다.
 
 ## 사용법
 
@@ -155,6 +161,8 @@ npm run verify    # 빌드 + 단위 테스트 + 실제 Next 앱 e2e (수동 확�
 npm run build
 node dist/cli.js --port 3199 --fast   # fixtures/mini-app 에서
 ```
+
+push할 때마다 GitHub Actions가 단위 테스트(Node 20·22·24)와 실제 앱 e2e를 자동으로 돌립니다.
 
 ## 라이선스
 
