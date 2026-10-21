@@ -15,6 +15,15 @@ export function stripComments(source: string): string {
   let out = "";
   let mode: "code" | "single" | "double" | "template" | "line" | "block" = "code";
 
+  const regexStart = (index: number): boolean => {
+    let i = index - 1;
+    while (i >= 0 && /\s/.test(source[i])) i -= 1;
+    if (i < 0) return true;
+    if ("=([{,;:!&|?".includes(source[i])) return true;
+    const before = source.slice(Math.max(0, i - 8), i + 1);
+    return /\b(?:return|case|typeof|instanceof|in|of|new|delete|void|yield|await)$/.test(before);
+  };
+
   for (let i = 0; i < source.length; i += 1) {
     const char = source[i];
     const next = source[i + 1];
@@ -30,6 +39,25 @@ export function stripComments(source: string): string {
         mode = "block";
         out += "  ";
         i += 1;
+        continue;
+      }
+      if (char === "/" && next !== "/" && next !== "*" && regexStart(i)) {
+        out += char;
+        i += 1;
+        let inClass = false;
+        while (i < source.length) {
+          const c = source[i];
+          if (c === "\\") {
+            out += c + (source[i + 1] ?? "");
+            i += 2;
+            continue;
+          }
+          out += c;
+          if (c === "[") inClass = true;
+          else if (c === "]") inClass = false;
+          else if (c === "/" && !inClass) break;
+          i += 1;
+        }
         continue;
       }
       if (char === "'") mode = "single";

@@ -180,6 +180,16 @@ test("comments do not create or hide write APIs", async (t) => {
   }]);
 });
 
+test("regex literals do not turn comments into auth", async (t) => {
+  const root = await fixture(t);
+  assert.deepEqual(await auditProject(input(root, [
+    route("/api/regex-comment", 'const quote = /"/; // auth()\nexport function POST() {}'),
+  ])), [{
+    id: "write-no-auth:/api/regex-comment", severity: "warning", messageKey: "extraWriteNoAuth",
+    messageVars: { path: "/api/regex-comment" },
+  }]);
+});
+
 test("redactSecrets hides env values and high-confidence keys", async (t) => {
   const root = await fixture(t, {
     ".env": "API_TOKEN=super-secret-value",
@@ -189,6 +199,27 @@ test("redactSecrets hides env values and high-confidence keys", async (t) => {
   assert.ok(!out.includes("super-secret-value"));
   assert.ok(!out.includes("another-secret-value"));
   assert.ok(!out.includes(fakeKey));
+  assert.match(out, /\[redacted\]/);
+});
+
+test("redactSecrets removes a whole private key block", async (t) => {
+  const root = await fixture(t);
+  const text = [
+    "failed",
+    "-----BEGIN PRIVATE KEY-----",
+    "FAKEBODYFAKEBODY",
+    "-----END PRIVATE KEY-----",
+    "-----BEGIN OPENSSH PRIVATE KEY-----",
+    "SSHBODYSSHBODY",
+    "-----END OPENSSH PRIVATE KEY-----",
+    "-----BEGIN RSA PRIVATE KEY-----",
+    "UNCLOSEDBODY",
+  ].join("\n");
+  const out = await redactSecrets(root, text);
+  assert.ok(!out.includes("FAKEBODYFAKEBODY"));
+  assert.ok(!out.includes("SSHBODYSSHBODY"));
+  assert.ok(!out.includes("UNCLOSEDBODY"));
+  assert.match(out, /failed/);
   assert.match(out, /\[redacted\]/);
 });
 
