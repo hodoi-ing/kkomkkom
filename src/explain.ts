@@ -1,7 +1,16 @@
 import { spawn } from "node:child_process";
+import { t, type Lang } from "./i18n.js";
 import type { Diff } from "./types.js";
 
 const TIMEOUT_MS = 90_000;
+
+const LANG_NAMES: Record<Lang, string> = {
+  en: "English",
+  ko: "Korean",
+  ja: "Japanese",
+  zh: "Chinese",
+  es: "Spanish",
+};
 
 export interface Provider {
   name: string;
@@ -15,33 +24,32 @@ export const PROVIDERS: Provider[] = [
   { name: "gemini", command: "gemini", args: (prompt) => ["-p", prompt] },
 ];
 
-export function buildPrompt(diff: Diff): string {
+export function buildPrompt(diff: Diff, lang: Lang = "en"): string {
   const exposed = diff.routes.filter((route) => route.to === "exposed");
   const errors = diff.routes.filter((route) => route.to === "error");
   const heavy = diff.pages.filter((page) => page.heavy);
 
   const lines = [
-    "너는 Next.js 앱의 커밋 전 점검 결과를 설명하는 도우미다.",
-    "아래 증거만 보고, 각 문제의 가능한 원인과 확인 순서를 한국어로 짧게 알려줘.",
-    "증거에 없는 내용은 추측이라고 표시해. 코드는 쓰지 마.",
+    "You explain the result of a pre-commit check for a Next.js app.",
+    `Using only the evidence below, briefly give the likely cause and the order to check it, for each problem. Answer in ${LANG_NAMES[lang]}. Mark anything not in the evidence as a guess. Do not write code.`,
     "",
   ];
 
   if (exposed.length > 0) {
-    lines.push("[안 잠긴 API]");
-    for (const route of exposed) lines.push(`- ${route.path}: ${route.detail}`);
+    lines.push("[Unlocked APIs]");
+    for (const route of exposed) lines.push(`- ${route.path}: ${t(lang, route.detailKey, route.detailVars)}`);
     lines.push("");
   }
   if (errors.length > 0) {
-    lines.push("[서버 오류]");
-    for (const route of errors) lines.push(`- ${route.path}: ${route.detail}`);
+    lines.push("[Server errors]");
+    for (const route of errors) lines.push(`- ${route.path}: ${t(lang, route.detailKey, route.detailVars)}`);
     lines.push("");
   }
   if (heavy.length > 0) {
-    lines.push("[무거워진 페이지]");
+    lines.push("[Heavier pages]");
     for (const page of heavy) {
-      const from = page.from === undefined ? "기준 없음" : `${Math.round(page.from / 1000)}KB`;
-      lines.push(`- ${page.path}: ${from} → ${Math.round(page.to / 1000)}KB (${Math.round(page.deltaPercent)}% 증가)`);
+      const from = page.from === undefined ? "no baseline" : `${Math.round(page.from / 1000)}KB`;
+      lines.push(`- ${page.path}: ${from} -> ${Math.round(page.to / 1000)}KB (+${Math.round(page.deltaPercent)}%)`);
     }
   }
 
@@ -77,9 +85,9 @@ function runProvider(provider: Provider, prompt: string): Promise<string | null>
 
 export async function explain(
   diff: Diff,
-  options: { prefer?: string } = {},
+  options: { prefer?: string; lang?: Lang } = {},
 ): Promise<{ provider: string; text: string } | null> {
-  const prompt = buildPrompt(diff);
+  const prompt = buildPrompt(diff, options.lang ?? "en");
   const ordered = options.prefer
     ? [...PROVIDERS.filter((p) => p.name === options.prefer), ...PROVIDERS.filter((p) => p.name !== options.prefer)]
     : PROVIDERS;

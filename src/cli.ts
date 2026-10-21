@@ -2,27 +2,51 @@
 import { createRequire } from "node:module";
 import { parseArgs } from "node:util";
 import { findProjectRoot } from "./discover.js";
-import { explain, buildPrompt } from "./explain.js";
+import { KkomkkomError } from "./errors.js";
+import { buildPrompt, explain } from "./explain.js";
+import { isLang, resolveLang, t, type Lang } from "./i18n.js";
 import { renderReport } from "./report.js";
 import { runCheck } from "./run.js";
+import { severityOf } from "./severity.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { version: string };
 
-const USAGE = `꼼꼼 — Next.js 커밋 전 점검
+const USAGE = `kkomkkom — pre-commit check for Next.js
 
-사용법
-  kkomkkom                    인증 검사 + 빌드/무게 검사
+Usage
+  kkomkkom                    check auth + page weight
+  kkomkkom --fast             auth check only (skip build)
+  kkomkkom --json             machine-readable JSON
+  kkomkkom --explain          explain problems with a local AI CLI
+  kkomkkom --explain-with claude
+  kkomkkom --update           save a --fast result as the baseline
+  kkomkkom --port 3100        dev server port
+  kkomkkom --lang ko          report language: en, ko, ja, zh, es
+  kkomkkom --strict           exit 1 on warnings too
+
+Exit codes
+  0  nothing blocking
+  1  deploy-blocking problem (or any warning with --strict)
+  2  the check itself failed
+
+Config
+  kkomkkom.config.json in the project root changes behavior.
+
+꼼꼼 — Next.js 커밋 전 점검
+  kkomkkom                    인증 검사 + 페이지 무게 검사
   kkomkkom --fast             인증 검사만 (빌드 생략)
   kkomkkom --json             기계가 읽는 JSON 출력
-  kkomkkom --explain          실패 원인을 로컬 AI CLI로 설명
-  kkomkkom --explain-with claude
+  kkomkkom --explain          문제 원인을 로컬 AI CLI로 설명
   kkomkkom --update           --fast 결과를 기준선에 반영
   kkomkkom --port 3100        개발 서버 포트 지정
+  kkomkkom --lang ko          보고서 언어: en, ko, ja, zh, es
+  kkomkkom --strict           경고만 있어도 종료 코드 1
 
-설정
-  kkomkkom.config.json 을 프로젝트 루트에 두면 동작을 바꿀 수 있습니다.
+  종료 코드: 0 문제 없음 / 1 배포 중단 또는 --strict 경고 / 2 검사 실패
 `;
+
+let activeLang: Lang = resolveLang();
 
 async function main(): Promise<number> {
   const { values } = parseArgs({
@@ -30,8 +54,10 @@ async function main(): Promise<number> {
       fast: { type: "boolean", default: false },
       json: { type: "boolean", default: false },
       update: { type: "boolean", default: false },
+      strict: { type: "boolean", default: false },
       explain: { type: "boolean", default: false },
       "explain-with": { type: "string" },
+      lang: { type: "string" },
       port: { type: "string" },
       help: { type: "boolean", short: "h", default: false },
       version: { type: "boolean", short: "v", default: false },
@@ -47,30 +73,60 @@ async function main(): Promise<number> {
     return 0;
   }
 
+  const flagged = values.lang?.toLowerCase().split(/[._-]/)[0];
+  if (flagged && !isLang(flagged)) {
+    throw new KkomkkomError("errLang", { lang: values.lang ?? "" });
+  }
+  const lang = resolveLang(values.lang);
+  activeLang = lang;
+
   const root = await findProjectRoot(process.cwd());
   const port = values.port ? Number(values.port) : undefined;
   if (values.port && (!Number.isInteger(port) || port! <= 0 || port! > 65535)) {
-    throw new Error("포트 번호가 올바르지 않습니다.");
+    throw new KkomkkomError("errPort");
   }
 
-  const result = await runCheck({ root, fast: values.fast, update: values.update, port });
+  const result = await runCheck({
+    root,
+    fast: values.fast,
+    update: values.update,
+    port,
+    strict: values.strict,
+  });
+
   const hasIssues =
-    result.diff.routes.some((route) => route.to === "exposed" || route.to === "error") ||
-    result.diff.pages.some((page) => page.heavy);
+    result.diff.routes.some(
+      (route) => route.to === "exposed" || route.to === "check" || route.to === "error",
+    ) || result.diff.pages.some((page) => page.heavy);
   const shouldExplain = values.explain && hasIssues;
 
   let explanation: { provider: string; text: string } | null = null;
   let prompt = "";
   if (shouldExplain) {
-    explanation = await explain(result.diff, { prefer: values["explain-with"] });
-    if (!explanation) prompt = buildPrompt(result.diff);
+    explanation = await explain(result.diff, { prefer: values["explain-with"], lang });
+    if (!explanation) prompt = buildPrompt(result.diff, lang);
   }
 
   if (values.json) {
-    console.log(JSON.stringify({ diff: result.diff, buildFailed: result.buildFailed, explanation }, null, 2));
+    const payload = {
+      lang,
+      exitCode: result.exitCode,
+      buildFailed: result.buildFailed,
+      diff: {
+        ...result.diff,
+        routes: result.diff.routes.map((route) => ({
+          ...route,
+          severity: severityOf(route.to),
+          detail: t(lang, route.detailKey, route.detailVars),
+        })),
+      },
+      explanation,
+    };
+    console.log(JSON.stringify(payload, null, 2));
   } else {
     console.log(
       renderReport(result.diff, {
+        lang,
         color: Boolean(process.stdout.isTTY) && !process.env.NO_COLOR,
         buildFailed: result.buildFailed,
         buildTail: result.buildTail,
@@ -79,11 +135,11 @@ async function main(): Promise<number> {
 
     if (explanation) {
       console.log("");
-      console.log(`💡 원인 추정 (${explanation.provider})`);
+      console.log(t(lang, "explainHeader", { provider: explanation.provider }));
       console.log(explanation.text);
     } else if (prompt) {
       console.log("");
-      console.log("💡 원인 설명을 받으려면 아래 글을 AI 채팅에 붙여넣으세요.");
+      console.log(t(lang, "promptHeader"));
       console.log("");
       console.log(prompt);
     }
@@ -95,6 +151,10 @@ async function main(): Promise<number> {
 main()
   .then((code) => process.exit(code))
   .catch((error: unknown) => {
-    console.error(`꼼꼼: ${error instanceof Error ? error.message : String(error)}`);
+    if (error instanceof KkomkkomError) {
+      console.error(`kkomkkom: ${t(activeLang, error.key, error.vars)}`);
+    } else {
+      console.error(`kkomkkom: ${error instanceof Error ? error.message : String(error)}`);
+    }
     process.exit(2);
   });

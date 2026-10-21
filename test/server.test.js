@@ -27,6 +27,9 @@ test("reuses a running Next.js server", async () => {
 
 test("refuses a port used by another program", async () => {
   await serve("<html>hello</html>", async (port) => {
-    await assert.rejects(() => startDevServer("/tmp", port), /다른 프로그램/);
+    await assert.rejects(
+      () => startDevServer("/tmp", port),
+      (error) => error.key === "errPortInUse" && error.vars.port === port,
+    );
   });
 });

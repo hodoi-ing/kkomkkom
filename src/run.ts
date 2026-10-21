@@ -4,6 +4,7 @@ import { loadConfig } from "./config.js";
 import { discoverRoutes } from "./discover.js";
 import { probeRoutes } from "./probe.js";
 import { startDevServer } from "./server.js";
+import { KkomkkomError } from "./errors.js";
 import type { Diff } from "./types.js";
 
 export interface RunOptions {
@@ -11,6 +12,7 @@ export interface RunOptions {
   fast: boolean;
   update?: boolean;
   port?: number;
+  strict?: boolean;
 }
 
 export interface RunResult {
@@ -26,7 +28,7 @@ export async function runCheck(options: RunOptions): Promise<RunResult> {
 
   const routes = await discoverRoutes(options.root);
   if (routes.length === 0) {
-    throw new Error("검사할 라우트를 찾지 못했습니다. app/ 또는 pages/ 폴더를 확인해주세요.");
+    throw new KkomkkomError("errNoRoutes");
   }
 
   const server = await startDevServer(options.root, port);
@@ -60,5 +62,9 @@ export async function runCheck(options: RunOptions): Promise<RunResult> {
   }
 
   const exposed = diff.routes.filter((route) => route.to === "exposed").length;
-  return { diff, buildFailed, buildTail, exitCode: buildFailed || exposed > 0 ? 1 : 0 };
+  const warnings =
+    diff.routes.filter((route) => route.to === "check" || route.to === "error").length +
+    diff.pages.filter((page) => page.heavy).length;
+  const exitCode = buildFailed || exposed > 0 || (options.strict === true && warnings > 0) ? 1 : 0;
+  return { diff, buildFailed, buildTail, exitCode };
 }

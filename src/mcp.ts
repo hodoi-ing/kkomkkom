@@ -3,6 +3,8 @@ import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { findProjectRoot } from "./discover.js";
+import { KkomkkomError } from "./errors.js";
+import { resolveLang, t } from "./i18n.js";
 import { renderReport } from "./report.js";
 import { runCheck } from "./run.js";
 
@@ -12,12 +14,14 @@ const pkg = require("../package.json") as { version: string };
 const TOOL = {
   name: "kkomkkom",
   description:
-    "Next.js 앱의 안 잠긴 API 라우트와 무거워진 페이지를 검사합니다. 커밋 전 확인이 필요할 때 사용하세요.",
+    "Check a Next.js app for API routes reachable without auth and pages that got much heavier. Use it before committing.",
   inputSchema: {
     type: "object",
     properties: {
-      projectPath: { type: "string", description: "Next.js 프로젝트 경로 (기본: 현재 폴더)" },
-      fast: { type: "boolean", description: "빌드 없이 인증 검사만 실행" },
+      projectPath: { type: "string", description: "Next.js project path (default: current folder)" },
+      fast: { type: "boolean", description: "Auth check only, skip the build" },
+      strict: { type: "boolean", description: "Treat warnings as failures" },
+      lang: { type: "string", description: "Report language: en, ko, ja, zh, es" },
     },
   },
 };
@@ -26,11 +30,13 @@ function send(message: unknown): void {
   process.stdout.write(JSON.stringify(message) + "\n");
 }
 
-async function callTool(args: { projectPath?: string; fast?: boolean }) {
+async function callTool(args: { projectPath?: string; fast?: boolean; strict?: boolean; lang?: string }) {
   const cwd = args.projectPath ? resolve(args.projectPath) : process.cwd();
   const root = await findProjectRoot(cwd);
-  const result = await runCheck({ root, fast: args.fast === true });
+  const lang = resolveLang(args.lang);
+  const result = await runCheck({ root, fast: args.fast === true, strict: args.strict === true });
   const text = renderReport(result.diff, {
+    lang,
     color: false,
     buildFailed: result.buildFailed,
     buildTail: result.buildTail,
@@ -78,14 +84,23 @@ rl.on("line", async (line) => {
 
   if (method === "tools/call" && params?.name === TOOL.name) {
     try {
-      const result = await callTool((params.arguments as { projectPath?: string; fast?: boolean }) ?? {});
+      const result = await callTool(
+        (params.arguments as { projectPath?: string; fast?: boolean; strict?: boolean; lang?: string }) ?? {},
+      );
       send({ jsonrpc: "2.0", id, result });
     } catch (error) {
+      const lang = resolveLang((params.arguments as { lang?: string } | undefined)?.lang);
+      const text =
+        error instanceof KkomkkomError
+          ? t(lang, error.key, error.vars)
+          : error instanceof Error
+            ? error.message
+            : String(error);
       send({
         jsonrpc: "2.0",
         id,
         result: {
-          content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
+          content: [{ type: "text", text }],
           isError: true,
         },
       });

@@ -8,7 +8,7 @@ import { buildBaseline, diffBaseline, loadBaseline, saveBaseline } from "../dist
 const thresholds = { jsPercent: 15, jsBytes: 30000 };
 
 function finding(path, verdict) {
-  return { path, verdict, detail: "test" };
+  return { path, verdict, detailKey: "detailUnknown" };
 }
 
 test("first run marks every route as new", () => {

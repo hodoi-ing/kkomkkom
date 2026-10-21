@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createConnection } from "node:net";
+import { KkomkkomError } from "./errors.js";
 
 export interface DevServer {
   url: string;
@@ -63,9 +64,7 @@ export async function startDevServer(root: string, port: number): Promise<DevSer
 
   if (await isPortOpen(port)) {
     if (!(await looksLikeNext(url))) {
-      throw new Error(
-        `${port}번 포트가 다른 프로그램에 쓰이고 있습니다. --port로 다른 번호를 지정하거나 그 프로그램을 종료해주세요.`,
-      );
+      throw new KkomkkomError("errPortInUse", { port });
     }
     return { url, owned: false, stop: async () => {} };
   }
@@ -84,7 +83,7 @@ export async function startDevServer(root: string, port: number): Promise<DevSer
   const ready = await waitForHttp(url, 60_000);
   if (!ready) {
     stopChild(child);
-    throw new Error(`60초 안에 개발 서버가 뜨지 않았습니다.\n${log.slice(-1500)}`);
+    throw new KkomkkomError("errDevTimeout", { log: log.slice(-1500) });
   }
 
   return {

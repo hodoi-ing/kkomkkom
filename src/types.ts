@@ -1,3 +1,5 @@
+import type { MessageKey } from "./i18n.js";
+
 export type Verdict = "locked" | "exposed" | "check" | "public" | "unknown" | "error";
 
 export interface RouteInfo {
@@ -12,7 +14,8 @@ export interface Finding {
   path: string;
   verdict: Verdict;
   status?: number;
-  detail: string;
+  detailKey: MessageKey;
+  detailVars?: Record<string, string | number>;
 }
 
 export interface PageWeight {
@@ -40,7 +43,8 @@ export interface RouteDiff {
   from?: Verdict;
   to: Verdict;
   state: RouteState;
-  detail: string;
+  detailKey: MessageKey;
+  detailVars?: Record<string, string | number>;
 }
 
 export interface WeightChange {
@@ -57,3 +61,5 @@ export interface Diff {
   routes: RouteDiff[];
   pages: WeightChange[];
 }
+
+export type Severity = "critical" | "warning" | "info";

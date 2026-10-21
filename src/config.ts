@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { KkomkkomError } from "./errors.js";
 import type { Config } from "./types.js";
 
 export const DEFAULT_CONFIG: Config = {
@@ -17,7 +18,7 @@ export async function loadConfig(root: string): Promise<Config> {
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new Error("kkomkkom.config.json 형식이 올바르지 않습니다.");
+    throw new KkomkkomError("errConfig");
   }
 
   return {

@@ -1,0 +1,204 @@
+export const LANGS = ["en", "ko", "ja", "zh", "es"] as const;
+export type Lang = (typeof LANGS)[number];
+
+const en = {
+  reportTitle: "kkomkkom — pre-commit check",
+  firstRunNote: "First run, so everything is shown. This becomes your baseline.",
+  stopBanner: "⛔ Stop the deploy — {count} problem(s) found.",
+  warnBanner: "⚠️  Check before deploy — {count} warning(s).",
+  okBanner: "✅ Safe to deploy.",
+  newExposedTitle: "🔴 Newly open doors: {count}",
+  exposedTitle: "🔴 Open doors: {count}",
+  checkTitle: "🟡 Doors to confirm: {count}",
+  errorTitle: "⚠️  Doors with server errors: {count}",
+  fixedTitle: "🟢 Doors now locked: {count}",
+  heavyTitle: "🐢 Pages that got heavier: {count}",
+  unknownTitle: "⚪ Doors not checked: {count}",
+  restSame: "The other {count} match the last run.",
+  buildFailedTitle: "🏗️  The build failed",
+  explainHeader: "💡 Probable cause ({provider})",
+  promptHeader: "💡 To get an explanation, paste this into your AI chat.",
+  detailLocked: "Blocked without login ({status})",
+  detailLockedRedirect: "Redirects to the login page ({status})",
+  detailExposed: "Data comes out without login ({status})",
+  detailCheck: "No auth code. Confirm this API is meant to be public ({status})",
+  detailError: "Server error ({status})",
+  detailUnknown: "Could not verify ({status})",
+  detailTimeout: "No response (timeout or connection failed)",
+  detailDynamic: "Dynamic route. Add values to sampleParams to check it",
+  detailIgnored: "On the public list, skipped",
+  errNotNext: "No Next.js project found. Run this where package.json includes next.",
+  errNoRoutes: "No routes found. Check the app/ or pages/ folder.",
+  errPort: "Invalid port number.",
+  errPortInUse: "Port {port} is used by another program. Use --port or stop that program.",
+  errDevTimeout: "The dev server did not start within 60 seconds.\n{log}",
+  errConfig: "kkomkkom.config.json is not valid.",
+  errLang: 'Unknown language "{lang}". Use one of: en, ko, ja, zh, es.',
+} as const;
+
+export type MessageKey = keyof typeof en;
+
+const ko: Record<MessageKey, string> = {
+  reportTitle: "꼼꼼 — 커밋 전 점검",
+  firstRunNote: "첫 실행이라 전체를 보여줍니다. 이 상태를 기준으로 저장합니다.",
+  stopBanner: "⛔ 배포를 멈추세요 — 문제 {count}개가 있습니다.",
+  warnBanner: "⚠️  배포 전에 확인하세요 — 경고 {count}개.",
+  okBanner: "✅ 배포해도 좋습니다.",
+  newExposedTitle: "🔴 새로 뚫린 문 {count}개",
+  exposedTitle: "🔴 뚫린 문 {count}개",
+  checkTitle: "🟡 확인이 필요한 문 {count}개",
+  errorTitle: "⚠️  서버 오류가 나는 문 {count}개",
+  fixedTitle: "🟢 막힌 문 {count}개",
+  heavyTitle: "🐢 무거워진 페이지 {count}개",
+  unknownTitle: "⚪ 확인하지 못한 문 {count}개",
+  restSame: "나머지 {count}개는 지난번과 같습니다.",
+  buildFailedTitle: "🏗️  빌드가 실패했습니다",
+  explainHeader: "💡 원인 추정 ({provider})",
+  promptHeader: "💡 원인 설명을 받으려면 아래 글을 AI 채팅에 붙여넣으세요.",
+  detailLocked: "로그인 없이는 막힙니다 ({status})",
+  detailLockedRedirect: "로그인 페이지로 넘어갑니다 ({status})",
+  detailExposed: "로그인 없이 데이터가 그대로 나옵니다 ({status})",
+  detailCheck: "인증 코드가 없습니다. 일부러 공개한 API인지 확인하세요 ({status})",
+  detailError: "서버 오류가 납니다 ({status})",
+  detailUnknown: "확인하지 못했습니다 ({status})",
+  detailTimeout: "응답이 없습니다 (타임아웃 또는 연결 실패)",
+  detailDynamic: "동적 라우트입니다. sampleParams에 값을 넣으면 검사합니다",
+  detailIgnored: "공개 목록에 있어 건너뜁니다",
+  errNotNext: "Next.js 프로젝트를 찾지 못했습니다. package.json에 next가 있는 폴더에서 실행해주세요.",
+  errNoRoutes: "검사할 라우트를 찾지 못했습니다. app/ 또는 pages/ 폴더를 확인해주세요.",
+  errPort: "포트 번호가 올바르지 않습니다.",
+  errPortInUse: "{port}번 포트가 다른 프로그램에 쓰이고 있습니다. --port로 다른 번호를 지정하거나 그 프로그램을 종료해주세요.",
+  errDevTimeout: "60초 안에 개발 서버가 뜨지 않았습니다.\n{log}",
+  errConfig: "kkomkkom.config.json 형식이 올바르지 않습니다.",
+  errLang: "알 수 없는 언어입니다: {lang}. en, ko, ja, zh, es 중 하나를 쓰세요.",
+};
+
+const ja: Record<MessageKey, string> = {
+  reportTitle: "꼼꼼 — コミット前チェック",
+  firstRunNote: "初回実行のため全体を表示します。この状態を基準として保存します。",
+  stopBanner: "⛔ デプロイを止めてください — 問題が{count}件あります。",
+  warnBanner: "⚠️  デプロイ前に確認してください — 警告{count}件。",
+  okBanner: "✅ デプロイしても大丈夫です。",
+  newExposedTitle: "🔴 新たに開いた扉 {count}件",
+  exposedTitle: "🔴 開いている扉 {count}件",
+  checkTitle: "🟡 確認が必要な扉 {count}件",
+  errorTitle: "⚠️  サーバーエラーの扉 {count}件",
+  fixedTitle: "🟢 閉じた扉 {count}件",
+  heavyTitle: "🐢 重くなったページ {count}件",
+  unknownTitle: "⚪ 確認できなかった扉 {count}件",
+  restSame: "残り{count}件は前回と同じです。",
+  buildFailedTitle: "🏗️  ビルドが失敗しました",
+  explainHeader: "💡 原因の推測 ({provider})",
+  promptHeader: "💡 原因の説明を受けるには、以下の文章をAIチャットに貼り付けてください。",
+  detailLocked: "ログインなしではブロックされます ({status})",
+  detailLockedRedirect: "ログインページに移動します ({status})",
+  detailExposed: "ログインなしでデータがそのまま表示されます ({status})",
+  detailCheck: "認証コードがありません。意図的に公開したAPIか確認してください ({status})",
+  detailError: "サーバーエラーが発生します ({status})",
+  detailUnknown: "確認できませんでした ({status})",
+  detailTimeout: "応答がありません（タイムアウトまたは接続失敗）",
+  detailDynamic: "動的ルートです。sampleParamsに値を入れると検査します",
+  detailIgnored: "公開リストにあるためスキップします",
+  errNotNext: "Next.jsプロジェクトが見つかりませんでした。package.jsonにnextがあるフォルダで実行してください。",
+  errNoRoutes: "検査するルートが見つかりませんでした。app/ または pages/ フォルダを確認してください。",
+  errPort: "ポート番号が正しくありません。",
+  errPortInUse: "ポート{port}は別のプログラムが使用しています。--portで別の番号を指定するか、そのプログラムを終了してください。",
+  errDevTimeout: "60秒以内に開発サーバーが起動しませんでした。\n{log}",
+  errConfig: "kkomkkom.config.jsonの形式が正しくありません。",
+  errLang: "不明な言語です: {lang}。en, ko, ja, zh, es のいずれかを使用してください。",
+};
+
+const zh: Record<MessageKey, string> = {
+  reportTitle: "꼼꼼 — 提交前检查",
+  firstRunNote: "首次运行，显示全部结果。将此状态保存为基准。",
+  stopBanner: "⛔ 请停止部署 — 发现 {count} 个问题。",
+  warnBanner: "⚠️  部署前请确认 — {count} 个警告。",
+  okBanner: "✅ 可以部署。",
+  newExposedTitle: "🔴 新开放的接口 {count} 个",
+  exposedTitle: "🔴 开放的接口 {count} 个",
+  checkTitle: "🟡 需要确认的接口 {count} 个",
+  errorTitle: "⚠️  服务器错误的接口 {count} 个",
+  fixedTitle: "🟢 已关闭的接口 {count} 个",
+  heavyTitle: "🐢 变重的页面 {count} 个",
+  unknownTitle: "⚪ 无法确认的接口 {count} 个",
+  restSame: "其余 {count} 个与上次相同。",
+  buildFailedTitle: "🏗️  构建失败",
+  explainHeader: "💡 原因推测 ({provider})",
+  promptHeader: "💡 如需原因说明，请将以下文字粘贴到 AI 聊天中。",
+  detailLocked: "未登录时会被拦截 ({status})",
+  detailLockedRedirect: "跳转到登录页面 ({status})",
+  detailExposed: "未登录也能直接获取数据 ({status})",
+  detailCheck: "没有认证代码。请确认是否为有意公开的 API ({status})",
+  detailError: "发生服务器错误 ({status})",
+  detailUnknown: "无法确认 ({status})",
+  detailTimeout: "没有响应（超时或连接失败）",
+  detailDynamic: "动态路由。在 sampleParams 中提供值后可检查",
+  detailIgnored: "在公开列表中，已跳过",
+  errNotNext: "找不到 Next.js 项目。请在包含 next 的 package.json 所在文件夹中运行。",
+  errNoRoutes: "找不到要检查的路由。请检查 app/ 或 pages/ 文件夹。",
+  errPort: "端口号无效。",
+  errPortInUse: "端口 {port} 已被其他程序占用。请用 --port 指定其他端口，或关闭该程序。",
+  errDevTimeout: "开发服务器在 60 秒内未能启动。\n{log}",
+  errConfig: "kkomkkom.config.json 格式无效。",
+  errLang: "未知语言：{lang}。请使用 en、ko、ja、zh、es 之一。",
+};
+
+const es: Record<MessageKey, string> = {
+  reportTitle: "꼼꼼 — revisión antes del commit",
+  firstRunNote: "Primera ejecución: se muestra todo. Se guardará como referencia.",
+  stopBanner: "⛔ Detén el despliegue — hay {count} problema(s).",
+  warnBanner: "⚠️  Revisa antes de desplegar — {count} advertencia(s).",
+  okBanner: "✅ Puedes desplegar.",
+  newExposedTitle: "🔴 Rutas recién abiertas: {count}",
+  exposedTitle: "🔴 Rutas abiertas: {count}",
+  checkTitle: "🟡 Rutas por revisar: {count}",
+  errorTitle: "⚠️  Rutas con error del servidor: {count}",
+  fixedTitle: "🟢 Rutas cerradas: {count}",
+  heavyTitle: "🐢 Páginas que engordaron: {count}",
+  unknownTitle: "⚪ Rutas no verificadas: {count}",
+  restSame: "Las otras {count} siguen igual.",
+  buildFailedTitle: "🏗️  La compilación falló",
+  explainHeader: "💡 Causa probable ({provider})",
+  promptHeader: "💡 Para obtener una explicación, pega este texto en tu chat de IA.",
+  detailLocked: "Bloqueado sin iniciar sesión ({status})",
+  detailLockedRedirect: "Redirige a la página de inicio de sesión ({status})",
+  detailExposed: "Los datos salen sin iniciar sesión ({status})",
+  detailCheck: "No hay código de autenticación. Confirma si la API es pública a propósito ({status})",
+  detailError: "Error del servidor ({status})",
+  detailUnknown: "No se pudo verificar ({status})",
+  detailTimeout: "Sin respuesta (tiempo de espera o conexión fallida)",
+  detailDynamic: "Ruta dinámica. Añade valores en sampleParams para revisarla",
+  detailIgnored: "Está en la lista pública, se omite",
+  errNotNext: "No se encontró un proyecto Next.js. Ejecútalo en la carpeta cuyo package.json incluye next.",
+  errNoRoutes: "No se encontraron rutas. Revisa las carpetas app/ o pages/.",
+  errPort: "El puerto no es válido.",
+  errPortInUse: "El puerto {port} está ocupado por otro programa. Usa --port o ciérralo.",
+  errDevTimeout: "El servidor de desarrollo no arrancó en 60 segundos.\n{log}",
+  errConfig: "El formato de kkomkkom.config.json no es válido.",
+  errLang: "Idioma desconocido: {lang}. Usa uno de: en, ko, ja, zh, es.",
+};
+
+const DICTIONARIES: Record<Lang, Record<MessageKey, string>> = { en, ko, ja, zh, es };
+
+export const MESSAGE_KEYS = Object.keys(en) as MessageKey[];
+
+export function isLang(value: string): value is Lang {
+  return (LANGS as readonly string[]).includes(value);
+}
+
+export function resolveLang(flag?: string): Lang {
+  const candidates = [flag, process.env.KKOMKKOM_LANG, process.env.LC_ALL, process.env.LANG];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const base = candidate.toLowerCase().split(/[._-]/)[0];
+    if (isLang(base)) return base;
+  }
+  return "en";
+}
+
+export function t(lang: Lang, key: MessageKey, vars: Record<string, string | number> = {}): string {
+  const template = DICTIONARIES[lang][key] ?? en[key];
+  return template.replace(/\{(\w+)\}/g, (match, name: string) =>
+    name in vars ? String(vars[name]) : match,
+  );
+}
