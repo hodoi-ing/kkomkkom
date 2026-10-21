@@ -48,10 +48,25 @@ async function waitForHttp(url: string, timeoutMs: number): Promise<boolean> {
   return false;
 }
 
+async function looksLikeNext(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(2000), redirect: "manual" });
+    const body = (await res.text()).slice(0, 20_000);
+    return /_next\/|__next/.test(body) || res.headers.has("x-nextjs-cache");
+  } catch {
+    return false;
+  }
+}
+
 export async function startDevServer(root: string, port: number): Promise<DevServer> {
   const url = `http://127.0.0.1:${port}`;
 
   if (await isPortOpen(port)) {
+    if (!(await looksLikeNext(url))) {
+      throw new Error(
+        `${port}번 포트가 다른 프로그램에 쓰이고 있습니다. --port로 다른 번호를 지정하거나 그 프로그램을 종료해주세요.`,
+      );
+    }
     return { url, owned: false, stop: async () => {} };
   }
 
