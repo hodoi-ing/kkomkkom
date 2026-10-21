@@ -36,7 +36,7 @@
 
 ## 다음
 
-- [ ] GPT 세션에 최종 diff 독립 검증 요청
+- [x] GPT 세션 최종 독립 검증 PASS — `f507fdc`, npm test 89/89, `npm run verify` 17/17, CLI 경계 39개
 - [ ] push 후 GitHub Actions (Node 20/22/24 + e2e) 확인
 - [ ] v1.1: TTFB 측정 (초 단위 체감 속도)
 - [ ] npm 배포 — 보류 (사용자 결정: 저장소 비공개 유지, 2026-10-21)
