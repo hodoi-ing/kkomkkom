@@ -4,7 +4,13 @@ import { lstat, mkdir, open, readdir, rename, unlink } from "node:fs/promises";
 import { dirname, join, parse, resolve, sep } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { createServer } from "node:net";
 import ts from "typescript";
+import { runBuild } from "./build.js";
+import { runArtifactCheck } from "./artifacts.js";
+import { readBody } from "./http.js";
+import { startProductionServer, type DevServer } from "./server.js";
+import type { CoverageSummary } from "./types.js";
 
 const exec = promisify(execFile);
 const CONFIG = /^next\.config\.(js|mjs|cjs|ts)$/;
@@ -14,6 +20,8 @@ const LIMIT = 1024 * 1024;
 const digest = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 
 export class ProtectionError extends Error {
+  transactionId?: string;
+  configRestored = false;
   constructor(public readonly reason: string, public readonly configChanged = false) {
     super(`Protection refused: ${reason}.`);
   }
@@ -187,6 +195,19 @@ async function locked<T>(directory: string, work: () => Promise<T>): Promise<T> 
   }
 }
 
+async function activeTransaction(directory: string, transactionId: string) {
+  const active = await readSafe(join(directory, "active"), 128);
+  if ((active.stat.mode & 0o077) !== 0 || (process.getuid && active.stat.uid !== process.getuid()) ||
+      active.bytes.toString("utf8") !== `${transactionId}\n`) refuse("transaction-not-active");
+  return active;
+}
+
+async function releaseActive(directory: string, transactionId: string) {
+  await activeTransaction(directory, transactionId);
+  await unlink(join(directory, "active"));
+  await syncDirectory(directory);
+}
+
 async function replace(root: string, file: string, expected: Awaited<ReturnType<typeof readSafe>>, bytes: Buffer, mode: number, before?: () => Promise<void>) {
   const temporary = join(root, `.kkomkkom-protect-${randomUUID()}.tmp`);
   let owned = false;
@@ -222,7 +243,7 @@ function changedBytes(bytes: Buffer, preview: ProtectionPreview) {
   return Buffer.from(text.slice(0, preview.diff.start) + "false" + text.slice(preview.diff.end));
 }
 
-export async function applyProtection(inputRoot: string, expectedHash: string) {
+async function prepareApply(inputRoot: string, expectedHash: string) {
   if (typeof expectedHash !== "string" || !HASH.test(expectedHash)) refuse("expected-hash-required");
   const root = resolve(inputRoot);
   const initial = await inspect(root);
@@ -231,56 +252,180 @@ export async function applyProtection(inputRoot: string, expectedHash: string) {
   if (initial.preview.expectedHash !== expectedHash) refuse("config-changed-repreview");
   await cleanTarget(root, file);
   const directory = await storage(root, true);
-  return locked(directory, async () => {
-    const current = await inspect(root);
-    if (current.preview.status !== "change" || current.preview.file !== file || current.preview.expectedHash !== expectedHash || !current.content) refuse("config-changed-repreview");
-    await cleanTarget(root, file);
-    const transactionId = randomUUID();
-    const transaction = join(directory, transactionId);
-    await mkdir(transaction, { mode: 0o700 });
-    await privateDirectory(transaction, false);
-    const original = current.content.bytes;
-    const applied = changedBytes(original, current.preview);
-    const rootStat = await safePath(root, true);
-    const metadata: Metadata = { version: 1, transactionId, root, rootDev: rootStat.dev, rootIno: rootStat.ino,
-      file, originalHash: digest(original), appliedHash: digest(applied), mode: current.content.stat.mode & 0o777 };
-    await exclusiveFile(join(transaction, "original"), original);
-    if (!(await readSafe(join(transaction, "original"))).bytes.equals(original)) refuse("backup-verification-failed");
-    await exclusiveFile(join(transaction, "metadata.json"), Buffer.from(JSON.stringify(metadata) + "\n"));
-    await syncDirectory(transaction);
-    await syncDirectory(directory);
-    await syncDirectory(dirname(directory));
-    await replace(root, file, current.content, applied, metadata.mode, () => cleanTarget(root, file));
-    return { transactionId, file, originalHash: metadata.originalHash, appliedHash: metadata.appliedHash, configChanged: true };
-  });
+  return { root, directory, file };
+}
+
+export async function applyProtection(inputRoot: string, expectedHash: string) {
+  const { root, directory, file } = await prepareApply(inputRoot, expectedHash);
+  return locked(directory, () => applyLocked(root, directory, file, expectedHash));
+}
+
+async function applyLocked(root: string, directory: string, file: string, expectedHash: string) {
+  try { await lstat(join(directory, "active")); refuse("active-transaction-conflict"); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+  const current = await inspect(root);
+  if (current.preview.status !== "change" || current.preview.file !== file || current.preview.expectedHash !== expectedHash || !current.content) refuse("config-changed-repreview");
+  await cleanTarget(root, file);
+  const transactionId = randomUUID();
+  const transaction = join(directory, transactionId);
+  await mkdir(transaction, { mode: 0o700 });
+  await privateDirectory(transaction, false);
+  const original = current.content.bytes;
+  const applied = changedBytes(original, current.preview);
+  const rootStat = await safePath(root, true);
+  const metadata: Metadata = { version: 1, transactionId, root, rootDev: rootStat.dev, rootIno: rootStat.ino,
+    file, originalHash: digest(original), appliedHash: digest(applied), mode: current.content.stat.mode & 0o7777 };
+  await exclusiveFile(join(transaction, "original"), original);
+  if (!(await readSafe(join(transaction, "original"))).bytes.equals(original)) refuse("backup-verification-failed");
+  await exclusiveFile(join(transaction, "metadata.json"), Buffer.from(JSON.stringify(metadata) + "\n"));
+  await syncDirectory(transaction);
+  await syncDirectory(directory);
+  await syncDirectory(dirname(directory));
+  await exclusiveFile(join(directory, "active"), Buffer.from(`${transactionId}\n`));
+  await syncDirectory(directory);
+  try { await replace(root, file, current.content, applied, metadata.mode, () => cleanTarget(root, file)); }
+  catch (error) {
+    const failure = error instanceof ProtectionError ? error : new ProtectionError("apply-replacement-failed");
+    failure.transactionId = transactionId;
+    if (!failure.configChanged) await releaseActive(directory, transactionId);
+    throw failure;
+  }
+  return { transactionId, file, originalHash: metadata.originalHash, appliedHash: metadata.appliedHash, configChanged: true };
 }
 
 export async function restoreProtection(inputRoot: string, transactionId: string) {
   if (typeof transactionId !== "string" || !ID.test(transactionId)) refuse("invalid-transaction-id");
   const root = resolve(inputRoot);
-  const rootStat = await safePath(root, true);
+  await safePath(root, true);
   const directory = await storage(root, false);
-  return locked(directory, async () => {
-    const transaction = join(directory, transactionId);
-    await privateDirectory(transaction, false);
-    const raw = await readSafe(join(transaction, "metadata.json"), 16384);
-    let metadata: Metadata;
-    try { metadata = JSON.parse(raw.bytes.toString("utf8")); }
-    catch { return refuse("invalid-transaction-metadata"); }
-    if (!metadata || metadata.version !== 1 || metadata.transactionId !== transactionId || metadata.root !== root ||
-        metadata.rootDev !== rootStat.dev || metadata.rootIno !== rootStat.ino || typeof metadata.file !== "string" || !CONFIG.test(metadata.file) ||
-        typeof metadata.originalHash !== "string" || !HASH.test(metadata.originalHash) || typeof metadata.appliedHash !== "string" || !HASH.test(metadata.appliedHash) ||
-        !Number.isInteger(metadata.mode) || metadata.mode < 0 || metadata.mode > 0o777 || Object.keys(metadata).sort().join(",") !==
-        "appliedHash,file,mode,originalHash,root,rootDev,rootIno,transactionId,version") refuse("invalid-transaction-metadata");
-    const backup = await readSafe(join(transaction, "original"));
-    if ((backup.stat.mode & 0o077) !== 0 || (raw.stat.mode & 0o077) !== 0 ||
-        (process.getuid && (backup.stat.uid !== process.getuid() || raw.stat.uid !== process.getuid()))) refuse("unsafe-backup");
-    if (digest(backup.bytes) !== metadata.originalHash) refuse("corrupt-backup");
-    const preview = locate(metadata.file, backup.bytes);
-    if (preview.status !== "change" || digest(changedBytes(backup.bytes, preview)) !== metadata.appliedHash) refuse("invalid-backup-change");
-    const current = await readSafe(join(root, metadata.file));
-    if (digest(current.bytes) !== metadata.appliedHash) refuse("config-edited-restore-refused");
+  return locked(directory, () => restoreLocked(root, directory, transactionId));
+}
+
+async function restoreLocked(root: string, directory: string, transactionId: string) {
+  const rootStat = await safePath(root, true);
+  await activeTransaction(directory, transactionId);
+  const transaction = join(directory, transactionId);
+  await privateDirectory(transaction, false);
+  const raw = await readSafe(join(transaction, "metadata.json"), 16384);
+  let metadata: Metadata;
+  try { metadata = JSON.parse(raw.bytes.toString("utf8")); }
+  catch { return refuse("invalid-transaction-metadata"); }
+  if (!metadata || metadata.version !== 1 || metadata.transactionId !== transactionId || metadata.root !== root ||
+      metadata.rootDev !== rootStat.dev || metadata.rootIno !== rootStat.ino || typeof metadata.file !== "string" || !CONFIG.test(metadata.file) ||
+      typeof metadata.originalHash !== "string" || !HASH.test(metadata.originalHash) || typeof metadata.appliedHash !== "string" || !HASH.test(metadata.appliedHash) ||
+      !Number.isInteger(metadata.mode) || metadata.mode < 0 || metadata.mode > 0o7777 || Object.keys(metadata).sort().join(",") !==
+      "appliedHash,file,mode,originalHash,root,rootDev,rootIno,transactionId,version") refuse("invalid-transaction-metadata");
+  const backup = await readSafe(join(transaction, "original"));
+  if ((backup.stat.mode & 0o077) !== 0 || (raw.stat.mode & 0o077) !== 0 ||
+      (process.getuid && (backup.stat.uid !== process.getuid() || raw.stat.uid !== process.getuid()))) refuse("unsafe-backup");
+  if (digest(backup.bytes) !== metadata.originalHash) refuse("corrupt-backup");
+  const preview = locate(metadata.file, backup.bytes);
+  if (preview.status !== "change" || digest(changedBytes(backup.bytes, preview)) !== metadata.appliedHash) refuse("invalid-backup-change");
+  const current = await readSafe(join(root, metadata.file));
+  if (digest(current.bytes) !== metadata.appliedHash) refuse("config-edited-restore-refused");
+  try {
     await replace(root, metadata.file, current, backup.bytes, metadata.mode);
-    return { transactionId, file: metadata.file, restored: true };
+    await releaseActive(directory, transactionId);
+  } catch (error) {
+    const failure = error instanceof ProtectionError ? error : new ProtectionError("restore-finalization-failed");
+    failure.configRestored = (await readSafe(join(root, metadata.file)).catch(() => null))?.bytes.equals(backup.bytes) ?? false;
+    throw failure;
+  }
+  return { transactionId, file: metadata.file, restored: true };
+}
+
+interface ProtectionVerification {
+  build: "not-run" | "passed" | "failed";
+  artifacts: "not-run" | "passed" | "failed";
+  smoke: "not-run" | "passed" | "failed";
+  cleanup: "not-run" | "passed" | "failed";
+}
+
+async function availablePort(): Promise<number> {
+  const listener = createServer();
+  return new Promise((resolve, reject) => {
+    listener.once("error", reject);
+    listener.listen(0, "127.0.0.1", () => {
+      const address = listener.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      listener.close((error) => error ? reject(error) : port ? resolve(port) : reject(new ProtectionError("no-loopback-port")));
+    });
   });
+}
+
+/** Build and smoke only after explicit apply; failures restore config, not build output. */
+export async function applyAndVerifyProtection(inputRoot: string, expectedHash: string) {
+  const controller = new AbortController();
+  const interrupt = () => controller.abort(130);
+  const terminate = () => controller.abort(143);
+  process.on("SIGINT", interrupt);
+  process.on("SIGTERM", terminate);
+  try {
+    const { root, directory, file } = await prepareApply(inputRoot, expectedHash);
+    const result = await locked(directory, () => verifyAppliedProtection(root, directory, file, expectedHash, controller.signal));
+    return controller.signal.aborted ? { ...result, exitCode: controller.signal.reason as number } : result;
+  } finally {
+    process.off("SIGINT", interrupt);
+    process.off("SIGTERM", terminate);
+  }
+}
+
+async function verifyAppliedProtection(root: string, directory: string, file: string, expectedHash: string, signal: AbortSignal) {
+  const verification: ProtectionVerification = { build: "not-run", artifacts: "not-run", smoke: "not-run", cleanup: "not-run" };
+  let transaction: Awaited<ReturnType<typeof applyProtection>>;
+  try { transaction = await applyLocked(root, directory, file, expectedHash); }
+  catch (error) {
+    if (!(error instanceof ProtectionError) || !error.configChanged || !error.transactionId) throw error;
+    let rollback: "restored" | "refused" = "refused";
+    try { await restoreLocked(root, directory, error.transactionId); rollback = "restored"; }
+    catch (restoreError) { if (restoreError instanceof ProtectionError && restoreError.configRestored) rollback = "restored"; }
+    return { status: "apply-failed" as const, exitCode: 1, transactionId: error.transactionId,
+      configChanged: rollback !== "restored", verification, rollback, buildOutput: "may-have-changed" as const };
+  }
+  let server: DevServer | undefined;
+  let failed = false;
+  let failureReason: string | undefined;
+  let artifactCoverage: CoverageSummary | undefined;
+  try {
+    verification.build = "failed";
+    const build = await runBuild(root, { signal });
+    // Page-weight measurement is unrelated to the protection verification.
+    if (!build.ok && build.failure !== "measure") refuse("production-build-failed");
+    verification.build = "passed";
+    verification.smoke = "failed";
+    server = await startProductionServer(root, await availablePort(), { signal });
+    if (!server.owned) refuse("production-not-owned");
+    const response = await fetch(server.url, { redirect: "manual", signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) });
+    const body = await readBody(response, LIMIT);
+    if (response.status < 200 || response.status >= 400 || body.truncated) refuse("production-smoke-failed");
+    verification.smoke = "passed";
+    verification.artifacts = "failed";
+    const inspection = await runArtifactCheck({ root, productionUrl: server.url });
+    artifactCoverage = inspection.coverage;
+    if (inspection.buildFailed || inspection.coverage.status !== "complete" ||
+        inspection.extras.some((finding) => finding.rule === "artifact-source-map") ||
+        inspection.coverage.checks.some((check) => check.status === "ignored" && check.reason?.startsWith("exception:artifact-source-map:"))) {
+      refuse("source-map-verification-failed");
+    }
+    const current = await readSafe(join(root, transaction.file));
+    if (signal.aborted) refuse("verification-cancelled");
+    if (digest(current.bytes) !== transaction.appliedHash) refuse("config-changed-during-verification");
+    verification.artifacts = "passed";
+  } catch (error) { failed = true; failureReason = error instanceof ProtectionError ? error.reason : "verification-error"; }
+  finally {
+    if (server) {
+      try { await server.stop(); verification.cleanup = "passed"; }
+      catch { verification.cleanup = "failed"; failed = true; }
+    }
+  }
+  if (signal.aborted) { failed = true; failureReason ??= "verification-cancelled"; }
+  let rollback: "not-needed" | "restored" | "refused" = "not-needed";
+  if (failed) {
+    rollback = "refused";
+    try { await restoreLocked(root, directory, transaction.transactionId); rollback = "restored"; }
+    catch (error) { if (error instanceof ProtectionError && error.configRestored) rollback = "restored"; }
+  }
+  return { status: failed ? "verification-failed" as const : "applied" as const, exitCode: failed ? 1 : 0,
+    transactionId: transaction.transactionId, file: transaction.file, configChanged: rollback !== "restored",
+    verification, rollback, artifactCoverage, failureReason, buildOutput: "may-have-changed" as const };
 }

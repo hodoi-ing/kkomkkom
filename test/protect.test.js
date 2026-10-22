@@ -88,6 +88,16 @@ test("protection apply has durable private exact backup, preserves mode, and has
   await assert.rejects(engine.restoreProtection(root, result.transactionId));
 });
 
+test("protection preserves all original Unix permission bits across apply and restore", async (t) => {
+  const root = await fixture(t);
+  const target = join(root, "next.config.js");
+  await chmod(target, 0o1640);
+  const applied = await engine.applyProtection(root, hash(original));
+  assert.equal((await stat(target)).mode & 0o7777, 0o1640);
+  await engine.restoreProtection(root, applied.transactionId);
+  assert.equal((await stat(target)).mode & 0o7777, 0o1640);
+});
+
 test("protection refuses dirty/index/untracked targets, missing Git, and preview races", async (t) => {
   assert.equal(typeof engine.applyProtection, "function");
   for (const kind of ["worktree", "index", "untracked", "no-git", "hash"]) {
@@ -154,6 +164,18 @@ test("protection refuses forged applied hashes that would overwrite user changes
   await writeFile(path, JSON.stringify(metadata));
   await assert.rejects(engine.restoreProtection(root, result.transactionId));
   assert.deepEqual(await readFile(target), userEdit);
+});
+
+test("protection refuses stale restore transactions after a later apply with identical bytes", async (t) => {
+  const root = await fixture(t);
+  const first = await engine.applyProtection(root, hash(original));
+  await engine.restoreProtection(root, first.transactionId);
+  const second = await engine.applyProtection(root, hash(original));
+  const before = await readFile(join(root, "next.config.js"));
+  await assert.rejects(engine.restoreProtection(root, first.transactionId));
+  assert.deepEqual(await readFile(join(root, "next.config.js")), before);
+  await engine.restoreProtection(root, second.transactionId);
+  assert.deepEqual(await readFile(join(root, "next.config.js")), original);
 });
 
 test("protection refuses non-private transaction metadata without changing config", async (t) => {
