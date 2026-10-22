@@ -262,6 +262,36 @@ test("a sensitive server env value found in a client artifact is a value-free wa
   assert.equal(result.exitCode, 0);
 });
 
+test("distinct known env keys in one artifact survive while repeated keys deduplicate", async (t) => {
+  const first = ["private", "alpha", "0123456789"].join("-");
+  const second = ["private", "beta", "9876543210"].join("-");
+  const publicValue = ["public", "token", "0123456789"].join("-");
+  const { root } = await project(t, {
+    files: {
+      ".env": `PRIVATE_TOKEN=${first}\nDB_PASSWORD=${second}\nNEXT_PUBLIC_TOKEN=${publicValue}\nAPP_VERSION=2026.10.22\nSERVICE_URL=https://api.example.com/v1\nEXAMPLE_TOKEN=example-placeholder-token\n`,
+      ".env.local": `PRIVATE_TOKEN=${first}\nBACKUP_TOKEN=${first}\n`,
+      "app/page.tsx": "export default function Page() { return null; }\n",
+      ".next/static/chunks/bundle.js":
+        `const values = ${JSON.stringify([first, first, second, publicValue, "2026.10.22", "https://api.example.com/v1", "example-placeholder-token"])};\n`,
+    },
+  });
+  const result = await runArtifactCheck({ root, strict: false });
+  const secrets = byRule(result, "artifact-client-secret");
+
+  assert.deepEqual(secrets.map((item) => item.messageVars.key).sort(),
+    ["BACKUP_TOKEN", "DB_PASSWORD", "PRIVATE_TOKEN"]);
+  assert.equal(new Set(secrets.map((item) => item.id)).size, 3);
+  for (const finding of secrets) {
+    assert.equal(finding.file, ".next/static/chunks/bundle.js");
+    assert.equal(finding.severity, "warning");
+    assert.equal(finding.confidence, "uncertain");
+    assert.equal(finding.messageKey, "artifactClientEnvValue");
+  }
+  const output = JSON.stringify(result);
+  for (const value of [first, second, publicValue]) assert.ok(!output.includes(value));
+  assert.equal(result.coverage.status, "complete");
+});
+
 test("runtime server imports reached from a client entry are potential boundary evidence", async (t) => {
   const serverModules = [
     "pg", "mysql2", "@prisma/client", "firebase-admin", "node:fs", "fs",
@@ -275,9 +305,11 @@ test("runtime server imports reached from a client entry are potential boundary 
       "app/server-imports.tsx":
         `"use client";\n${imports}\nimport { getServerSession } from "next-auth";\nexport default function A() { return getServerSession; }\n`,
       "app/client.tsx":
-        "\"use client\";\nimport { db } from \"../lib/db\";\nexport function B() { return db; }\n",
+        "\"use client\";\nimport { db } from \"../lib/db\";\nimport { other } from \"../lib/other\";\nexport function B() { return [db, other]; }\n",
       "lib/db.ts":
         "import { PrismaClient } from \"@prisma/client\";\nexport const db = new PrismaClient();\n",
+      "lib/other.ts":
+        "import { PrismaClient } from \"@prisma/client\";\nexport const other = new PrismaClient();\n",
       "app/clean.tsx":
         "\"use client\";\nimport React from \"react\";\nimport { useSession } from \"next-auth/react\";\nimport { signIn } from \"next-auth\";\nimport type { PrismaClient } from \"@prisma/client\";\nimport { type Pool } from \"pg\";\nimport type fs from \"node:fs\";\nexport function C() { return [React, useSession, signIn]; }\n",
     },
@@ -289,11 +321,14 @@ test("runtime server imports reached from a client entry are potential boundary 
 
   for (const specifier of serverModules) assert.ok(targets.has(specifier), specifier);
   assert.ok(targets.has("next-auth"));
+  assert.equal(direct.length, 12);
+  assert.equal(new Set(direct.map((item) => item.id)).size, 12);
   assert.equal(direct[0].evidenceKind, "source-import");
   assert.equal(direct[0].confidence, "uncertain");
   assert.equal(direct[0].severity, "warning");
   assert.ok(boundary.some((item) =>
     item.file === "app/client.tsx" && item.messageVars.target === "@prisma/client"));
+  assert.equal(boundary.filter((item) => item.file === "app/client.tsx").length, 1);
   assert.equal(boundary.filter((item) => item.file === "app/clean.tsx").length, 0);
   assert.equal(result.exitCode, 0);
 });

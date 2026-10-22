@@ -84,7 +84,7 @@ function inside(parent: string, child: string): boolean {
 function add(
   findings: Map<string, ExtraFinding>,
   finding: ExtraFinding,
-  key = `${finding.rule}:${finding.file}`,
+  key = finding.id,
 ): void {
   const previous = findings.get(key);
   if (previous === undefined || rank(finding.severity) < rank(previous.severity)) {
