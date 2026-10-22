@@ -4,6 +4,15 @@
 
 사용자 승인: 탭1은 설계·독립 검수·통합, Herdr 탭 `2`는 구현·테스트를 담당한다. 추가 사용자 승인 없이 검수된 변경을 GitHub와 이 로컬 소스에 동일하게 반영한다. 공개 전환·배포는 금지한다. 아래 작업이 과거 `다음` 목록보다 우선한다.
 
+### 중단·재개 지점 (2026-10-22)
+
+- **BLOCKED — 탭2 DeepSeek Flash 무료 일일 한도 소진.** Herdr `w1:pA` 화면에 `You've used today's free messages. They reset at 9:00 AM · 10/23/2026.` 확인. 모델/구독은 임의 변경하지 않았고, 자동 재개 타이머도 설정하지 않음.
+- 완료된 #1은 `main`에 반영·CI 성공·이슈 종료 상태. #2는 `issue2/artifacts`의 작업 브랜치에만 보존. 현재 구현 WIP는 `3ed9fc4`, worktree clean 확인 후 인수인계. 한도 소진 뒤 새 구현 변경 없음.
+- Task2.1 빌드는 exit 0, artifact focused는 **41개 중 40 pass / 1 fail**. 실패: 동일 client의 `pg`/`mysql2`/`@prisma/client` 중 첫 target만 남는 증거 손실. 총괄이 원인 확인: `src/artifacts.ts`의 `add` 기본 key가 `rule:file`이므로, distinct `finding.id`를 기본 key로 써야 함. 같은 id의 severity 승격은 유지. outer inspect는 이미 id를 사용함.
+- 다음 구현자는 이 한 줄 근본 수정 → 여러 server targets/known env keys 회귀 → README 한/영 계약 보완 → focused/연결 회귀 → 총괄 검수부터 진행. 직전 지시의 HTTP/protect 착수 금지는 유지. Task2.1 및 단계1 전체를 완료 처리하지 말 것.
+- 이후 미완료: 선택적 production HTTP 및 실제 제공 증거·패키지 통합/비용 비교, 보호 preview/apply/restore/재검증, 후속 후보 평가, 최종 main/로컬 동기화. 계획: `docs/superpowers/plans/2026-10-22-issue2-artifacts.md`.
+- 모델 승격은 사용자 결정 사항. 재개 승인을 받을 때 `/승격`(탭2 GPT-6.1 Sol, medium; GPT Plus 쿼터 사용)을 제안하고, 승격 작업 뒤 `/복귀` 안내. 한도/모델 변경 없이 Flash로 재개하려면 화면에 안내된 초기화 뒤 이 TASKLIST에서 이어갈 것.
+
 - [x] #1: 설계·회귀 검증 계획 확정 — 2026-10-22 specs/plans 작성, 이슈별 조건·호환성·안전 경계·검증 매핑 자체 검토.
 - [x] #1: 서버 바인딩·프로세스 실패/정리 및 입력 검증 수정 — 총괄 독립검수 승인(2026-10-22): 기존 focused 43/43 + de8a6b1 회귀 3/3 직접 통과, mini-app startDevServer→GET /api/health 200→stop→포트 closed(43821) 확인, 원격 main 반영. Windows `taskkill` 실경로와 build SIGINT의 Windows 동작은 미검증.
 - [x] #1: 메서드별 인증 분석·명시적 접근 정책·관찰/판정 분리 — 총괄 PASS(2026-10-22): `e567b00` Task2/3 재작업을 독립 108/108 회귀+코드검토로 확인. 총괄 PASS 전 [x] 금지 규칙에 따라 이 항목만 [x].
