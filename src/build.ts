@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { nextEnv, resolveNextCli } from "./next.js";
-import { terminateGroup } from "./process.js";
+import { installInterrupt, terminateGroup } from "./process.js";
 import type { PageWeight } from "./types.js";
 
 const BOX = /[┌├└│─┐┘┴┬╭╮╰╯]/g;
@@ -108,7 +108,7 @@ export async function measurePages(root: string): Promise<Record<string, PageWei
   return pages;
 }
 
-export type BuildFailure = "missing" | "spawn" | "compile" | "timeout" | "internal";
+export type BuildFailure = "missing" | "spawn" | "compile" | "signal" | "timeout" | "internal";
 
 export interface BuildResult {
   ok: boolean;
@@ -158,22 +158,41 @@ export function runBuild(root: string, options: BuildOptions = {}): Promise<Buil
     let output = "";
     let settled = false;
     let timedOut = false;
+    let handlingExit = false;
+    let closed = false;
     let timer: NodeJS.Timeout | undefined;
+    let resolveClosed = () => {};
+    const closedWait = new Promise<void>((done) => {
+      resolveClosed = done;
+    });
+    let cleanupPromise: Promise<boolean> | null = null;
+    let removeInterrupt = () => {};
 
     const finish = (result: BuildResult) => {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
+      removeInterrupt();
       resolve(result);
     };
 
-    const cleanup = () =>
-      terminateGroup(child.pid, options.stopTimeoutMs ?? 1000, 1000);
+    const cleanup = () => {
+      cleanupPromise ??= terminateGroup(child.pid, options.stopTimeoutMs ?? 1000, 1000);
+      return cleanupPromise;
+    };
 
-    const handleClose = async (code: number | null) => {
-      if (settled || timedOut) return;
+    const handleExit = async (code: number | null, signal: NodeJS.Signals | null) => {
+      if (settled || timedOut || handlingExit) return;
+      handlingExit = true;
       try {
         const cleaned = await cleanup();
+        if (!closed) {
+          // A descendant outside the group can keep the pipe open forever.
+          await Promise.race([
+            closedWait,
+            new Promise<void>((done) => setTimeout(done, 500)),
+          ]);
+        }
         if (!cleaned) {
           finish({
             ok: false,
@@ -181,6 +200,10 @@ export function runBuild(root: string, options: BuildOptions = {}): Promise<Buil
             output: output + "\nThe Next.js build process group could not be stopped.",
             pages: {},
           });
+          return;
+        }
+        if (signal !== null) {
+          finish({ ok: false, failure: "signal", output: output + `\nbuild stopped by ${signal}`, pages: {} });
           return;
         }
         if (code !== 0) {
@@ -222,12 +245,20 @@ export function runBuild(root: string, options: BuildOptions = {}): Promise<Buil
       })();
     }, options.timeoutMs ?? 300_000);
 
-    child.on("close", (code) => {
-      void handleClose(code);
+    child.once("exit", (code, signal) => {
+      void handleExit(code, signal);
+    });
+
+    child.once("close", (code) => {
+      closed = true;
+      resolveClosed();
+      void handleExit(code, null);
     });
 
     child.on("error", (error) => {
       finish({ ok: false, failure: "spawn", output: output + String(error), pages: {} });
     });
+
+    removeInterrupt = installInterrupt(cleanup);
   });
 }

@@ -63,6 +63,24 @@ function taskkill(pid: number): Promise<void> {
 }
 
 /**
+ * Run stop() once on the first SIGINT, then exit 130. Returns an uninstall
+ * function so a finished operation stops owning the user's Ctrl+C.
+ */
+export function installInterrupt(
+  stop: () => Promise<unknown>,
+  report?: (error: unknown) => void,
+): () => void {
+  const handler = () => {
+    process.off("SIGINT", handler);
+    void stop()
+      .catch((error: unknown) => report?.(error))
+      .finally(() => process.exit(130));
+  };
+  process.once("SIGINT", handler);
+  return () => process.off("SIGINT", handler);
+}
+
+/**
  * Stop the process group led by pid. A parent that exited first does not hide
  * descendants that still hold its group, pipes or port. Returns false when the
  * final bounded wait still sees live members.

@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { chmod, mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -84,6 +85,40 @@ test("measurePages finds chunks written without the /_next prefix", async () => 
   assert.equal(pages["/checkout"].firstLoadJs, 1500);
   await rm(root, { recursive: true, force: true });
 });
+
+async function waitForExit(child, timeout = 15000) {
+  if (child.exitCode !== null) return { code: child.exitCode, signal: child.signalCode };
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("child did not exit")), timeout);
+    child.once("exit", (code, signal) => {
+      clearTimeout(timer);
+      resolve({ code, signal });
+    });
+  });
+}
+
+async function waitForDead(pid, timeout = 5000) {
+  const deadline = Date.now() + timeout;
+  while (true) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return;
+    }
+    if (Date.now() >= deadline) assert.fail(`process ${pid} is still alive`);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
+async function waitForFile(file, timeout = 15000) {
+  const deadline = Date.now() + timeout;
+  while (true) {
+    const value = await readFile(file, "utf8").catch(() => null);
+    if (value !== null) return value;
+    if (Date.now() >= deadline) assert.fail(`file ${file} was not written`);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
 
 async function fakeNextProject(t, script) {
   const root = await mkdtemp(join(tmpdir(), "kkomkkom-build-"));
@@ -233,4 +268,85 @@ test("runBuild turns a manifest read failure into an execution failure", { skip:
   const result = await runBuild(root);
   assert.equal(result.ok, false);
   assert.equal(result.failure, "internal");
+});
+
+test("runBuild stops waiting when the parent exits but a descendant keeps stdout open", { skip: process.platform === "win32" }, async (t) => {
+  const root = await fakeNextProject(t, `
+    const fs = require("node:fs");
+    const { spawn } = require("node:child_process");
+    const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000);"], {
+      stdio: ["ignore", "inherit", "inherit"],
+    });
+    fs.writeFileSync(process.env.KKOMKKOM_BUILD_CHILD_FILE, String(child.pid));
+    console.log("parent build done");
+    process.exit(0);
+  `);
+  const artifacts = await mkdtemp(join(tmpdir(), "kkomkkom-build-artifacts-"));
+  t.after(() => rm(artifacts, { recursive: true, force: true }));
+  const childFile = join(artifacts, "child.pid");
+  process.env.KKOMKKOM_BUILD_CHILD_FILE = childFile;
+  t.after(() => delete process.env.KKOMKKOM_BUILD_CHILD_FILE);
+
+  const started = Date.now();
+  const result = await runBuild(root, { timeoutMs: 3000, stopTimeoutMs: 300 });
+  assert.equal(result.ok, true, `unexpected failure: ${result.failure}`);
+  assert.ok(Date.now() - started < 3000, "must not wait for the output pipe or timeout");
+  await waitForDead(Number(await waitForFile(childFile)));
+});
+
+test("runBuild treats a signal-terminated build as an execution failure", { skip: process.platform === "win32" }, async (t) => {
+  const root = await fakeNextProject(t, 'process.kill(process.pid, "SIGTERM");');
+  const result = await runBuild(root);
+  assert.equal(result.ok, false);
+  assert.equal(result.failure, "signal");
+});
+
+test("SIGINT during a build stops the owned group and exits 130", { skip: process.platform === "win32" }, async (t) => {
+  const root = await fakeNextProject(t, `
+    const fs = require("node:fs");
+    const { spawn } = require("node:child_process");
+    fs.writeFileSync(process.env.KKOMKKOM_BUILD_PID_FILE, String(process.pid));
+    const child = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"], {
+      stdio: "ignore",
+    });
+    fs.writeFileSync(process.env.KKOMKKOM_BUILD_CHILD_FILE, String(child.pid));
+    setInterval(() => {}, 1000);
+  `);
+  const artifacts = await mkdtemp(join(tmpdir(), "kkomkkom-build-artifacts-"));
+  t.after(() => rm(artifacts, { recursive: true, force: true }));
+  const pidFile = join(artifacts, "build.pid");
+  const childFile = join(artifacts, "child.pid");
+  const script = join(artifacts, "run.mjs");
+  await writeFile(script, `
+    const { runBuild } = await import(process.env.KKOMKKOM_BUILD);
+    await runBuild(process.env.KKOMKKOM_ROOT, { timeoutMs: 60000, stopTimeoutMs: 500 });
+    process.stdout.write("BUILD-DONE\\n");
+  `);
+  const env = { KKOMKKOM_BUILD_PID_FILE: pidFile, KKOMKKOM_BUILD_CHILD_FILE: childFile };
+  const oldEnv = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
+  for (const [key, value] of Object.entries(env)) process.env[key] = value;
+  try {
+    const child = spawn(process.execPath, [script], {
+      env: {
+        ...process.env,
+        KKOMKKOM_BUILD: new URL("../dist/build.js", import.meta.url).pathname,
+        KKOMKKOM_ROOT: root,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    t.after(() => child.kill("SIGKILL"));
+    const pid = Number(await waitForFile(pidFile));
+    const childPid = Number(await waitForFile(childFile));
+
+    child.kill("SIGINT");
+    const { code } = await waitForExit(child);
+    assert.equal(code, 130);
+    await waitForDead(pid);
+    await waitForDead(childPid);
+  } finally {
+    for (const [key, value] of Object.entries(oldEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 });

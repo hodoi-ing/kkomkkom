@@ -4,7 +4,7 @@ import { redactSecrets } from "./audit.js";
 import { KkomkkomError } from "./errors.js";
 import { resolveLang, t } from "./i18n.js";
 import { nextEnv, resolveNextCli } from "./next.js";
-import { terminateGroup } from "./process.js";
+import { installInterrupt, terminateGroup } from "./process.js";
 
 export interface DevServer {
   url: string;
@@ -41,21 +41,6 @@ export function isPortOpen(port: number, host = "127.0.0.1"): Promise<boolean> {
     socket.once("timeout", () => done(false));
     socket.once("error", () => done(false));
   });
-}
-
-function installInterrupt(stop: () => Promise<void>): () => void {
-  const handler = () => {
-    process.off("SIGINT", handler);
-    void stop()
-      .catch((error: unknown) => {
-        if (error instanceof KkomkkomError) {
-          process.stderr.write(`kkomkkom: ${t(resolveLang(), error.key, error.vars)}\n`);
-        }
-      })
-      .finally(() => process.exit(130));
-  };
-  process.once("SIGINT", handler);
-  return () => process.off("SIGINT", handler);
 }
 
 async function waitForHttp(
@@ -172,7 +157,11 @@ export async function startDevServer(
     })();
     return stopPromise;
   };
-  removeInterrupt = installInterrupt(stop);
+  removeInterrupt = installInterrupt(stop, (error) => {
+    if (error instanceof KkomkkomError) {
+      process.stderr.write(`kkomkkom: ${t(resolveLang(), error.key, error.vars)}\n`);
+    }
+  });
 
   let failure = await waitForHttp(url, exited, () => exitInfo, options.startupTimeoutMs ?? DEFAULT_STARTUP_MS);
   if (failure === null && exitInfo !== null) failure = { reason: exitInfo };
