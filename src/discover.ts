@@ -1,6 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { KkomkkomError } from "./errors.js";
+import { displayPath, isMissing } from "./fs.js";
 import type { RouteInfo } from "./types.js";
 
 const ROUTE_FILE = /^route\.(ts|tsx|js|jsx|mjs)$/;
@@ -26,17 +27,18 @@ export async function findProjectRoot(cwd: string): Promise<string> {
   }
 }
 
-async function walk(dir: string, out: string[]): Promise<void> {
+async function walk(dir: string, out: string[], root: string): Promise<void> {
   let entries;
   try {
     entries = await readdir(dir, { withFileTypes: true });
-  } catch {
-    return;
+  } catch (error) {
+    if (isMissing(error)) return;
+    throw new KkomkkomError("errSourceRead", { path: displayPath(root, dir) });
   }
   for (const entry of entries) {
     if (entry.name.startsWith(".") || SKIP_DIRS.has(entry.name)) continue;
     const path = join(dir, entry.name);
-    if (entry.isDirectory()) await walk(path, out);
+    if (entry.isDirectory()) await walk(path, out, root);
     else out.push(path);
   }
 }
@@ -72,7 +74,7 @@ export async function discoverRoutes(root: string): Promise<RouteInfo[]> {
   const pagesRoots = [join(root, "pages"), join(root, "src", "pages")];
 
   const files: string[] = [];
-  for (const dir of [...appRoots, ...pagesRoots]) await walk(dir, files);
+  for (const dir of [...appRoots, ...pagesRoots]) await walk(dir, files, root);
 
   const routes: RouteInfo[] = [];
   for (const file of files) {
@@ -100,7 +102,14 @@ export async function discoverRoutes(root: string): Promise<RouteInfo[]> {
     }
 
     if (!kind) continue;
-    const source = kind === "api" ? await readFile(file, "utf8").catch(() => "") : "";
+    let source = "";
+    if (kind === "api") {
+      try {
+        source = await readFile(file, "utf8");
+      } catch {
+        throw new KkomkkomError("errSourceRead", { path: displayPath(root, file) });
+      }
+    }
     routes.push({ path, file, kind, dynamic: isDynamic(path), source, router: appRoot ? "app" : "pages" });
   }
 

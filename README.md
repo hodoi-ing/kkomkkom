@@ -156,7 +156,7 @@ kkomkkom --explain          # 설치된 AI CLI로 추가 설명 요청
 | `1` | API `exposed`, critical 항목, 빌드 실패, 또는 `--strict`의 warning·불완전/빈 coverage |
 | `2` | 프로젝트·포트·설정·기준선 오류로 검사를 시작·완료하지 못했거나, 기준선 갱신이 거부됨 |
 
-`unknown` 판정이나 `failed`/`unsupported` coverage는 기본 실행에서 exit 0일 수 있지만, `--strict`에서는 1입니다. 종료 코드 0과 “배포해도 좋습니다” 문구를 전체 검증 완료로 해석하지 마세요. 관련 동작은 [#1](https://github.com/hodoi-ing/kkomkkom/issues/1)에서 추적합니다.
+`unknown` 판정이나 `failed`/`unsupported` coverage는 기본 실행에서 exit 0일 수 있지만, `--strict`에서는 1입니다. 400·408·429처럼 GET 인증을 확인하지 못한 응답은 `checked`가 아니라 `api-auth` `failed`/`http-<status>`로 남습니다. 종료 코드 0과 “배포해도 좋습니다” 문구를 전체 검증 완료로 해석하지 마세요. 관련 동작은 [#1](https://github.com/hodoi-ing/kkomkkom/issues/1)에서 추적합니다.
 
 </details>
 
@@ -198,7 +198,7 @@ kkomkkom --explain          # 설치된 AI CLI로 추가 설명 요청
 
 **lock.** 다른 프로세스가 lock을 잡고 있으면 최대 5초 기다린 뒤 명시적 오류로 끝냅니다. mtime만 보고 오래된 lock을 자동 삭제하지 않습니다. 실행 중인 꼼꼼 프로세스가 없다고 확인한 경우에만 `.kkomkkom/baseline.json.lock`을 직접 지우세요. 꼼꼼은 자신이 만든 lock만 해제합니다.
 
-**측정 방식과 비교.** `firstLoadJs`는 `.next` 빌드 매니페스트가 참조하는 고유 JS 청크 파일 크기의 합(`manifest-file`)입니다. 매니페스트가 없는 구버전 출력은 `Size`/`First Load JS` 표를 파싱합니다(`next-output`). 압축 전 파일 크기이며 gzip 전송량·TTFB·브라우저 성능과 다릅니다. 측정 방식이 기준선과 현재 검사에서 모두 기록되어 있고 같을 때만 증감·경고를 계산합니다. `method`가 없는 구버전 기준선은 읽되 페이지 크기를 비교하지 않고, `--update`로 새 측정값을 저장하기 전까지 마이그레이션 안내를 표시합니다. 페이지 소스가 발견됐는데 해당 페이지의 측정값이 없으면 0으로 대체하지 않고 `build` coverage `failed`로 남깁니다.
+**측정 방식과 비교.** `manifest-file`은 `.next` 빌드 매니페스트가 참조하는 고유 JS 청크 파일 크기의 합(비압축 파일 기준)입니다. 매니페스트가 없는 구버전 출력의 `next-output`은 해당 Next 버전이 `Size`/`First Load JS` 표에 보고한 값을 파싱한 것으로, 비압축 파일 합계나 실제 HTTP 전송량과 같다고 보장하지 않습니다. 두 방식 모두 gzip 전송량·TTFB·브라우저 성능과 다릅니다. 측정 방식이 기준선과 현재 검사에서 모두 기록되어 있고 같을 때만 증감·경고를 계산합니다. `method`가 없는 구버전 기준선은 읽되 페이지 크기를 비교하지 않고, `--update`로 새 측정값을 저장하기 전까지 마이그레이션 안내를 표시합니다. 페이지 소스가 발견됐는데 해당 페이지의 측정값이 없으면 0으로 대체하지 않고 `build` coverage `failed`로 남깁니다.
 
 **JSON schema.** CLI `--json`과 MCP `structuredContent`는 `schemaVersion: 2`이며 `coverage`, `diff`, `extra`, `exitCode`를 공유합니다. `coverage.checks[]`의 `status`는 `checked`, `static-only`, `ignored`, `skipped`, `failed`, `unsupported` 중 하나이고 `reason`에 근거가 붙습니다. `coverage.status`는 `complete`, `incomplete`, `empty`입니다. `--reuse`는 실행 중인 서버가 같은 프로젝트인지 확인하지 않으므로 `server`/`unsupported` 검사가 추가됩니다.
 
@@ -272,7 +272,7 @@ The package is not published to npm. Clone an accessible copy of this repository
 
 For MCP, launch `node /absolute/path/to/kkomkkom/dist/mcp.js`. The tool is named `kkomkkom`; pass the app's absolute `projectPath`. A `tools/call` response includes readable text plus `structuredContent` with `schemaVersion: 2`, `coverage`, `diff`, `extra` and `exitCode`. Tool errors set `isError` and keep the stream usable. There is no MCP update argument, so baseline writes stay a CLI operation. `reuse` does not verify that the running server belongs to the project and records `server`/`unsupported` coverage. Individual agent connection tests are deferred, not completed.
 
-Page weights are uncompressed JS chunk sizes from the build manifests (or the legacy size table), not gzip transfer size or TTFB. Sizes are compared only when both runs recorded the same measurement method; legacy baselines without a method are loaded but not compared until a non-fast `--update` replaces their page values. Production-build, packed-consumer and local MCP calls were verified on Linux/WSL only; Windows and macOS are untested.
+Page weights are not raw network sizes. `manifest-file` is the sum of uncompressed JS chunk files referenced by the build manifests. `next-output` is the `First Load JS` value reported by that older Next version, which is not guaranteed to equal either the raw file sum or the actual HTTP transfer size. Neither method is gzip transfer size or TTFB. Sizes are compared only when both runs recorded the same method; legacy baselines without one are loaded but not compared until a non-fast `--update` replaces their values. Production-build, packed-consumer and local MCP calls were verified on Linux/WSL only; Windows and macOS are untested.
 
 The preview above uses sample data, not a recorded app scan. Findings require review: a 200 response does not by itself prove an auth bypass, and exit code 0 is not a security guarantee. Sources and settings are not automatically fixed; dev/build artifacts and baseline files can change. Redaction has limits. Optional AI explanations may send data to the configured model provider.
 

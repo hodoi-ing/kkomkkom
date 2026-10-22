@@ -1,7 +1,7 @@
 npm notice run kkomkkom@0.1.0 verify
 npm notice run node scripts/verify.mjs
 ✔ build
-✔ unit tests (190)
+✔ unit tests (197)
 ✔ real app: an open API exits 1
 ✔ real app: the open API is critical
 ✔ real app: JSON includes an extra array
@@ -36,6 +36,6 @@ npm notice run node scripts/verify.mjs
 ✔ pack: consumer CLI runs
 ✔ pack: consumer CLI checks the app with production dependencies
 ✔ pack: consumer MCP tools/call returns the shared result
-  · packed 51892 bytes; consumer install 495 ms
+  · packed 52950 bytes; consumer install 558 ms
 
 all checks passed

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { discoverRoutes, findProjectRoot } from "../dist/discover.js";
@@ -43,6 +43,32 @@ test("discoverRoutes maps app and pages routes", async () => {
   assert.ok(paths.includes("api:/api/health"));
   assert.ok(!paths.some((path) => path.includes("_app")));
   await rm(root, { recursive: true, force: true });
+});
+
+test("an unreadable API source is a tool error naming its path", { skip: process.platform === "win32" || process.getuid?.() === 0 }, async () => {
+  const root = await fixture();
+  const file = join(root, "app", "api", "users", "route.ts");
+  await chmod(file, 0o000);
+  try {
+    await assert.rejects(discoverRoutes(root), (error) =>
+      error.key === "errSourceRead" && error.vars.path === "app/api/users/route.ts");
+  } finally {
+    await chmod(file, 0o644).catch(() => {});
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("an unreadable route directory is a tool error naming its path", { skip: process.platform === "win32" || process.getuid?.() === 0 }, async () => {
+  const root = await fixture();
+  const dir = join(root, "app", "api", "users");
+  await chmod(dir, 0o000);
+  try {
+    await assert.rejects(discoverRoutes(root), (error) =>
+      error.key === "errSourceRead" && error.vars.path === "app/api/users");
+  } finally {
+    await chmod(dir, 0o755).catch(() => {});
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("discoverRoutes supports src/app and src/pages", async () => {

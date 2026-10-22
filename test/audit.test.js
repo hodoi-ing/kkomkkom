@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, writeFile, rm, symlink } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, writeFile, rm, symlink } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -104,6 +104,51 @@ test("env parsing handles export, quotes, comments, placeholders and duplicate k
   assert.deepEqual((await auditProject(input(root))).map((f) => f.id), [
     "public-secret:NEXT_PUBLIC_ACCESS_KEY", "public-secret:NEXT_PUBLIC_API_SECRET",
   ]);
+});
+
+test("an unreadable source file is failed coverage and the scan continues", { skip: process.platform === "win32" || process.getuid?.() === 0 }, async (t) => {
+  const root = await fixture(t, {
+    "lib/open.ts": `const key = '${fakeKey}';`,
+    "lib/private.ts": `const key = '${fakeKey}';`,
+  });
+  const locked = join(root, "lib", "private.ts");
+  await chmod(locked, 0o000);
+  const coverage = [];
+  const findings = await auditProject(input(root), coverage);
+  assert.deepEqual(findings.map((finding) => finding.id), ["hardcoded-secret:lib/open.ts:1"]);
+  assert.deepEqual(coverage, [{
+    rule: "secrets", path: "lib/private.ts", status: "failed", reason: "read",
+  }]);
+  assert.ok(!JSON.stringify(coverage).includes(fakeKey));
+});
+
+test("an unreadable source directory is failed coverage, not an empty scan", { skip: process.platform === "win32" || process.getuid?.() === 0 }, async (t) => {
+  const root = await fixture(t, { "lib/locked/secret.ts": `const key = '${fakeKey}';` });
+  const locked = join(root, "lib", "locked");
+  await chmod(locked, 0o000);
+  const coverage = [];
+  let findings;
+  try {
+    findings = await auditProject(input(root), coverage);
+  } finally {
+    await chmod(locked, 0o755).catch(() => {});
+  }
+  assert.deepEqual(findings, []);
+  assert.deepEqual(coverage, [{
+    rule: "secrets", path: "lib/locked", status: "failed", reason: "read",
+  }]);
+});
+
+test("an unreadable .env is failed coverage without exposing its value", { skip: process.platform === "win32" || process.getuid?.() === 0 }, async (t) => {
+  const root = await fixture(t, { ".env": `NEXT_PUBLIC_API_SECRET=${fakeKey}` });
+  await chmod(join(root, ".env"), 0o000);
+  const coverage = [];
+  const findings = await auditProject(input(root), coverage);
+  assert.deepEqual(findings, []);
+  assert.deepEqual(coverage, [{
+    rule: "secrets", path: ".env", status: "failed", reason: "read",
+  }]);
+  assert.ok(!JSON.stringify(coverage).includes(fakeKey));
 });
 
 test("hardcoded key is critical with only its relative file and line", async (t) => {
