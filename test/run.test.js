@@ -428,6 +428,30 @@ test("an API-only project does not invent page measurements", async (t) => {
   assert.equal(result.exitCode, 0);
 });
 
+test("a reused server leaves its unverified identity in coverage", async (t) => {
+  const { createServer } = await import("node:http");
+  const root = await project(t, "ok");
+  await config(root, { routePolicies: { "/api/health": { GET: "public" } } });
+  const port = await freePort();
+  const server = createServer((_req, res) => {
+    res.writeHead(200, { "content-type": "text/html" });
+    res.end('<html><script src="/_next/static/chunk.js"></script></html>');
+  });
+  await new Promise((resolve) => server.listen(port, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => {
+    server.closeAllConnections();
+    server.close(resolve);
+  }));
+
+  const result = await runCheck({ root, fast: true, strict: true, reuse: true, port });
+  assert.equal(result.coverage.status, "incomplete");
+  assert.ok(result.coverage.checks.some(
+    (check) => check.rule === "server" && check.status === "unsupported" &&
+      check.reason === "reuse-unverified",
+  ));
+  assert.equal(result.exitCode, 1);
+});
+
 test("a corrupt baseline is a tool error and stays untouched", async (t) => {
   const root = await project(t, "ok");
   await config(root, { routePolicies: { "/api/health": { GET: "public" } } });

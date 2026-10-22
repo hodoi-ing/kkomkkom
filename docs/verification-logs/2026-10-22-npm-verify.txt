@@ -1,0 +1,41 @@
+npm notice run kkomkkom@0.1.0 verify
+npm notice run node scripts/verify.mjs
+✔ build
+✔ unit tests (190)
+✔ real app: an open API exits 1
+✔ real app: the open API is critical
+✔ real app: JSON includes an extra array
+✔ real app: detail follows --lang ko
+✔ real app: report follows --lang ja
+✔ first --fast --update writes a baseline
+✔ warnings alone exit 0
+✔ --strict turns warnings into exit 1
+✔ real app: a hardcoded secret stops the deploy
+✔ real app: a public secret warns
+✔ real app: a write API without auth warns
+✔ real app: a broken page warns
+✔ real app: extra detail follows --lang ko
+✔ real app: warning-only project checks exit 0
+✔ real app: --strict applies to project-check warnings
+✔ production build: complete non-fast run exits 0
+✔ production build: measured weights for every page
+✔ production build: real build and client-reference manifests exist
+✔ production build: a default check does not modify sources or the baseline
+✔ production build: explicit update stores measured page methods
+✔ production build: a later default check keeps the baseline byte-identical
+✔ production build: source digest is still unchanged
+✔ MCP tools/call: normal fast run returns the shared result
+✔ MCP tools/call: invalid input is a tool error
+✔ MCP tools/call: a non-Next project is a tool error
+✔ MCP tools/call: invalid config names the field
+✔ MCP stream survives tool errors
+✔ pack: npm pack succeeds
+✔ pack: tarball carries dist, not src or tests
+✔ pack: production-only consumer install succeeds
+✔ pack: production install has typescript but no dev-only types
+✔ pack: consumer CLI runs
+✔ pack: consumer CLI checks the app with production dependencies
+✔ pack: consumer MCP tools/call returns the shared result
+  · packed 51892 bytes; consumer install 495 ms
+
+all checks passed
