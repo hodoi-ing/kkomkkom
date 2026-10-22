@@ -70,6 +70,14 @@ Coordinator reproduction on `e5e6aa3`: a plain `PRIVATE_TOKEN` value from root `
 
 **Interfaces:** CLI `--production-url http://127.0.0.1:PORT`, MCP `productionUrl` is allowed only with artifacts mode. Restrict hostname to numeric loopback/localhost, forbid credentials/query/fragment/non-http schemes, do not follow redirects. Report server/project identity uncertainty. Match bounded served content against the artifact to establish specific-file exposure.
 
+**Concrete safety contract:**
+- Normalize accepted `localhost` to a numeric loopback before fetch; never rely on arbitrary DNS or suffix matching. Encode each relative artifact path segment, and never send cookies, Authorization, raw source/env contents or a write request.
+- Only files inside verified `public/` or `.next/static/` boundaries are HTTP candidates. Deduplicate by URL; do not request source graph files, `external-target` or `outside-boundary` references.
+- Confirm a file only on a complete 2xx body with an exact raw-byte content match. Redirects, SPA fallbacks, truncated/failed bodies and mismatched bytes remain unconfirmed. Do not expose file contents or secret-bearing digests in any result/log/explanation.
+- Preserve static observations even when HTTP returns 404; label actual local serving evidence separately from Internet deployment or project identity. An explicit HTTP selection with no eligible targets must say it performed no file verification, not claim the server was verified.
+- Bound requests to 50 unique candidates, 5 concurrent, 5 seconds per request and 60 seconds overall. Bound response bodies to 1 MiB each and 32 MiB aggregate HTTP payload; this is a separate response budget from the documented local-file scan reservation. Limits and remaining unverified targets are visible coverage, never silent success.
+- Runtime argument validation, normal/error MCP tools/call, exact-boundary body sizes, binary byte mismatches, empty/missing outputs and all five language messages are part of this task's regressions.
+
 - [ ] Add failing tests for localhost exposure, SPA 200 fallback, redirect, mismatched served content, nonloopback/IP tricks/userinfo, body timeout and budget; prove write requests and auth headers never occur.
 - [ ] Add opt-in local HTTP evidence without starting/reconfiguring unrelated servers. Reuse body limits/cancellation; observation limits remain visible.
 - [ ] Run real Next production build → static inspection → explicit local production HTTP; isolated packed consumer CLI/MCP tools/call normal/input/error tests. Exercise invalid exceptions, missing outputs and masking through explanation input/stdout/stderr/JSON/MCP.
