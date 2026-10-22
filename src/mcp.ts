@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { redactSecrets } from "./audit.js";
+import { runArtifactCheck } from "./artifacts.js";
 import { findProjectRoot } from "./discover.js";
 import { KkomkkomError } from "./errors.js";
 import { isLang, resolveLang, t, type Lang } from "./i18n.js";
@@ -15,11 +16,13 @@ const pkg = require("../package.json") as { version: string };
 const TOOL = {
   name: "kkomkkom",
   description:
-    "Check a Next.js app for API routes reachable without auth, exposed secrets, page errors, write APIs without auth, and pages that got much heavier. Use it before committing.",
+    "Check a Next.js app for API routes reachable without auth, exposed secrets, page errors, write APIs without auth, and pages that got much heavier. Use it before committing. Set artifacts to inspect public/.next/static only, without a server or build.",
   inputSchema: {
     type: "object",
     properties: {
       projectPath: { type: "string", description: "Next.js project path (default: current folder)" },
+      artifacts: { type: "boolean", description: "Standalone static production-artifact inspection (no server or build)" },
+      fresh: { type: "boolean", description: "With artifacts: build first, then inspect the new output" },
       fast: { type: "boolean", description: "Auth check only, skip the build" },
       strict: { type: "boolean", description: "Treat warnings as failures" },
       reuse: { type: "boolean", description: "Use a Next server already running on the port (project identity is not verified)" },
@@ -30,6 +33,8 @@ const TOOL = {
 
 interface ToolArgs {
   projectPath?: string;
+  artifacts?: boolean;
+  fresh?: boolean;
   fast?: boolean;
   strict?: boolean;
   reuse?: boolean;
@@ -64,12 +69,15 @@ function validateArgs(value: unknown): ToolArgs {
     if (typeof value.projectPath !== "string" || value.projectPath.trim() === "") invalid("projectPath");
     args.projectPath = value.projectPath;
   }
-  for (const key of ["fast", "strict", "reuse"] as const) {
+  for (const key of ["artifacts", "fresh", "fast", "strict", "reuse"] as const) {
     if (key in value) {
       if (typeof value[key] !== "boolean") invalid(key);
       args[key] = value[key];
     }
   }
+  if (args.fresh === true && args.artifacts !== true) invalid("fresh");
+  if (args.artifacts === true && args.fast === true) invalid("fast");
+  if (args.artifacts === true && args.reuse === true) invalid("reuse");
   if ("lang" in value) {
     if (typeof value.lang !== "string" || !isLang(value.lang.toLowerCase().split(/[._-]/)[0])) {
       invalid("lang");
@@ -90,12 +98,18 @@ async function callTool(args: ToolArgs) {
   const cwd = args.projectPath ? resolve(args.projectPath) : process.cwd();
   const root = await findProjectRoot(cwd);
   const lang = resolveLang(args.lang);
-  const result = await runCheck({
-    root,
-    fast: args.fast === true,
-    strict: args.strict === true,
-    reuse: args.reuse === true,
-  });
+  const result = args.artifacts === true
+    ? await runArtifactCheck({
+      root,
+      fresh: args.fresh === true,
+      strict: args.strict === true,
+    })
+    : await runCheck({
+      root,
+      fast: args.fast === true,
+      strict: args.strict === true,
+      reuse: args.reuse === true,
+    });
   const text = renderReport(result.diff, {
     lang,
     color: false,

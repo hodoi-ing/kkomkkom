@@ -31,6 +31,11 @@ const PEM_BLOCK = /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----[\
 const PEM_UNCLOSED = /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----[\s\S]*/g;
 const WRITES = new Set<HttpMethod>(["POST", "PUT", "PATCH", "DELETE"]);
 
+/** Confirmed secret patterns only; placeholders and examples never count. */
+export function hasHighConfidenceSecret(text: string): boolean {
+  return [...text.matchAll(SECRET)].some((match) => !PLACEHOLDER.test(match[0]));
+}
+
 function isEnvEntry(entry: Dirent): boolean {
   return (
     (entry.isFile() || entry.isSymbolicLink()) &&

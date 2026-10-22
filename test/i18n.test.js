@@ -43,7 +43,7 @@ test("t fills placeholders", () => {
 });
 
 test("every language has every message with no unfilled placeholders", () => {
-  const vars = { count: 1, status: 200, port: 3100, log: "log", lang: "xx", provider: "claude", location: "?", file: ".env", line: 1, key: "NEXT_PUBLIC_TOKEN", path: "/api/x", seconds: 8, reason: "exit 1", field: "port", method: "POST", methods: "POST", checked: 1, skipped: 0, ignored: 0, failed: 0, unsupported: 0 };
+  const vars = { count: 1, status: 200, port: 3100, log: "log", lang: "xx", provider: "claude", location: "?", file: ".env", line: 1, key: "NEXT_PUBLIC_TOKEN", path: "/api/x", seconds: 8, reason: "exit 1", field: "port", method: "POST", methods: "POST", checked: 1, skipped: 0, ignored: 0, failed: 0, unsupported: 0, target: "./server", client: "app/widget.tsx", option: "--fast" };
   for (const lang of LANGS) {
     for (const key of MESSAGE_KEYS) {
       const text = t(lang, key, vars);
