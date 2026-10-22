@@ -4,7 +4,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, sep } from "node:path";
-import { runArtifactCheck } from "../dist/artifacts.js";
+import { rangeChangeReason, runArtifactCheck } from "../dist/artifacts.js";
 import { loadConfig } from "../dist/config.js";
 
 const SECRET = "sk_live_ABCDEFGHIJKLMNOPQRST";
@@ -205,6 +205,20 @@ test("type-only imports and exports are not runtime server-only evidence", async
   assert.equal(boundary[0].file, "app/mixed-entry.tsx");
 });
 
+test("a default runtime binding keeps type-only named imports as runtime evidence", async (t) => {
+  const { root } = await project(t, {
+    files: {
+      "app/client.tsx": "\"use client\";\nimport Foo, { type Bar } from \"../lib/server\";\nexport default () => Foo;\n",
+      "lib/server.ts": "import \"server-only\";\nexport default function Foo() {}\nexport type Bar = number;\n",
+    },
+  });
+  const result = await runArtifactCheck({ root, strict: false });
+  const boundary = byRule(result, "artifact-server-boundary");
+  assert.equal(boundary.length, 1);
+  assert.equal(boundary[0].file, "app/client.tsx");
+  assert.equal(boundary[0].messageVars.target, "lib/server.ts");
+});
+
 test("comments and strings do not create server-only or map findings", async (t) => {
   const { root } = await project(t, {
     files: {
@@ -219,6 +233,47 @@ test("comments and strings do not create server-only or map findings", async (t)
   assert.equal(byRule(result, "artifact-source-map").filter((item) => item.file === "public/app.js").length, 1);
   assert.equal(byRule(result, "artifact-source-map").find((item) => item.file === "public/app.js").messageKey,
     "artifactSourceMapReference");
+});
+
+test("a regex literal that looks like a source map directive is not a comment", async (t) => {
+  const { root } = await project(t, {
+    files: {
+      ".next/static/chunks/re.js": "const re = /[//]sourceMappingURL=foo.map/;\nconsole.log(re);\n",
+      ".next/static/chunks/template.js":
+        "const text = `//# sourceMappingURL=template.map`;\nconsole.log(text);\n",
+    },
+  });
+  const result = await runArtifactCheck({ root, strict: false });
+  assert.equal(byRule(result, "artifact-source-map").filter((item) =>
+    item.file === ".next/static/chunks/re.js" || item.file === ".next/static/chunks/template.js").length, 0);
+});
+
+test("indexed version 3 source maps are valid map evidence", async (t) => {
+  const section = (sourcesContent) => ({
+    offset: { line: 0, column: 0 },
+    map: { version: 3, sources: ["app.ts"], mappings: "AAAA", ...(sourcesContent ? { sourcesContent: ["x"] } : {}) },
+  });
+  const { root } = await project(t, {
+    files: {
+      "public/indexed-content.map": JSON.stringify({ version: 3, sections: [section(true)] }),
+      "public/indexed-url.map": JSON.stringify({
+        version: 3,
+        sections: [{ offset: { line: 0, column: 0 }, url: "chunk.map" }],
+      }),
+      "public/indexed-bad.map": JSON.stringify({
+        version: 3,
+        sections: [{ offset: { line: 0 }, map: {} }],
+      }),
+    },
+  });
+  const result = await runArtifactCheck({ root, strict: false });
+  const maps = byRule(result, "artifact-source-map");
+  assert.ok(maps.some((item) => item.file === "public/indexed-content.map"
+    && item.messageKey === "artifactSourceMapFileContent"));
+  assert.ok(maps.some((item) => item.file === "public/indexed-url.map"
+    && item.messageKey === "artifactSourceMapFile"));
+  assert.equal(maps.some((item) => item.file === "public/indexed-bad.map"), false);
+  assert.ok(coverageReasons(result, "static-only").includes("invalid-map-format"));
 });
 
 test("a variable dynamic import is unverified, not silently safe", async (t) => {
@@ -348,6 +403,59 @@ test("source-map targets and exception reasons are masked", async (t) => {
   assert.ok(!ignored.reason.includes(SECRET));
 });
 
+test("exception reasons and map targets mask project env secret values", async (t) => {
+  const envSecret = "ordinary-env-value-abcdef123456";
+  const { root } = await project(t, {
+    files: {
+      ".env": `PRIVATE_TOKEN=${envSecret}\n`,
+      "app/page.tsx": "export default function Page() { return null; }\n",
+      "public/valid.map": JSON.stringify({ version: 3, sources: ["a"], mappings: "AAAA", sourcesContent: ["x"] }),
+      ".next/static/chunks/ref.js": `//# sourceMappingURL=${envSecret}.map\n`,
+    },
+    config: {
+      artifactExceptions: [
+        { ruleId: "artifact-source-map", file: "public/valid.map", reason: `known ${envSecret}` },
+      ],
+    },
+  });
+  const result = await runArtifactCheck({ root, strict: false });
+  const serialized = JSON.stringify(result);
+  assert.ok(!serialized.includes(envSecret));
+  assert.equal(result.coverage.status, "complete");
+  const ignored = result.coverage.checks.find((check) => check.status === "ignored");
+  assert.ok(ignored);
+  assert.match(ignored.reason, /\[redacted\]/);
+  const reference = byRule(result, "artifact-source-map").find((item) => item.file === ".next/static/chunks/ref.js");
+  assert.equal(reference.messageVars.target, "[redacted].map");
+
+  const cli = runCli(root, ["--artifacts", "--json"]);
+  assert.equal(cli.status, 0, cli.stderr);
+  assert.ok(!cli.stdout.includes(envSecret));
+  assert.ok(!cli.stderr.includes(envSecret));
+});
+
+test("an unreadable masking context marks exception reasons unconfirmed", { skip: process.platform === "win32" }, async (t) => {
+  const outsideDir = await mkdtemp(join(tmpdir(), "kkomkkom-env-"));
+  t.after(() => rm(outsideDir, { recursive: true, force: true }));
+  const envSecret = "outside-env-value-abcdef123456";
+  await writeFile(join(outsideDir, ".env"), `PRIVATE_TOKEN=${envSecret}\n`);
+  const { root } = await project(t, {
+    files: {
+      "public/valid.map": JSON.stringify({ version: 3, sources: ["a"], mappings: "AAAA", sourcesContent: ["x"] }),
+    },
+    config: {
+      artifactExceptions: [
+        { ruleId: "artifact-source-map", file: "public/valid.map", reason: `${envSecret}` },
+      ],
+    },
+  });
+  await symlink(join(outsideDir, ".env"), join(root, ".env"));
+  const result = await runArtifactCheck({ root, strict: false });
+  assert.ok(!JSON.stringify(result).includes(envSecret));
+  const ignored = result.coverage.checks.find((check) => check.status === "ignored");
+  assert.equal(ignored.reason, "exception:artifact-source-map:unconfirmed");
+});
+
 test("sensitive names alone are warnings while high-confidence secret patterns are critical", async (t) => {
   const named = await project(t, {
     files: { "public/.env": "DATABASE_PASSWORD=plainvalue\n" },
@@ -447,6 +555,31 @@ test("oversized files and read failures are visible coverage, not silence", asyn
   });
   const result = await runArtifactCheck({ root, strict: false });
   assert.ok(coverageReasons(result, "failed").includes("file-size"));
+});
+
+test("a changed read range is reported instead of silently completed", () => {
+  assert.equal(rangeChangeReason(100, 100, 100), null);
+  assert.equal(rangeChangeReason(100, 120, 120), "file-grew");
+  assert.equal(rangeChangeReason(100, 80, 80), "file-shrunk");
+  assert.equal(rangeChangeReason(100, 80, 100), "file-short");
+});
+
+test("an oversized or symlinked-out inspection config is an explicit error", { skip: process.platform === "win32" }, async (t) => {
+  const large = await project(t, { files: { "public/app.js": "console.log('ok');\n" } });
+  await writeFile(join(large.root, "kkomkkom.config.json"),
+    `{"artifactExceptions":[]}${" ".repeat(1024 * 1024)}`);
+  const before = await readFile(join(large.root, "package.json"), "utf8");
+  const largeRun = runCli(large.root, ["--artifacts", "--json"]);
+  assert.equal(largeRun.status, 2);
+  assert.equal(await readFile(join(large.root, "package.json"), "utf8"), before);
+
+  const outsideDir = await mkdtemp(join(tmpdir(), "kkomkkom-config-"));
+  t.after(() => rm(outsideDir, { recursive: true, force: true }));
+  await writeFile(join(outsideDir, "kkomkkom.config.json"), "{}");
+  const linked = await project(t, { files: { "public/app.js": "console.log('ok');\n" } });
+  await symlink(join(outsideDir, "kkomkkom.config.json"), join(linked.root, "kkomkkom.config.json"));
+  const linkedRun = runCli(linked.root, ["--artifacts", "--json"]);
+  assert.equal(linkedRun.status, 2);
 });
 
 test("total read budget and file count limits are visible", { timeout: 60000 }, async (t) => {
