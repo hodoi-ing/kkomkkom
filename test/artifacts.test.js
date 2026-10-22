@@ -5,7 +5,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import { dirname, join, relative, sep } from "node:path";
 import { rangeChangeReason, runArtifactCheck } from "../dist/artifacts.js";
-import { loadConfig } from "../dist/config.js";
+import { CONFIG_LIMIT, loadConfig } from "../dist/config.js";
 
 const SECRET = "sk_live_ABCDEFGHIJKLMNOPQRST";
 
@@ -233,6 +233,114 @@ test("comments and strings do not create server-only or map findings", async (t)
   assert.equal(byRule(result, "artifact-source-map").filter((item) => item.file === "public/app.js").length, 1);
   assert.equal(byRule(result, "artifact-source-map").find((item) => item.file === "public/app.js").messageKey,
     "artifactSourceMapReference");
+});
+
+test("a sensitive server env value found in a client artifact is a value-free warning", async (t) => {
+  const value = "ordinary-private-token-abcdef123456";
+  const publicValue = "https://api.example.com/v1";
+  const version = "1.2.3";
+  const { root } = await project(t, {
+    files: {
+      ".env": `PRIVATE_TOKEN=${value}\nNEXT_PUBLIC_API_URL=${publicValue}\nAPP_VERSION=${version}\nEXAMPLE_TOKEN=example-placeholder-token\n`,
+      ".next/static/chunks/bundle.js":
+        `const a = "${value}";\nconst b = "${publicValue}";\nconst c = "${version}";\n`,
+      "app/page.tsx": "export default function Page() { return null; }\n",
+    },
+  });
+  const result = await runArtifactCheck({ root, strict: false });
+  const secrets = byRule(result, "artifact-client-secret");
+
+  assert.equal(secrets.length, 1);
+  assert.equal(secrets[0].file, ".next/static/chunks/bundle.js");
+  assert.equal(secrets[0].severity, "warning");
+  assert.equal(secrets[0].confidence, "uncertain");
+  assert.equal(secrets[0].messageKey, "artifactClientEnvValue");
+  assert.equal(secrets[0].messageVars.key, "PRIVATE_TOKEN");
+  assert.ok(!JSON.stringify(result).includes(value));
+  assert.ok(!JSON.stringify(result).includes("example-placeholder-token"));
+  assert.equal(result.coverage.status, "complete");
+  assert.equal(result.exitCode, 0);
+});
+
+test("runtime server imports reached from a client entry are potential boundary evidence", async (t) => {
+  const serverModules = [
+    "pg", "mysql2", "@prisma/client", "firebase-admin", "node:fs", "fs",
+    "node:child_process", "child_process", "node:net", "net", "@clerk/nextjs/server",
+  ];
+  const imports = serverModules
+    .map((specifier, index) => `import module${index} from "${specifier}";`)
+    .join("\n");
+  const { root } = await project(t, {
+    files: {
+      "app/server-imports.tsx":
+        `"use client";\n${imports}\nimport { getServerSession } from "next-auth";\nexport default function A() { return getServerSession; }\n`,
+      "app/client.tsx":
+        "\"use client\";\nimport { db } from \"../lib/db\";\nexport function B() { return db; }\n",
+      "lib/db.ts":
+        "import { PrismaClient } from \"@prisma/client\";\nexport const db = new PrismaClient();\n",
+      "app/clean.tsx":
+        "\"use client\";\nimport React from \"react\";\nimport { useSession } from \"next-auth/react\";\nimport { signIn } from \"next-auth\";\nimport type { PrismaClient } from \"@prisma/client\";\nimport { type Pool } from \"pg\";\nimport type fs from \"node:fs\";\nexport function C() { return [React, useSession, signIn]; }\n",
+    },
+  });
+  const result = await runArtifactCheck({ root, strict: false });
+  const boundary = byRule(result, "artifact-server-boundary");
+  const direct = boundary.filter((item) => item.file === "app/server-imports.tsx");
+  const targets = new Set(direct.map((item) => item.messageVars.target));
+
+  for (const specifier of serverModules) assert.ok(targets.has(specifier), specifier);
+  assert.ok(targets.has("next-auth"));
+  assert.equal(direct[0].evidenceKind, "source-import");
+  assert.equal(direct[0].confidence, "uncertain");
+  assert.equal(direct[0].severity, "warning");
+  assert.ok(boundary.some((item) =>
+    item.file === "app/client.tsx" && item.messageVars.target === "@prisma/client"));
+  assert.equal(boundary.filter((item) => item.file === "app/clean.tsx").length, 0);
+  assert.equal(result.exitCode, 0);
+});
+
+test("module-level use server stops the client graph while function strings do not", async (t) => {
+  const { root } = await project(t, {
+    files: {
+      "app/client.tsx":
+        "\"use client\";\nimport { save } from \"./actions\";\nexport function A() { return save; }\n",
+      "app/actions.ts":
+        "\"use server\";\nimport pg from \"pg\";\nimport { getServerSession } from \"next-auth\";\nexport async function save() { return [pg, getServerSession]; }\n",
+      "app/middle-client.tsx":
+        "\"use client\";\nimport { text } from \"./middle\";\nexport function B() { return text; }\n",
+      "app/middle.ts":
+        "import pg from \"pg\";\nexport function text() { return \"use server\"; }\n",
+      "app/both-client.tsx":
+        "\"use client\";\nimport { both } from \"./both\";\nexport function C() { return both; }\n",
+      "app/both.ts":
+        "\"use server\";\n\"use client\";\nimport pg from \"pg\";\nexport const both = pg;\n",
+    },
+  });
+  const result = await runArtifactCheck({ root, strict: false });
+  const boundary = byRule(result, "artifact-server-boundary");
+
+  assert.ok(coverageReasons(result, "static-only").includes("server-action-boundary"));
+  assert.ok(result.coverage.checks.some((check) =>
+    check.status === "static-only" && check.path === "app/actions.ts"));
+  assert.ok(coverageReasons(result, "unsupported").includes("conflicting-directives"));
+  assert.ok(!boundary.some((item) => item.file === "app/client.tsx"));
+  assert.ok(!boundary.some((item) => item.file === "app/both-client.tsx"));
+  assert.equal(boundary.length, 1);
+  assert.equal(boundary[0].file, "app/middle-client.tsx");
+  assert.equal(boundary[0].messageVars.target, "pg");
+});
+
+test("dynamic process.env keys stay unverified", async (t) => {
+  const { root } = await project(t, {
+    files: {
+      "app/dynamic-env.tsx":
+        "\"use client\";\nconst key = \"PRIVATE_TOKEN\";\nexport function A() { return process.env[key]; }\n",
+      "app/static-env.tsx":
+        "\"use client\";\nexport function B() { return process.env.NEXT_PUBLIC_API_URL; }\n",
+    },
+  });
+  const result = await runArtifactCheck({ root, strict: false });
+  assert.ok(coverageReasons(result, "unsupported").includes("process-env-dynamic"));
+  assert.equal(result.extras.length, 0);
 });
 
 test("a regex literal that looks like a source map directive is not a comment", async (t) => {
@@ -582,18 +690,19 @@ test("an oversized or symlinked-out inspection config is an explicit error", { s
   assert.equal(linkedRun.status, 2);
 });
 
-test("total read budget and file count limits are visible", { timeout: 60000 }, async (t) => {
+test("total read budget and file count limits include a reserved config read", { timeout: 60000 }, async (t) => {
+  assert.equal(CONFIG_LIMIT, 1024 * 1024);
   const files = {};
-  for (let index = 0; index < 33; index += 1) {
+  for (let index = 0; index < 32; index += 1) {
     files[`public/budget-${index}.txt`] = "x".repeat(1024 * 1024);
   }
-  const budget = await project(t, { files });
+  const budget = await project(t, { files, withStatic: false });
   const result = await runArtifactCheck({ root: budget.root, strict: false });
   assert.ok(coverageReasons(result, "failed").includes("total-budget"));
 
   const many = {};
-  for (let index = 0; index < 2001; index += 1) many[`public/many-${index}.txt`] = "x";
-  const count = await project(t, { files: many });
+  for (let index = 0; index < 2000; index += 1) many[`public/many-${index}.txt`] = "x";
+  const count = await project(t, { files: many, withStatic: false });
   const counted = await runArtifactCheck({ root: count.root, strict: false });
   assert.ok(coverageReasons(counted, "failed").includes("count-limit"));
 });
