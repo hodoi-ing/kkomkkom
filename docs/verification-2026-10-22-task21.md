@@ -61,3 +61,24 @@
 - full `npm test`/`npm run verify`, production HTTP, 실제 앱 build/pack 소비자 재실측, protect, Windows/macOS는 이번 범위에서 실행하지 않았다.
 - 사용자 지시대로 별도 모델·에이전트·요금제·AI 윤문 CLI를 호출하지 않았다. README는 기술 계약만 직접 수정했으며 patina CLI 검증을 주장하지 않는다.
 - 작업 중 발견한 `docs/superpowers/plans/2026-10-22-issue2-artifacts.md`의 별도 Task3 safety contract 변경은 총괄 작업으로 보존하고 이 구현 커밋에서 제외한다.
+
+## 총괄 검수 재작업 — placeholder와 출력 마스킹 분리
+
+총괄이 Task2.1 positive 6건을 직접 통과시킨 뒤, 공통 `searchableEnvValue`의 placeholder 제외가 실제 테스트 환경 자격증명까지 출력 마스킹에서 빼는 회귀를 재현했다. 승인/PASS는 여전히 대기 중이다.
+
+- 공통 마스킹 대상은 기존 계약인 8자 이상·고정 비민감 enum 제외로 복구했다. `PLACEHOLDER` 제외는 `envSensitivePairs`의 finding 탐지에만 적용한다. 새 계층/옵션/의존성은 없다.
+- `test`/`dummy`/`your`를 포함한 값마다 audit 1건·artifact 정적 1건·fake build 실패/CLI 오류 출력 1건, 총 9건을 추가했다. `envSecretValues`·`maskSecrets`·`redactSecrets`, artifact exception reason·상대 map target, buildTail·CLI stdout/stderr의 원문 비노출을 검증한다. 해당 값과 공개 env 값은 계속 finding 탐지에서 제외한다.
+- build 실패 회귀는 고유 임시 fixture의 가짜 Next 실행 파일만 명시적 `fresh`로 실행한다. 실제 사용자 앱 build/서버/네트워크/설치는 수행하지 않는다.
+
+고유 로그 경로: `/tmp/opencode/kk-task21-mask.U5yLvw`. 테스트에는 이 경로를 `TMPDIR`로 전달했다.
+
+| 순서 | 명령 | 실제 결과 | 로그 |
+|---|---|---|---|
+| RED | `node --test --test-reporter=tap --test-name-pattern='^masking regression:' test/audit.test.js test/artifacts.test.js` | exit 1, 0 pass / 9 fail. 마스킹 목록 누락, reason/buildTail 마스킹 실패 | `red.log` |
+| 검사기 컴파일 | `npm run build` | exit 0 | `build.log` |
+| 첫 연결 실행 | `node --test --test-reporter=tap --test-name-pattern='^masking regression:|^every language has every message with no unfilled placeholders$' test/audit.test.js test/artifacts.test.js test/i18n.test.js` | exit 1, 7 pass / 3 fail. i18n 1건은 통과. artifact의 외부 map URL fixture가 이미 `external-target`으로 치환돼 target의 `[redacted]` assert가 실패 | `green.log` |
+| 최종 focused | RED와 같은 명령 | exit 0, 9 pass / 0 fail / 0 skipped | `focused.log` |
+
+외부 map URL fixture만 상대 map 경로로 교체해 실제 target 마스킹 경로를 검사했다. assert를 제거/완화하지 않았다. i18n은 첫 연결 실행의 1 pass를 사용하고 다시 실행하지 않았다. 총괄 PASS positive 6건·기존 골든·전체 artifact/audit·full test/verify는 반복하지 않았다. HTTP/protect·push 미착수, Task2.1 `[ ]` 유지. 총괄의 별도 미커밋 Task3 계획은 보존하고 이 수정 커밋에서도 제외한다.
+
+`git diff --check` exit 0. 위 로그 4개에 회귀용 자격증명 원문이 없는지도 별도 assert로 확인했다(exit 0).

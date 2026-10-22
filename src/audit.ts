@@ -88,7 +88,7 @@ function envPairs(content: string): Array<{ key: string; value: string }> {
 }
 
 function searchableEnvValue(value: string): boolean {
-  return value.length >= 8 && !PLACEHOLDER.test(value) && !SEARCHABLE_ENV_SKIP.test(value);
+  return value.length >= 8 && !SEARCHABLE_ENV_SKIP.test(value);
 }
 
 /** Values from bounded env-file text that are safe to search for in free text. */
@@ -102,7 +102,8 @@ export function envSecretValues(content: string): string[] {
 /** Non-public server env assignments whose literal values are worth matching in artifacts. */
 export function envSensitivePairs(content: string): Array<{ key: string; value: string }> {
   return envPairs(content).filter(({ key, value }) =>
-    !key.startsWith("NEXT_PUBLIC_") && PUBLIC_SECRET.test(key) && searchableEnvValue(value));
+    !key.startsWith("NEXT_PUBLIC_") && PUBLIC_SECRET.test(key)
+    && searchableEnvValue(value) && !PLACEHOLDER.test(value));
 }
 
 function git(root: string, args: string[]): Promise<{ code: number | null; stdout: string }> {

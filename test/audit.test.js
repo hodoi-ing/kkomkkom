@@ -6,7 +6,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { auditProject, redactSecrets } from "../dist/audit.js";
+import { auditProject, envSecretValues, envSensitivePairs, maskSecrets, redactSecrets } from "../dist/audit.js";
 
 const exec = promisify(execFile);
 const fakeKey = "sk_live_" + "FAKE0123456789".repeat(3);
@@ -42,6 +42,23 @@ async function serve(t, handler) {
     server.close(resolve);
   }));
   return `http://127.0.0.1:${server.address().port}`;
+}
+
+for (const marker of ["test", "dummy", "your"]) {
+  test(`masking regression: ${marker} inside credentials is masked, not a detection finding`, async (t) => {
+    const value = ["real", marker, "service", "token", "0123456789"].join("-");
+    const env = `PRIVATE_TOKEN=${value}\nNEXT_PUBLIC_TOKEN=${value}\nMODE=production\nSHORT=small\n`;
+    const root = await fixture(t, { ".env": env });
+    const values = envSecretValues(env);
+
+    assert.equal(values.length, 1);
+    assert.ok(values.includes(value));
+    assert.equal(envSensitivePairs(env).length, 0);
+    assert.equal(maskSecrets(`error: ${value}`, values), "error: [redacted]");
+    const output = await redactSecrets(root, `build failed: ${value}`);
+    assert.ok(!output.includes(value));
+    assert.equal(output, "build failed: [redacted]");
+  });
 }
 
 test("tracked .env is critical without a duplicate not-ignored warning", async (t) => {

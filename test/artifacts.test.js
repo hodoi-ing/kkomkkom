@@ -262,6 +262,51 @@ test("a sensitive server env value found in a client artifact is a value-free wa
   assert.equal(result.exitCode, 0);
 });
 
+for (const marker of ["test", "dummy", "your"]) {
+  test(`masking regression: ${marker} credentials stay out of artifact reasons and targets`, async (t) => {
+    const value = ["real", marker, "service", "token", "0123456789"].join("-");
+    const { root } = await project(t, {
+      files: {
+        ".env": `PRIVATE_TOKEN=${value}\n`,
+        "app/page.tsx": "export default function Page() { return null; }\n",
+        ".next/static/chunks/app.js": `const value = ${JSON.stringify(value)};\n`,
+        "public/reference.js": `//# sourceMappingURL=${value}.map\n`,
+        "public/suppressed.js.map": '{"version":3,"sources":["app.ts"],"mappings":"AAAA"}',
+      },
+      config: { artifactExceptions: [{
+        ruleId: "artifact-source-map", file: "public/suppressed.js.map", reason: `review: ${value}`,
+      }] },
+    });
+    const result = await runArtifactCheck({ root, strict: false });
+    const ignored = result.coverage.checks.find((check) => check.status === "ignored");
+    const reference = byRule(result, "artifact-source-map")
+      .find((finding) => finding.file === "public/reference.js");
+
+    assert.ok(ignored.reason.includes("[redacted]"));
+    assert.ok(reference.messageVars.target.includes("[redacted]"));
+    assert.ok(!JSON.stringify(result).includes(value));
+    assert.equal(byRule(result, "artifact-client-secret").length, 0);
+    assert.equal(result.coverage.status, "complete");
+  });
+
+  test(`masking regression: ${marker} credentials stay out of build failure and CLI error output`, async (t) => {
+    const value = ["real", marker, "service", "token", "0123456789"].join("-");
+    const { root } = await project(t, { files: { ".env": `PRIVATE_TOKEN=${value}\n` } });
+    await writeFile(join(root, "node_modules", "next", "dist", "bin", "next"),
+      `process.stderr.write(${JSON.stringify(`error: ${value}\n`)}); process.exit(1);\n`);
+
+    const result = await runArtifactCheck({ root, fresh: true, strict: false });
+    assert.equal(result.buildFailed, true);
+    assert.equal(result.exitCode, 1);
+    assert.ok(result.buildTail.includes("[redacted]"));
+    assert.ok(!JSON.stringify(result).includes(value));
+
+    const cli = runCli(root, ["--artifacts", "--fresh"]);
+    assert.equal(cli.status, 1);
+    assert.ok(!`${cli.stdout}${cli.stderr}`.includes(value));
+  });
+}
+
 test("distinct known env keys in one artifact survive while repeated keys deduplicate", async (t) => {
   const first = ["private", "alpha", "0123456789"].join("-");
   const second = ["private", "beta", "9876543210"].join("-");
