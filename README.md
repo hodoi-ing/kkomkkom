@@ -124,7 +124,17 @@ stdio에서 직접 호출하는 예시는 다음과 같습니다. 한 줄에 JSO
 
 배포물 탐색은 기본 Next 출력인 `public/`과 `.next/static/`으로 제한합니다. `next.config.*`는 실행·import하지 않고 텍스트만 읽습니다. `distDir` 변경, `output: "export"`, `output: "standalone"`, 복수 설정, 정적으로 해석할 수 없는 설정은 지원 성공으로 표시하지 않고 `unsupported` coverage로 남깁니다. `.next` 존재만으로 최신 빌드라고 단정하지 않으며, 빌드하지 않은 검사는 `build-freshness-unknown`을 기록합니다. 파일당 1 MiB, 전체 32 MiB, 2000개 상한을 넘거나 읽기 실패가 있으면 `failed`, symlink 경계 이탈이나 해석 불가는 `unsupported` coverage로 남기고 통과로 숨기지 않습니다. 별도 로더가 검증하는 `kkomkkom.config.json`은 최대 1 MiB이며, 파일이 없거나 작아도 전체 예산에서 1 MiB와 1개를 보수적으로 예약합니다. 나머지 읽기는 최대 31 MiB·1999개를 공유합니다.
 
-`artifactExceptions`는 정확히 같은 rule ID와 프로젝트 상대 파일에만 적용됩니다. 사유가 비어 있거나 알 수 없는 rule ID, 절대 경로, `..` 경로는 설정 오류(exit 2)입니다. 예외로 억제된 항목은 `coverage.checks[]`에 `ignored`와 사유로 남습니다. 이 검사는 HTTP로 실제 제공 여부를 확인하지 않으므로, 파일 존재와 외부 노출을 같은 의미로 읽지 마세요. loopback production HTTP 확인은 후속 단계입니다.
+`artifactExceptions`는 정확히 같은 rule ID와 프로젝트 상대 파일에만 적용됩니다. 사유가 비어 있거나 알 수 없는 rule ID, 절대 경로, `..` 경로는 설정 오류(exit 2)입니다. 예외로 억제된 항목은 `coverage.checks[]`에 `ignored`와 사유로 남습니다. 예외의 정확한 경로 매칭은 마스킹 전에 수행하며, 결과의 경로·id·메시지·coverage에는 알려진 env 값과 provider 키 패턴을 가립니다. 같은 표시 경로로 가려진 관찰도 합치지 않습니다.
+
+### 명시적 로컬 production HTTP 확인
+
+운영 빌드와 서버는 사용자가 별도로 준비합니다. `--artifacts --production-url http://127.0.0.1:3000`은 이미 실행 중인 로컬 서버에만 GET을 보냅니다. MCP에서는 `artifacts: true, productionUrl: "http://127.0.0.1:3000"`을 전달합니다. 이 옵션은 서버를 시작하거나 설정·기준선을 쓰지 않습니다. `--fresh`를 함께 지정할 때만 먼저 빌드하므로, 실행 중인 서버가 그 빌드를 제공하는지도 따로 확인하세요.
+
+허용 주소는 경로 없는 정규 HTTP loopback origin(`localhost`, `127.x.x.x`, `[::1]`)입니다. `localhost`는 DNS 조회 없이 `127.0.0.1`로 바꿉니다. 인증정보·쿼리·fragment·비 HTTP·외부 호스트·축약/비정규 IP는 거부합니다. 쿠키·Authorization·쓰기 요청은 보내지 않고 redirect도 따라가지 않습니다.
+
+검증된 `public/`·`.next/static/` 실파일만 후보가 되며, 경로 세그먼트를 인코딩하고 URL 중복을 제거합니다. 완전한 2xx 응답 본문이 파일의 raw bytes와 같을 때만 그 파일의 `local-production-http` 관찰을 추가합니다. JS 파일의 일치는 참조된 map의 제공을 증명하지 않습니다. SPA fallback·redirect·404·잘린 본문·일치하는 prefix만 있는 응답은 미확인으로 남기고, 기존 정적 finding은 지우지 않습니다. 서버의 프로젝트 신원과 인터넷 노출은 여전히 미확인입니다. 후보가 없으면 파일 검증을 수행하지 않았다고 표시합니다.
+
+HTTP 상한은 URL 50개, 동시 5개, 요청당 본문 완료까지 5초, 전체 60초, 본문당 1 MiB, 합계 32 MiB입니다. 합계는 처리에 수락한 payload 바이트 예산이며 네트워크·OS 버퍼 크기를 보장하는 값은 아닙니다. 초과 chunk는 보관하지 않고 stream을 취소합니다. 이 예산은 로컬 읽기 예산과 별개이며, 제한·오류·남은 미검증 파일은 coverage에 기록됩니다. 본문과 비밀값이 담긴 digest는 출력하지 않습니다.
 
 ### 결과를 보고 무엇을 하나요?
 
@@ -157,6 +167,7 @@ kkomkkom --explain          # 설치된 AI CLI로 추가 설명 요청
 | `--fast` | 새 빌드·새 JS 크기 측정을 생략. HTTP·소스 검사는 실행 |
 | `--artifacts` | `public/`·`.next/static/` 정적 배포물만 검사. 서버·빌드·설치 없음 |
 | `--artifacts --fresh` | 먼저 `next build`를 실행한 뒤 새 배포물 검사 |
+| `--artifacts --production-url URL` | 실행 중인 HTTP loopback 서버에 GET으로 파일 바이트 일치 확인. 자동 서버 시작 없음 |
 | `--json` | `schemaVersion: 2`와 `coverage`, `diff`, `extra`, `exitCode`를 JSON으로 출력 |
 | `--strict` | warning 또는 `coverage` 불완전/빈 범위를 종료 코드 1로 처리 |
 | `--port 3100` | 개발 서버 포트 지정. 기본값은 `kkomkkom.config.json`의 `port` 또는 3100 |
@@ -258,7 +269,7 @@ kkomkkom --explain          # 설치된 AI CLI로 추가 설명 요청
 | 실행 방식 | CLI와 로컬 stdio MCP 서버 제공 |
 | 자동 검증 구성 | GitHub Actions에 Node 20·22·24 단위 테스트와 실제 Next fixture e2e 구성. 실행 결과는 상단 Tests 배지에서 확인 |
 | production·pack 검증 | 2026-10-22 Linux/WSL에서 실제 `next build`(비 fast), 매니페스트 측정, MCP `tools/call`, npm pack 소비자 CLI/MCP를 확인. 상세 로그는 [검증 기록](docs/verification-2026-10-22.md) |
-| 배포물 정적 검사 | `--artifacts`/MCP `artifacts` 구현·회귀 검증 완료(2026-10-22). Linux/WSL에서 실제 fixture 정적 검사 확인. production HTTP 제공 여부는 미구현 |
+| 배포물·로컬 production HTTP 검사 | `--artifacts`/MCP `artifacts`, opt-in `production-url`/`productionUrl`. Linux/WSL 임시 production fixture와 packed consumer CLI/MCP 연결 검증(2026-10-22). 외부 배포·CDN·프로젝트 신원은 미검증 |
 | 플랫폼 | Linux/WSL에서만 검증. **Windows·macOS는 미검증** |
 | 에이전트별 검증 | **보류**. OpenCode·Codex 등 개별 클라이언트 호환성 완료를 보장하지 않음 |
 | 배포 | npm 미공개. 저장소 접근 권한과 로컬 빌드 필요 |
@@ -271,7 +282,7 @@ kkomkkom --explain          # 설치된 AI CLI로 추가 설명 요청
 - 개발 서버 HTTP 결과는 production 배포 검증과 다릅니다. 페이지 타임아웃·검사 생략·지원하지 않는 빌드 형식도 확인해야 합니다.
 - JS 크기는 압축 전 파일 크기 합이라 gzip·네트워크 전송량·TTFB와 다릅니다. 페이지 측정값이 하나라도 빠지면 불완전으로 처리하며 0으로 채우지 않습니다.
 - 실제 production 빌드·pack 소비자·MCP 호출 검증은 Linux/WSL에서 수행했습니다. Windows·macOS의 프로세스 종료, 경로, `npm pack` 설치는 미검증입니다.
-- `--artifacts`는 `public/`과 `.next/static/`의 정적 파일만 봅니다. 실제 HTTP 제공, CDN·프록시 규칙, custom `distDir`, `export`, standalone, 모노레포 출력은 확인하지 않으며, 빌드 신선도는 `unknown`으로 남깁니다. 파일명 신호와 실제 비밀값, 소스맵 설정과 공개 노출을 구분해 읽어야 합니다.
+- `--artifacts`만 실행하면 실제 HTTP 제공은 확인하지 않습니다. 명시적 `--production-url`도 선택한 로컬 파일의 응답 바이트만 확인하며, CDN·프록시·외부 배포·서버 프로젝트 신원은 확인하지 않습니다. custom `distDir`, `export`, standalone, 모노레포 출력은 미지원이며 빌드 신선도는 명시 빌드 없이는 `unknown`입니다. 파일명 신호와 실제 비밀값, 소스맵 설정과 공개 노출을 구분해 읽어야 합니다.
 
 [정확도·오류 처리 개선 #1](https://github.com/hodoi-ing/kkomkkom/issues/1) · [제품 로드맵·검증 재개 체크리스트 #2](https://github.com/hodoi-ing/kkomkkom/issues/2)
 
@@ -304,6 +315,12 @@ For `artifact-client-secret`, high-confidence provider-key patterns are `critica
 `artifact-server-boundary` follows relative static imports from `use client` entries to `server-only` markers or these runtime imports: `pg`, `mysql2`, `@prisma/client`, `firebase-admin`, `fs`/`node:fs`, `child_process`/`node:child_process`, `net`/`node:net`, `@clerk/nextjs/server`, and `getServerSession` from `next-auth`. This is potential boundary misuse, not proof of a deployed leak. Type-only imports/exports and React/client-auth imports are not runtime server evidence. A module-level `use server` directive stops traversal with `static-only/server-action-boundary`; a function-local string does not. Conflicting `use client`/`use server` directives are `unsupported/conflicting-directives`. Aliases, dynamic imports and unresolved graphs stay unverified; dynamic env keys such as `process.env[key]` are `unsupported/process-env-dynamic`.
 
 Reads are limited to 1 MiB per file, 32 MiB total and 2000 entries. The separately validated `kkomkkom.config.json` loader allows at most 1 MiB; the scan conservatively reserves that maximum and one entry even if the config is absent or smaller. All remaining reads share at most 31 MiB and 1999 entries.
+
+To verify an already-running local production server, use `--artifacts --production-url http://127.0.0.1:3000`, or MCP `artifacts: true, productionUrl: "http://127.0.0.1:3000"`. This never starts a server or writes config/baselines; only explicit `--fresh` builds first. Accepted origins are canonical HTTP `localhost`, `127.x.x.x` or `[::1]`, without credentials, path, query or fragment. Localhost is normalized to numeric loopback without DNS. No cookies, Authorization, write methods or redirect following.
+
+Only verified served-boundary files become candidates, with encoded path segments and URL deduplication. A complete 2xx payload must exactly match the file's raw bytes for a `local-production-http` observation. Matching a JS file does not verify its referenced map. SPA fallbacks, redirects, 404s, cut-off bodies and matching prefixes stay unconfirmed; static findings remain. Server/project identity and Internet exposure are unverified, and zero candidates explicitly means no file verification ran.
+
+HTTP limits are 50 URLs, five concurrent requests, five seconds through body completion per request, 60 seconds overall, 1 MiB per body and 32 MiB accepted payload in total, separate from local reads. Excess chunks are rejected and streams cancelled. This is not a bound on network/OS buffering or a download-byte measurement. Limits/errors/unverified targets remain coverage. Contents and secret-bearing digests are never emitted. Known env values and provider patterns are also masked in output IDs, file paths, messages and coverage after raw candidate/exception matching; distinct redacted observations remain separate.
 
 Page weights are not raw network sizes. `manifest-file` is the sum of uncompressed JS chunk files referenced by the build manifests. `next-output` is the `First Load JS` value reported by that older Next version, which is not guaranteed to equal either the raw file sum or the actual HTTP transfer size. Neither method is gzip transfer size or TTFB. Sizes are compared only when both runs recorded the same method; legacy baselines without one are loaded but not compared until a non-fast `--update` replaces their values. Production-build, packed-consumer and local MCP calls were verified on Linux/WSL only; Windows and macOS are untested.
 
