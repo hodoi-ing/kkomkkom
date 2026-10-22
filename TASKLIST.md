@@ -7,9 +7,9 @@
 ### 모델 한도·재개 기록 (2026-10-22)
 
 - **RESUMED — 사용자 “너꺼 한도 쓸때 까지해” 승인으로 GPT 한도를 사용해 계속 진행.** 탭2 `w1:pA`를 실제 모델 목록에서 확인한 `openai/gpt-6.1-sol#medium`으로 전환하고 새 세션을 열었음. Flash 무료 일일 한도 소진(화면 안내: 10/23 오전 9시 초기화)은 그대로이며, 구독·전역 설정 변경이나 자동 타이머는 없음.
-- 완료된 #1은 `main`에 반영·CI 성공·이슈 종료 상태. #2는 `issue2/artifacts`의 작업 브랜치에만 보존. 현재 구현 WIP는 `3ed9fc4`, worktree clean 확인 후 인수인계. 한도 소진 뒤 새 구현 변경 없음.
-- Task2.1 빌드는 exit 0, artifact focused는 **41개 중 40 pass / 1 fail**. 실패: 동일 client의 `pg`/`mysql2`/`@prisma/client` 중 첫 target만 남는 증거 손실. 총괄이 원인 확인: `src/artifacts.ts`의 `add` 기본 key가 `rule:file`이므로, distinct `finding.id`를 기본 key로 써야 함. 같은 id의 severity 승격은 유지. outer inspect는 이미 id를 사용함.
-- 다음 구현자는 이 한 줄 근본 수정 → 여러 server targets/known env keys 회귀 → README 한/영 계약 보완 → focused/연결 회귀 → 총괄 검수부터 진행. 직전 지시의 HTTP/protect 착수 금지는 유지. Task2.1 및 단계1 전체를 완료 처리하지 말 것.
+- 완료된 #1은 `main`에 반영·CI 성공·이슈 종료 상태. #2는 `issue2/artifacts`의 작업 브랜치에만 보존. Task2.1 수정 `77080de` 및 마스킹 재작업 `175ac72`는 총괄 독립 검수 PASS. 과거 WIP 실패 기록은 아래 이력으로 보존한다.
+- 총괄 검수: distinct target/env key·server action·동적 env·config 예산 positive 6건 직접 PASS, 이후 test/dummy/your 출력 마스킹 신규 9건 직접 PASS(exit 0). 공통 마스킹은 기존 계약으로 복구하고 placeholder 제외는 finding 탐지에만 적용한다.
+- 다음 구현자는 승인된 계획 Task3만 진행: opt-in loopback production HTTP·실제 production/pack CLI·MCP 통합·비용 비교. HTTP 착수 금지는 해제하며 protect(Task4)는 Task3 독립 검수 전까지 착수 금지. 완료된 회귀/골든의 기계적 반복은 금지한다.
 - 이후 미완료: 선택적 production HTTP 및 실제 제공 증거·패키지 통합/비용 비교, 보호 preview/apply/restore/재검증, 후속 후보 평가, 최종 main/로컬 동기화. 계획: `docs/superpowers/plans/2026-10-22-issue2-artifacts.md`.
 - 이번 GPT 승격과 Plus 쿼터 사용은 사용자 승인 완료. 추가 작업 승인 없이 기존 #2 계획을 계속하되, 또 다른 모델/요금제는 임의 선택하지 말 것. GPT 승격 작업이 끝나면 `/복귀` 안내. 공개 전환·배포 금지와 총괄 검수 후 원격 반영 규칙은 유지.
 
@@ -43,7 +43,8 @@
 - [x] #2 단계 0: 설치 크기·시간·메모리·네트워크 실측 기준선 및 계약 정리 — 총괄 PASS: `e5e6aa3` 실제 time 로그/pack 파일 확인(68,477B, 설치 0.56s/196,592KB, 정적 0.83s/197,768KB, fresh 4.70s/937,884KB). 원본 `df10e36` 기준선 유지, 초기 prototype 수치는 현재 판정에서 제외, 네트워크·OS·캐시·프로세스 트리 RSS 한계 명시.
   - 2026-10-22: 측정·계약 기록을 `770400e`로 커밋. pre/post pack 52,950B/62,545B, `--fast` 2.18s/480,984KB, full build 6.46s/987,676KB, `--artifacts` 0.21s/121,832KB. 총괄 검수 전이므로 `[ ]` 유지. 원본 로그 `docs/measurement-logs/2026-10-22-baseline.txt`.
   - 2026-10-22 재작업(`e5e6aa3`): 62,545B/0.21s는 640줄 prototype 관측으로 명시하고 현재 판정에서 제외. 동일 fixture/cache로 현재 `pack` 68,477B/240,309B/49, `--artifacts` 0.83s/197,768KB, `--artifacts --fresh` 4.70s/937,884KB, 설치 0.56s/196,592KB/node_modules 23,866,468B(+69,268B) 재실측. 정적 I/O 표에 `public/.next` 외 `BUILD_ID`·next config·`kkomkkom.config.json`·소스 그래프·root `.env*` 마스킹 컨텍스트를 기록. 원본 `docs/measurement-logs/2026-10-22-artifacts-rework.txt`.
-- [ ] #2 단계 1: Next production 배포물 점검 설계·구현·검수 (소스맵/배포 파일/클라이언트 비밀정보/지원 범위).
+- [x] #2 단계 1: Next production 배포물 정적 점검 설계·구현·검수 — 총괄 PASS: Task2 기존 독립 회귀·Task2.1 positive 6건 및 `175ac72` 마스킹 9/9 직접 통과. 실제 HTTP/production/pack·비용 비교는 단계2에서 검증한다.
+  - [x] Task2.1 최종 승인(2026-10-22): `77080de` distinct finding.id 보존과 `175ac72` 탐지/마스킹 분리 확인. `node --test --test-name-pattern='^masking regression:' test/audit.test.js test/artifacts.test.js` → 9 pass / 0 fail, exit 0. 과거 [ ]·실패 기록은 이력이며 현재 상태는 이 승인 항목을 따른다.
   - 2026-10-22 재작업: 정규식 import/config 판별을 TypeScript AST로 교체. type-only import/export 제외, 주석·문자열 가짜 신호 무시, 변수 dynamic import·config shorthand/wrapper/spread/conditional/computed는 `unsupported`. canonical root+realpath 경계, fd 기반 1MiB/32MiB/2000개 공유 상한, symlink loop/escape·EACCES 노출, BUILD_ID 관찰(`build-id-present`)과 `diff.firstRun:false`. 소스맵은 유효한 JSON/data URL만 경고하고 `sourcesContent` 여부를 구분하며, 참조 target의 query/hash와 userinfo를 제거. 민감한 파일명/키 이름만으로는 critical을 만들지 않고 고신뢰 패턴만 critical.
   - 2026-10-22 총괄 지적 5건 재작업(`e5e6aa3`): `import Foo, {type Bar}` default runtime binding 보존, AST comment range로 regex/문자열/템플릿 내 가짜 directive 배제, indexed v3 `sections` 맵 지원, 공통 `maskSecrets`+제한된 `.env*` 로딩으로 예외 사유/target의 env-known 값 마스킹(마스킹 컨텍스트 실패 시 `unconfirmed`), `readBounded` 추가 byte/final fstat로 grew/shrunk/short 기록, `kkomkkom.config.json` 1MiB·root realpath 경계·명시오류2. 신규 회귀 7개 포함 focused `node --test test/artifacts.test.js` 37/37 pass. 연결 `config/run/audit/report/i18n/mcp` 112/112 pass. 총괄 검수 전이므로 `[ ]` 유지; 원격 push 금지.
   - 남은 확인: 총괄 독립검수, 실제 production HTTP·custom distDir/export/standalone·모노레포·Windows/macOS는 미검증. `artifactExceptions`는 정확한 rule/file만 억제하며 coverage에 남김.
@@ -54,6 +55,7 @@
   - 2026-10-22 Task2.1 검수 요청(탭2): `add` 기본 key를 `finding.id`로 한 줄 수정. 서로 다른 server target 12개·known env key 3개 보존 및 동일 id 중복 제거 회귀, README 한/영 지원 경계 보완. 수정 전 targeted 2 fail(exit 1) → 최종 artifact **42/42 pass(exit 0)**, audit/config/i18n/report/mcp 선택 연결 **12/12 pass(exit 0)**, 검사기 build exit 0. 로그 `/tmp/opencode/kk-task21-fix.g09vAI/{red,build,green,artifacts,connected}.log`, 명령/초기 fixture 수정/범위 이탈 기록 `docs/verification-2026-10-22-task21.md`. 골든 3건 제외 정규식이 부모 suite에 매칭돼 의도치 않게 포함됨을 보고하며 추가 재실행하지 않음. full test/verify·HTTP/protect·push 없음. Task2.1/단계1 `[ ]` 유지, 총괄 PASS 대기.
   - 2026-10-22 총괄 검수 재작업(탭2): 핵심 positive 6건은 총괄 직접 PASS이나, 공통 env 마스킹의 placeholder 제외로 보안 회귀 지적. `searchableEnvValue`는 8자 이상+고정 enum 제외로 복구하고 `envSensitivePairs` 탐지에만 placeholder 제외 적용. test/dummy/your 값의 audit·artifact reason/target·fake build/CLI 오류 비노출 신규 9건 RED(0/9, exit 1) → GREEN(9/9, exit 0), i18n 1건은 첫 연결 실행에서 pass 후 반복 없음, 검사기 build exit 0. 로그 `/tmp/opencode/kk-task21-mask.U5yLvw/{red,build,green,focused}.log`, 최초 target fixture 보완 포함 명령/결과는 `docs/verification-2026-10-22-task21.md`. 완료 positive/골든/전체 tests 미반복, HTTP/protect·push 없음. `[ ]` 유지, 총괄 재검수 대기.
 - [ ] #2 단계 2: production 산출물·opt-in 로컬 운영 서버·경계 사례·소비자 CLI/MCP 검증과 비용 비교.
+  - 현재 착수: 계획 Task3. 구체적인 HTTP 안전 계약은 `6b6d6b6`에 별도 커밋. 총괄은 설계/독립검수/원격 통합, 탭2는 구현/로컬 검증만 담당한다.
 - [ ] #2 단계 3: 제한된 Next 보호 변경의 미리보기·선택 적용·복원·재검증 설계 및 구현/검수.
 - [ ] #2 단계 4: 후속 확장 수요/비용 평가 기록 — 난독화·Electron·모바일 구현은 후속 후보로 유지.
 - [ ] 최종 검수 결과·이슈별 완료/보류/한계 기록, GitHub main과 로컬 HEAD 일치 확인.

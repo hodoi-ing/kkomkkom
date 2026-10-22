@@ -48,10 +48,10 @@
 
 Rule IDs: `artifact-source-map`, `artifact-sensitive-file`, `artifact-client-secret`, `artifact-server-boundary`. Rule IDs are stable; occurrence IDs can include file/line. Evidence distinguishes `configuration`, `artifact`, `source-import`, `local-production-http`; confidence is `confirmed` for the observation, not a blanket vulnerability assertion.
 
-- [ ] Write failing tests for maps absent/present/inline/reference/private-server/upload storage; config/artifact mismatch; public sensitive files versus repository-only tests; real fake secret/public key/example placeholders; missing/stale/unsupported output; null/wrong exceptions; oversized files, read failures and symlink escape.
-- [ ] Implement bounded discovery of public and .next/static plus nonexecuting Next config support detection. Missing or unsupported artifacts yield visible coverage, not all-clear. Distinguish server-only evidence.
-- [ ] Reuse secret detection/masking; add limited use-client local static-import tracing with server-only evidence. Unknown alias/dynamic imports produce unsupported coverage, not safe/unsafe guesses. Deduplicate same rule/file/location.
-- [ ] Integrate CLI/MCP JSON/text and all 5 languages from the shared engine. Run tests that assert no build/server/AI/installation occurs in static mode and no source/config/dependency writes. Commit for coordinator review.
+- [x] Write failing tests for maps absent/present/inline/reference/private-server/upload storage; config/artifact mismatch; public sensitive files versus repository-only tests; real fake secret/public key/example placeholders; missing/stale/unsupported output; null/wrong exceptions; oversized files, read failures and symlink escape.
+- [x] Implement bounded discovery of public and .next/static plus nonexecuting Next config support detection. Missing or unsupported artifacts yield visible coverage, not all-clear. Distinguish server-only evidence.
+- [x] Reuse secret detection/masking; add limited use-client local static-import tracing with server-only evidence. Unknown alias/dynamic imports produce unsupported coverage, not safe/unsafe guesses. Deduplicate same rule/file/location.
+- [x] Integrate CLI/MCP JSON/text and all 5 languages from the shared engine. Run tests that assert no build/server/AI/installation occurs in static mode and no source/config/dependency writes. Commit for coordinator review. Coordinator PASS recorded in TASKLIST and Task2.1 verification report.
 
 ### Task 2.1: Close the observed client-information gaps before HTTP
 
@@ -59,10 +59,10 @@ Coordinator reproduction on `e5e6aa3`: a plain `PRIVATE_TOKEN` value from root `
 
 **Files:** artifact engine, shared env parsing as needed, artifact tests, five-language messages and README support boundaries.
 
-- [ ] Pin a failing fixture for a non-placeholder sensitive server env value found in a client artifact; report the key/location, never its value. Distinguish this known-value observation (warning/uncertainty where privacy intent is not proven) from provider-key pattern criticals and mere name signals. Public `NEXT_PUBLIC_*` values and ordinary version/URL/example values must not be classified as private solely because they occur in an env file.
-- [ ] Pin AST runtime import evidence for a small documented set of server-specific modules: `pg`, `mysql2`, `@prisma/client`, `firebase-admin`, filesystem/process/network Node modules, `@clerk/nextjs/server`, and the `getServerSession` import from `next-auth`. Keep React/client auth and type-only imports clean. This is potential server-boundary misuse evidence, not proof of a deployed leak. Unknown indirect env keys remain unverified.
-- [ ] Account for the separately validated inspection JSON config in the advertised total/count budget. The smallest safe option is to reserve the loader's maximum 1 MiB and one entry from the 32 MiB/2000 allowance, reuse the actual exported config limit, and document the reservation; no new loader abstraction is necessary.
-- [ ] Run the new targeted regressions, preserve existing masking/readonly contracts, then request coordinator review. Do not repeat completed issue #1 checks.
+- [x] Pin a failing fixture for a non-placeholder sensitive server env value found in a client artifact; report the key/location, never its value. Distinguish this known-value observation (warning/uncertainty where privacy intent is not proven) from provider-key pattern criticals and mere name signals. Public `NEXT_PUBLIC_*` values and ordinary version/URL/example values must not be classified as private solely because they occur in an env file.
+- [x] Pin AST runtime import evidence for a small documented set of server-specific modules: `pg`, `mysql2`, `@prisma/client`, `firebase-admin`, filesystem/process/network Node modules, `@clerk/nextjs/server`, and the `getServerSession` import from `next-auth`. Keep React/client auth and type-only imports clean. This is potential server-boundary misuse evidence, not proof of a deployed leak. Unknown indirect env keys remain unverified.
+- [x] Account for the separately validated inspection JSON config in the advertised total/count budget. The smallest safe option is to reserve the loader's maximum 1 MiB and one entry from the 32 MiB/2000 allowance, reuse the actual exported config limit, and document the reservation; no new loader abstraction is necessary.
+- [x] Run the new targeted regressions, preserve existing masking/readonly contracts, then request coordinator review. Do not repeat completed issue #1 checks. Coordinator directly passed six positive cases and nine masking regressions; see `docs/verification-2026-10-22-task21.md`.
 
 ### Task 3: Explicit loopback production HTTP and integration costs
 

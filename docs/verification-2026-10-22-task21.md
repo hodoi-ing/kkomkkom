@@ -1,4 +1,4 @@
-# Issue #2 Task2.1 — 총괄 검수 대기
+# Issue #2 Task2.1 — 총괄 검수 PASS
 
 범위: `issue2/artifacts`의 WIP `3ed9fc4`를 이어 받아, `1b37b28` 위에서 관찰 dedupe 손실만 수정했다. production HTTP/protect는 착수하지 않았다. 원격 push·공개 전환·배포·npm publish·의존성 설치는 하지 않았다.
 
@@ -82,3 +82,10 @@
 외부 map URL fixture만 상대 map 경로로 교체해 실제 target 마스킹 경로를 검사했다. assert를 제거/완화하지 않았다. i18n은 첫 연결 실행의 1 pass를 사용하고 다시 실행하지 않았다. 총괄 PASS positive 6건·기존 골든·전체 artifact/audit·full test/verify는 반복하지 않았다. HTTP/protect·push 미착수, Task2.1 `[ ]` 유지. 총괄의 별도 미커밋 Task3 계획은 보존하고 이 수정 커밋에서도 제외한다.
 
 `git diff --check` exit 0. 위 로그 4개에 회귀용 자격증명 원문이 없는지도 별도 assert로 확인했다(exit 0).
+
+## 총괄 최종 승인 (2026-10-22)
+
+- `77080de`의 distinct finding.id 보존과 Task2.1 positive 6건은 앞선 독립 검수에서 직접 통과했다. 완료된 검사를 반복하지 않았다.
+- `175ac72`의 공통 마스킹/탐지 분리를 호출부와 신규 회귀에서 확인하고, `node --test --test-name-pattern='^masking regression:' test/audit.test.js test/artifacts.test.js`를 직접 실행했다: **9 pass / 0 fail / 0 skipped, exit 0**.
+- 원본 RED/GREEN 로그의 0/9 → 9/9 결과와 중간 fixture 실패 3건을 확인했다. 로그 4개에 회귀 자격증명 원문이 없다는 assert와 `git diff --check`도 exit 0이었다.
+- Task2.1 및 정적 점검 단계1을 승인한다. 이 검수는 실제 production HTTP/pack 소비자·보호 기능·Windows/macOS·에이전트별 MCP 연결을 검증한 것이 아니다. HTTP/통합/비용은 다음 Task3, 보호는 그 이후 Task4로 남긴다.
