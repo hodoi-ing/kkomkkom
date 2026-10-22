@@ -2,6 +2,9 @@ export const LANGS = ["en", "ko", "ja", "zh", "es"] as const;
 export type Lang = (typeof LANGS)[number];
 
 const en = {
+  errProductionUrl: "productionUrl requires --artifacts and a canonical HTTP loopback origin (localhost, 127.x.x.x or [::1]); credentials, paths, query and fragment are forbidden.",
+  artifactHttpMatch: "The local server returned complete bytes matching {file}. This confirms only this file, not referenced maps, project identity or Internet exposure.",
+  artifactHttpIdentity: "The selected local server's project identity and Internet deployment are unverified. HTTP checks do not start a server.",
   reportTitle: "kkomkkom — pre-commit check",
   firstRunNote: "First run, so everything is shown. Run --update to save this as your baseline.",
   legacyBaselineNote: "The baseline was saved without a page measurement method, so page sizes are not compared. Run --update to replace it with measured values.",
@@ -83,6 +86,9 @@ const en = {
 export type MessageKey = keyof typeof en;
 
 const ko: Record<MessageKey, string> = {
+  errProductionUrl: "productionUrl은 --artifacts와 정규 HTTP loopback origin(localhost, 127.x.x.x 또는 [::1])이 필요합니다. 인증정보·경로·쿼리·fragment는 허용하지 않습니다.",
+  artifactHttpMatch: "로컬 서버가 {file}과 완전히 같은 바이트를 반환했습니다. 이 파일만 확인했으며 참조 map·프로젝트 신원·인터넷 노출은 확인하지 않았습니다.",
+  artifactHttpIdentity: "선택한 로컬 서버의 프로젝트 신원과 인터넷 배포 여부는 미확인입니다. HTTP 검사는 서버를 시작하지 않습니다.",
   reportTitle: "꼼꼼 — 커밋 전 점검",
   firstRunNote: "첫 실행이라 전체를 보여줍니다. 기준선으로 저장하려면 --update를 실행하세요.",
   legacyBaselineNote: "기준선에 페이지 측정 방식이 없어 크기를 비교하지 않습니다. --update로 측정값을 새로 저장하세요.",
@@ -162,6 +168,9 @@ const ko: Record<MessageKey, string> = {
 };
 
 const ja: Record<MessageKey, string> = {
+  errProductionUrl: "productionUrl は --artifacts と正規の HTTP ループバック origin（localhost、127.x.x.x または [::1]）が必要です。認証情報・パス・クエリ・fragment は許可されません。",
+  artifactHttpMatch: "ローカルサーバーは {file} と完全に一致するバイト列を返しました。このファイルのみを確認し、参照 map・プロジェクトの同一性・インターネット公開は未確認です。",
+  artifactHttpIdentity: "選択したローカルサーバーのプロジェクトの同一性とインターネット公開は未確認です。HTTP 検査はサーバーを起動しません。",
   reportTitle: "꼼꼼 — コミット前チェック",
   firstRunNote: "初回実行のため全体を表示します。基準として保存するには --update を実行してください。",
   legacyBaselineNote: "基準にページ測定方式がないため、サイズは比較しません。--update で測定値を保存し直してください。",
@@ -241,6 +250,9 @@ const ja: Record<MessageKey, string> = {
 };
 
 const zh: Record<MessageKey, string> = {
+  errProductionUrl: "productionUrl 需要 --artifacts 和规范的 HTTP 回环 origin（localhost、127.x.x.x 或 [::1]）。不允许凭据、路径、查询或 fragment。",
+  artifactHttpMatch: "本地服务器返回了与 {file} 完全一致的字节。仅确认此文件，不确认引用的 map、项目身份或互联网暴露。",
+  artifactHttpIdentity: "所选本地服务器的项目身份及互联网部署尚未验证。HTTP 检查不会启动服务器。",
   reportTitle: "꼼꼼 — 提交前检查",
   firstRunNote: "首次运行，显示全部结果。要保存为基准，请运行 --update。",
   legacyBaselineNote: "基准没有页面测量方式，因此不比较大小。请用 --update 重新保存测量值。",
@@ -320,6 +332,9 @@ const zh: Record<MessageKey, string> = {
 };
 
 const es: Record<MessageKey, string> = {
+  errProductionUrl: "productionUrl requiere --artifacts y un origen HTTP loopback canónico (localhost, 127.x.x.x o [::1]); no admite credenciales, rutas, consultas ni fragmentos.",
+  artifactHttpMatch: "El servidor local devolvió bytes completos que coinciden con {file}. Solo confirma este archivo, no los mapas referenciados, la identidad del proyecto ni la exposición en Internet.",
+  artifactHttpIdentity: "La identidad del proyecto del servidor local y su despliegue en Internet no están verificados. La comprobación HTTP no inicia un servidor.",
   reportTitle: "꼼꼼 — revisión antes del commit",
   firstRunNote: "Primera ejecución: se muestra todo. Ejecuta --update para guardarlo como referencia.",
   legacyBaselineNote: "La referencia no guarda el método de medición de páginas, así que no se comparan tamaños. Ejecuta --update para guardar valores medidos.",

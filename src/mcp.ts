@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { redactSecrets } from "./audit.js";
 import { runArtifactCheck } from "./artifacts.js";
+import { normalizeProductionUrl } from "./artifact-http.js";
 import { findProjectRoot } from "./discover.js";
 import { KkomkkomError } from "./errors.js";
 import { isLang, resolveLang, t, type Lang } from "./i18n.js";
@@ -23,6 +24,7 @@ const TOOL = {
       projectPath: { type: "string", description: "Next.js project path (default: current folder)" },
       artifacts: { type: "boolean", description: "Standalone static production-artifact inspection (no server or build)" },
       fresh: { type: "boolean", description: "With artifacts: build first, then inspect the new output" },
+      productionUrl: { type: "string", description: "With artifacts: opt-in GET-only verification against an existing HTTP loopback origin; no server is started, project identity is unverified" },
       fast: { type: "boolean", description: "Auth check only, skip the build" },
       strict: { type: "boolean", description: "Treat warnings as failures" },
       reuse: { type: "boolean", description: "Use a Next server already running on the port (project identity is not verified)" },
@@ -35,6 +37,7 @@ interface ToolArgs {
   projectPath?: string;
   artifacts?: boolean;
   fresh?: boolean;
+  productionUrl?: string;
   fast?: boolean;
   strict?: boolean;
   reuse?: boolean;
@@ -76,6 +79,10 @@ function validateArgs(value: unknown): ToolArgs {
     }
   }
   if (args.fresh === true && args.artifacts !== true) invalid("fresh");
+  if ("productionUrl" in value) {
+    if (args.artifacts !== true) invalid("productionUrl");
+    args.productionUrl = normalizeProductionUrl(value.productionUrl);
+  }
   if (args.artifacts === true && args.fast === true) invalid("fast");
   if (args.artifacts === true && args.reuse === true) invalid("reuse");
   if ("lang" in value) {
@@ -103,6 +110,7 @@ async function callTool(args: ToolArgs) {
       root,
       fresh: args.fresh === true,
       strict: args.strict === true,
+      productionUrl: args.productionUrl,
     })
     : await runCheck({
       root,
