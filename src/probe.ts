@@ -1,12 +1,16 @@
 import { analyzeRoute, matchesGlob } from "./classify.js";
+import { readBody } from "./http.js";
 import { sampleTarget } from "./params.js";
 import type { MessageKey } from "./i18n.js";
-import type { Config, Finding, RouteInfo, Verdict } from "./types.js";
+import type { Config, CoverageCheck, Finding, RouteInfo, Verdict } from "./types.js";
 
 const TIMEOUT_MS = 8_000;
 const CONCURRENCY = 5;
 const REDIRECT_TIMEOUT_MS = 3_000;
 const MAX_REDIRECT_HOPS = 3;
+const LOGIN_BODY_LIMIT = 8192;
+const ERROR_BODY_LIMIT = 2048;
+
 function safeLocation(location: string): string {
   const withoutQuery = location.split(/[?#]/, 1)[0];
   const withoutUserInfo = withoutQuery.replace(/\/\/[^/]*@/, "//");
@@ -64,7 +68,7 @@ async function followsToLoginPage(
     const type = res.headers.get("content-type") ?? "";
     if (!type.includes("text/html")) return false;
 
-    const body = (await res.text().catch(() => "")).slice(0, 8192).toLowerCase();
+    const body = (await readBody(res, LOGIN_BODY_LIMIT).catch(() => "")).toLowerCase();
     return (
       /<input[^>]+type=["']?password/.test(body) ||
       /<form[^>]+action=["'][^"']*(login|signin|sign-in|auth)/.test(body)
@@ -73,19 +77,30 @@ async function followsToLoginPage(
   return false;
 }
 
-async function probeOne(baseUrl: string, route: RouteInfo, config: Config): Promise<Finding> {
+async function probeOne(
+  baseUrl: string,
+  route: RouteInfo,
+  config: Config,
+  coverage?: CoverageCheck[],
+): Promise<Finding> {
   const policy = config.routePolicies?.[route.path]?.GET;
   const auth = analyzeRoute(route).methods.GET?.state ?? "unknown";
   const evidence = { method: "GET" as const, policy, auth };
+  const check = (status: CoverageCheck["status"], reason: string) => {
+    coverage?.push({ rule: "api-auth", path: route.path, method: "GET", status, reason });
+  };
 
   if (config.ignoreRoutes.some((pattern) => matchesGlob(route.path, pattern))) {
+    check("ignored", "ignoreRoutes");
     return { path: route.path, verdict: "public", detailKey: "detailIgnored", ...evidence };
   }
 
   const sample = sampleTarget(baseUrl, route.path, config.sampleParams[route.path]);
   if ("reason" in sample) {
+    check(sample.reason === "missing" ? "skipped" : "unsupported", `sample-${sample.reason}`);
     return { path: route.path, verdict: "unknown", detailKey: "detailDynamic", ...evidence };
   }
+
   const url = sample.url;
   let res: Response;
   try {
@@ -96,8 +111,13 @@ async function probeOne(baseUrl: string, route: RouteInfo, config: Config): Prom
       headers: { "user-agent": "kkomkkom/0.1" },
     });
   } catch {
+    check("failed", "timeout");
     return { path: route.path, verdict: "unknown", detailKey: "detailTimeout", ...evidence };
   }
+
+  if (res.status === 404) check("failed", "not-found");
+  else if (res.status === 405) check("skipped", "method-not-allowed");
+  else check("checked", "response");
 
   const redirect = res.status >= 300 && res.status < 400;
   const location = redirect ? (res.headers.get("location") ?? "") : "";
@@ -118,7 +138,7 @@ async function probeOne(baseUrl: string, route: RouteInfo, config: Config): Prom
     verdict = "unknown";
     detailKey = "detailUnknown";
   } else if (res.status >= 200 && res.status < 300) {
-    const body = (await res.text().catch(() => "")).slice(0, 2048);
+    const body = await readBody(res, ERROR_BODY_LIMIT).catch(() => "");
     if (/__next_error__|Application error|Internal Server Error/i.test(body)) {
       verdict = "error";
       detailKey = "detailError";
@@ -150,7 +170,12 @@ async function probeOne(baseUrl: string, route: RouteInfo, config: Config): Prom
   };
 }
 
-export async function probeRoutes(baseUrl: string, routes: RouteInfo[], config: Config): Promise<Finding[]> {
+export async function probeRoutes(
+  baseUrl: string,
+  routes: RouteInfo[],
+  config: Config,
+  coverage?: CoverageCheck[],
+): Promise<Finding[]> {
   const queue = routes.filter((route) => route.kind === "api");
   const findings: Finding[] = [];
 
@@ -158,7 +183,7 @@ export async function probeRoutes(baseUrl: string, routes: RouteInfo[], config: 
     for (;;) {
       const route = queue.shift();
       if (!route) return;
-      findings.push(await probeOne(baseUrl, route, config));
+      findings.push(await probeOne(baseUrl, route, config, coverage));
     }
   });
 

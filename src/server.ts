@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { createConnection } from "node:net";
 import { redactSecrets } from "./audit.js";
 import { KkomkkomError } from "./errors.js";
+import { readBody } from "./http.js";
 import { resolveLang, t } from "./i18n.js";
 import { nextEnv, resolveNextCli } from "./next.js";
 import { installInterrupt, terminateGroup } from "./process.js";
@@ -82,7 +83,7 @@ async function waitForHttp(
 async function looksLikeNext(url: string): Promise<boolean> {
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(2000), redirect: "manual" });
-    const body = (await res.text()).slice(0, 20_000);
+    const body = await readBody(res, 20_000).catch(() => "");
     return /_next\/|__next/.test(body) || res.headers.has("x-nextjs-cache");
   } catch {
     return false;

@@ -196,6 +196,7 @@ test("wrapper, re-export and uncalled nested auth stay unknown instead of confir
     route("/api/ambiguous", 'export default function handler(req, res) { return res.end("ok") }',
       "api", false, "/project/pages/api/ambiguous.ts", "pages"),
   ]))).map((finding) => finding.id), [
+    "write-unknown:/api/ambiguous",
     "write-unknown:/api/nested",
     "write-unknown:/api/reexport",
     "write-unknown:/api/wrapper",
@@ -204,14 +205,19 @@ test("wrapper, re-export and uncalled nested auth stay unknown instead of confir
 
 test("an explicit public write policy is not a warning and keeps static evidence", async (t) => {
   const root = await fixture(t);
+  const coverage = [];
   const findings = await auditProject(input(root, [
     route("/api/public", "export function POST() {}\nexport function PUT() {}"),
-  ], { routePolicies: { "/api/public": { POST: "public" } } }));
+  ], { routePolicies: { "/api/public": { POST: "public" } } }), coverage);
   assert.deepEqual(findings, [{
     id: "write-no-auth:/api/public:PUT", severity: "warning", messageKey: "extraWriteNoAuth",
     messageVars: { path: "/api/public", method: "PUT" },
     evidence: [{ method: "PUT", auth: "none" }],
   }]);
+  assert.deepEqual(coverage.filter((check) => check.rule === "write-auth"), [
+    { rule: "write-auth", path: "/api/public", method: "POST", status: "static-only", reason: "explicit-public" },
+    { rule: "write-auth", path: "/api/public", method: "PUT", status: "static-only", reason: "none" },
+  ]);
 });
 
 test("comments do not create or hide write APIs", async (t) => {
@@ -403,4 +409,35 @@ test("missing git skips only git checks and still detects secret names", async (
   assert.equal(stderr, "");
   assert.ok(!stdout.includes("real-value"));
   assert.deepEqual(JSON.parse(stdout).map((f) => f.id), ["public-secret:NEXT_PUBLIC_API_SECRET"]);
+});
+
+test("coverage records page success, exclusion, missing sample, timeout and write uncertainty", async (t) => {
+  const root = await fixture(t);
+  const base = await serve(t, (req, res) => {
+    if (req.url === "/slow") return req.socket.destroy();
+    res.writeHead(200, { "content-type": "text/html" });
+    res.end("<html>ok</html>");
+  });
+  const coverage = [];
+  const routes = [
+    route("/ok", "", "page"),
+    route("/ignored", "", "page"),
+    route("/missing/[id]", "", "page", true),
+    route("/slow", "", "page"),
+    route("/api/wrapper", "export const POST = withAuth(handler)"),
+  ];
+  await auditProject(input(root, routes, {
+    ignoreRoutes: ["/ignored"],
+    sampleParams: {},
+  }, base), coverage);
+
+  const page = (path) => coverage.find((check) => check.rule === "page-smoke" && check.path === path);
+  assert.deepEqual(page("/ok"), { rule: "page-smoke", path: "/ok", status: "checked", reason: "response" });
+  assert.deepEqual(page("/ignored"), { rule: "page-smoke", path: "/ignored", status: "ignored", reason: "ignoreRoutes" });
+  assert.deepEqual(page("/missing/[id]"), { rule: "page-smoke", path: "/missing/[id]", status: "skipped", reason: "sample-missing" });
+  assert.deepEqual(page("/slow"), { rule: "page-smoke", path: "/slow", status: "failed", reason: "timeout" });
+  assert.deepEqual(
+    coverage.find((check) => check.rule === "write-auth" && check.path === "/api/wrapper"),
+    { rule: "write-auth", path: "/api/wrapper", method: "POST", status: "static-only", reason: "unknown" },
+  );
 });

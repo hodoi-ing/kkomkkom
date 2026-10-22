@@ -170,3 +170,66 @@ test("a project lookup failure does not echo the supplied path", async () => {
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+async function fakeProject() {
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  const root = await mkdtemp(join(tmpdir(), "kkomkkom-mcp-"));
+  await mkdir(join(root, "app", "api", "health"), { recursive: true });
+  await writeFile(
+    join(root, "app", "api", "health", "route.ts"),
+    "export async function GET() { return Response.json({ ok: true }); }",
+  );
+  await writeFile(join(root, "kkomkkom.config.json"),
+    JSON.stringify({ routePolicies: { "/api/health": { GET: "public" } } }));
+  await writeFile(join(root, "package.json"), JSON.stringify({
+    name: "fake-mcp-app", dependencies: { next: "16.0.0" },
+  }));
+  await mkdir(join(root, "node_modules", "next", "dist", "bin"), { recursive: true });
+  await writeFile(join(root, "node_modules", "next", "package.json"),
+    JSON.stringify({ name: "next", version: "16.0.0" }));
+  await writeFile(join(root, "node_modules", "next", "dist", "bin", "next"), `
+    const http = require("node:http");
+    const args = process.argv.slice(2);
+    const port = Number(args[args.indexOf("-p") + 1]);
+    const host = args[args.indexOf("--hostname") + 1];
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end("<html>ok</html>");
+    });
+    server.listen(port, host);
+    process.on("SIGTERM", () => {
+      server.closeAllConnections();
+      server.close(() => process.exit(0));
+    });
+  `);
+  return root;
+}
+
+test("tools/call returns structured coverage and concurrent calls stay ordered", async () => {
+  const server = startServer();
+  const root = await fakeProject();
+  try {
+    server.send({
+      jsonrpc: "2.0", id: 50, method: "tools/call",
+      params: { name: "kkomkkom", arguments: { projectPath: root, fast: true } },
+    });
+    const response = await server.next(20000);
+    assert.equal(response.id, 50);
+    assert.equal(response.result.structuredContent.schemaVersion, 2);
+    assert.equal(response.result.structuredContent.coverage.status, "incomplete");
+    assert.ok(Array.isArray(response.result.structuredContent.extra));
+
+    server.send({ jsonrpc: "2.0", id: 51, method: "tools/call",
+      params: { name: "kkomkkom", arguments: { fast: "bad" } } });
+    server.send({ jsonrpc: "2.0", id: 52, method: "tools/call",
+      params: { name: "kkomkkom", arguments: { strict: "bad" } } });
+    const first = await server.next();
+    const second = await server.next();
+    assert.deepEqual([first.id, second.id], [51, 52]);
+    assert.equal(first.result.isError, true);
+    assert.equal(second.result.isError, true);
+  } finally {
+    server.child.kill();
+    await rm(root, { recursive: true, force: true });
+  }
+});

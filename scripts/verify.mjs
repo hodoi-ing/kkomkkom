@@ -80,6 +80,12 @@ async function main() {
       join(work, "node_modules"),
       process.platform === "win32" ? "junction" : "dir",
     );
+    // Auth calls in source are evidence, not a policy: an explicit protected
+    // policy is what turns a 2xx into an exposed finding.
+    await writeFile(
+      join(work, "kkomkkom.config.json"),
+      JSON.stringify({ routePolicies: { "/api/leak": { GET: "protected" } } }),
+    );
 
     const ko = await runCli(["--json", "--lang", "ko"], work);
     let report = null;
@@ -94,7 +100,7 @@ async function main() {
     check("real app: JSON includes an extra array", Array.isArray(report?.extra), ko.stdout);
     check(
       "real app: detail follows --lang ko",
-      /데이터가 그대로/.test(leak?.detail ?? ""),
+      /보호 대상으로 지정했는데/.test(leak?.detail ?? ""),
       ko.stdout,
     );
 
@@ -154,7 +160,7 @@ async function main() {
     const extraIds = new Set((extrasReport?.extra ?? []).map((item) => item.id));
     check("real app: a hardcoded secret stops the deploy", extras.status === 1 && extraIds.has("hardcoded-secret:lib/leaked.ts:1"), extras.stderr || extras.stdout);
     check("real app: a public secret warns", extraIds.has("public-secret:NEXT_PUBLIC_API_SECRET"), extras.stdout);
-    check("real app: a write API without auth warns", extraIds.has("write-no-auth:/api/write"), extras.stdout);
+    check("real app: a write API without auth warns", extraIds.has("write-no-auth:/api/write:POST"), extras.stdout);
     check("real app: a broken page warns", extraIds.has("page-error:/broken"), extras.stdout);
     const hardcoded = (extrasReport?.extra ?? []).find((item) => item.id.startsWith("hardcoded-secret:"));
     check("real app: extra detail follows --lang ko", /비밀키로 보이는 값/.test(hardcoded?.message ?? ""), extras.stdout);

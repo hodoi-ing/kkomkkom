@@ -33,7 +33,7 @@ test("the report follows the requested language", () => {
 
 test("a clean run says it is safe to deploy", () => {
   const out = renderReport({ firstRun: false, routes: [], pages: [] }, { lang: "ko", color: false });
-  assert.match(out, /배포해도 좋습니다/);
+  assert.match(out, /검사한 범위에서 차단 문제가 없습니다/);
 });
 
 test("warnings without exposure show the warning banner, not the stop banner", () => {
@@ -74,7 +74,7 @@ test("a warning that was already there is still shown", () => {
   const out = renderReport(diff, { lang: "en", color: false });
   assert.match(out, /Check before deploy — 1 warning/);
   assert.match(out, /\/api\/health/);
-  assert.doesNotMatch(out, /Safe to deploy/);
+  assert.doesNotMatch(out, /No blocking problems in the checked scope/);
 });
 
 test("new and existing exposed routes are both listed", () => {
@@ -113,7 +113,7 @@ test("a failed build never says it is safe to deploy", () => {
     { lang: "en", color: false, buildFailed: true, buildTail: "Error: boom" },
   );
   assert.match(out, /The build failed/);
-  assert.doesNotMatch(out, /Safe to deploy/);
+  assert.doesNotMatch(out, /No blocking problems in the checked scope/);
 });
 
 test("a critical project check stops the deploy", () => {
@@ -135,7 +135,7 @@ test("a critical project check stops the deploy", () => {
   assert.match(out, /배포를 멈추세요/);
   assert.match(out, /프로젝트 점검 1개/);
   assert.match(out, /\.env이\(가\) git에 올라가 있습니다/);
-  assert.doesNotMatch(out, /배포해도 좋습니다/);
+  assert.doesNotMatch(out, /검사한 범위에서 차단 문제가 없습니다/);
 });
 
 test("a warning project check uses the warning banner", () => {
@@ -175,6 +175,27 @@ test("an info project check is shown without blocking", () => {
       ],
     },
   );
-  assert.match(out, /Safe to deploy/);
+  assert.match(out, /No blocking problems in the checked scope/);
   assert.match(out, /\/slow could not be checked \(8s timeout or connection failed\)/);
+});
+
+test("an incomplete or empty scope never shows the pass banner", () => {
+  const checks = (states) => ({
+    status: states.includes("checked") ? "incomplete" : "empty",
+    checks: [],
+    counts: { checked: 0, "static-only": 0, ignored: 0, skipped: 0, failed: 0, unsupported: 0 },
+  });
+  const incomplete = renderReport(
+    { firstRun: false, routes: [], pages: [] },
+    { lang: "en", color: false, coverage: checks(["checked", "ignored"]) },
+  );
+  assert.doesNotMatch(incomplete, /No blocking problems in the checked scope/);
+  assert.match(incomplete, /Check scope is incomplete/);
+
+  const empty = renderReport(
+    { firstRun: false, routes: [], pages: [] },
+    { lang: "ko", color: false, coverage: checks(["ignored"]) },
+  );
+  assert.doesNotMatch(empty, /검사한 범위에서 차단 문제가 없습니다/);
+  assert.match(empty, /유의미한 검사를 하나도 하지 못했습니다/);
 });

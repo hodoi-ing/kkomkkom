@@ -17,7 +17,7 @@ function freePort() {
   });
 }
 
-async function project(t, buildMode) {
+async function project(t, buildMode, status = 200) {
   const root = await mkdtemp(join(tmpdir(), "kkomkkom-run-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   await mkdir(join(root, "app", "api", "health"), { recursive: true });
@@ -41,7 +41,7 @@ async function project(t, buildMode) {
       const port = Number(args[args.indexOf("-p") + 1]);
       const host = args[args.indexOf("--hostname") + 1];
       const server = http.createServer((_req, res) => {
-        res.writeHead(200, { "content-type": "text/html" });
+        res.writeHead(${JSON.stringify(status)}, { "content-type": "text/html" });
         res.end("<html>ok</html>");
       });
       server.listen(port, host);
@@ -86,4 +86,61 @@ test("a build runner/tool failure is an execution error, not a compile failure",
       return true;
     },
   );
+});
+
+async function config(root, value) {
+  await writeFile(join(root, "kkomkkom.config.json"), JSON.stringify(value));
+}
+
+test("fast scope is incomplete for normal exit but strict fails", async (t) => {
+  const root = await project(t, "ok");
+  await config(root, { routePolicies: { "/api/health": { GET: "public" } } });
+  const port = await freePort();
+  const ordinary = await runCheck({ root, fast: true, strict: false, port });
+  assert.equal(ordinary.coverage.status, "incomplete");
+  assert.equal(ordinary.exitCode, 0);
+
+  const strict = await runCheck({ root, fast: true, strict: true, port: await freePort() });
+  assert.equal(strict.coverage.status, "incomplete");
+  assert.equal(strict.exitCode, 1);
+});
+
+test("all routes ignored is empty scope, not a pass", async (t) => {
+  const root = await project(t, "ok");
+  await config(root, { ignoreRoutes: ["/api/*"] });
+  const result = await runCheck({ root, fast: true, strict: false, port: await freePort() });
+  assert.equal(result.coverage.status, "empty");
+  assert.equal(result.coverage.counts.checked, 1); // secrets only
+  assert.equal(result.exitCode, 0);
+});
+
+test("a POST-only route answers 405 on GET and stays visibly skipped", async (t) => {
+  const root = await project(t, "ok", 405);
+  await writeFile(
+    join(root, "app", "api", "health", "route.ts"),
+    "export async function POST() { return Response.json({ ok: true }); }",
+  );
+  await config(root, { routePolicies: { "/api/health": { POST: "public" } } });
+  const result = await runCheck({ root, fast: true, strict: false, port: await freePort() });
+  assert.equal(result.coverage.status, "incomplete");
+  assert.ok(result.coverage.checks.some(
+    (check) => check.rule === "api-auth" && check.status === "skipped" && check.reason === "method-not-allowed",
+  ));
+  assert.equal(result.exitCode, 0);
+});
+
+test("CLI JSON exposes schemaVersion 2 and coverage", async (t) => {
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const run = promisify(execFile);
+  const root = await project(t, "ok");
+  await config(root, { routePolicies: { "/api/health": { GET: "public" } } });
+  const cli = new URL("../dist/cli.js", import.meta.url).pathname;
+  const { stdout } = await run(process.execPath, [
+    cli, "--fast", "--json", "--port", String(await freePort()),
+  ], { cwd: root });
+  const payload = JSON.parse(stdout);
+  assert.equal(payload.schemaVersion, 2);
+  assert.equal(payload.coverage.status, "incomplete");
+  assert.equal(payload.exitCode, 0);
 });
