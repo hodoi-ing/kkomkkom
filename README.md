@@ -2,199 +2,159 @@
 
 # 🐯 꼼꼼 <sub>kkomkkom</sub>
 
-**Next.js 앱을 커밋하기 전에, 실제로 불러서 찾아보는 문제들.**
+**Next.js 앱의 인증·비밀정보·페이지 오류·JS 크기를 배포 전에 점검하는 CLI · MCP 도구.**
 
-`안 잠긴 API` · `새어 나가는 비밀키` · `깨진 페이지` · `인증 없는 쓰기 API` · `무거워진 페이지`
+로컬에서 실행하고, 확인할 근거를 받으세요.
 
-<a href="https://github.com/hodoi-ing/kkomkkom/actions/workflows/test.yml"><img src="https://github.com/hodoi-ing/kkomkkom/actions/workflows/test.yml/badge.svg" alt="test" /></a>
-<a href="https://img.shields.io/badge/license-MIT-2f6f4f.svg"><img src="https://img.shields.io/badge/license-MIT-2f6f4f.svg" alt="MIT License" /></a>
-<a href="https://img.shields.io/badge/node-%3E%3D20-5FA04E.svg"><img src="https://img.shields.io/badge/node-%3E%3D20-5FA04E.svg" alt="Node 20+" /></a>
-<a href="https://img.shields.io/badge/Next.js-000000?logo=next.js"><img src="https://img.shields.io/badge/Next.js-000000?logo=next.js" alt="Next.js" /></a>
-<a href="https://img.shields.io/badge/npm-%EB%8B%9C%ED%8A%B8-lightgrey"><img src="https://img.shields.io/badge/npm-%EB%8B%9C%ED%8A%B8-lightgrey" alt="npm unpublished" /></a>
+[![Tests](https://github.com/hodoi-ing/kkomkkom/actions/workflows/test.yml/badge.svg)](https://github.com/hodoi-ing/kkomkkom/actions/workflows/test.yml)
+[![Node 20+](https://img.shields.io/badge/Node-%E2%89%A520-5FA04E?logo=node.js&logoColor=white)](package.json)
+[![License: MIT](https://img.shields.io/badge/License-MIT-2f6f4f.svg)](LICENSE)
+
+[빠른 시작](#빠른-시작) · [에이전트 연결](#에이전트-연결-mcp) · [검사 항목](#무엇을-검사하나요) · [지원·검증 상태](#지원검증-상태) · [English](#english)
 
 </div>
 
----
+<!-- DEMO_VIDEO: 실제 영상이 확보되면 아래 결과 이미지 앞에 GitHub 첨부 영상 URL을 삽입합니다. 편집 기준: docs/demo.md -->
 
-## 왜 필요한가
+![꼼꼼 보고서 예시: git에 추적된 .env와 인증 확인이 필요한 쓰기 API를 표시합니다.](docs/assets/report-preview.svg)
 
-AI가 짠 코드는 검증을 건너뛰면 그대로 배포됩니다. 그런데 지금까지 쓰던 검증은 두 가지뿐이었습니다.
+<p align="center"><sub>현재 보고서 렌더러에 고정된 예시 데이터를 넣어 생성한 화면입니다. 실제 앱 검사 녹화는 아닙니다.</sub></p>
 
-- **눈으로 읽는 코드 리뷰** — 라우트가 열려 있는지 소스에서 찾아 읽습니다. 놓치기 쉽습니다.
-- **AI에게 다시 물어보기** — "이거 안전해?"라고 물으면 그럴듯한 답이 돌아옵니다. 근거는 없습니다.
+**개발 중 · npm 미공개.** 현재는 저장소에 접근할 수 있는 사용자가 소스에서 빌드해 사용합니다. 검사 결과는 검토할 신호이며, 취약점이나 배포 안전 전체를 보증하지 않습니다.
 
-꼼꼼은 질문 대신 **직접 부릅니다**. 라우트를 실제로 GET하고, 응답 코드를 확인하고, 번들 크기를 비교합니다.
+## 빠른 시작
 
-| | AI에게 다시 묻기 | 꼼꼼 |
-|---|---|---|
-| 근거 | 그럴듯한 답변 | 실제 HTTP 응답 |
-| 열린 API | 소스에서 추측 | 로그인 없이 호출해 확인 |
-| 페이지 무게 | 감으로 짐작 | 지난 실행과 전송량 비교 |
-| 비밀키 | 파일을 훑어봄 | git에 올라갔는지, 패턴으로 판정 |
-| 결과 | 확신 없음 | 종료 코드와 기준선 파일 |
+Node.js 20 이상과 의존성이 설치된 Next.js 프로젝트가 필요합니다. 아래 명령은 bash 환경(예: WSL Ubuntu) 기준입니다.
 
----
-
-## 무엇을 찾는가
-
-| 검사 | 찾는 것 | 기준 |
-|---|---|---|
-| **안 잠긴 API 문** | 로그인 없이 열리는 라우트 | 401/403이면 잠김, 200인데 인증 코드가 있으면 **뚫린 것** |
-| **새어 나가는 비밀키** | git에 올라간 `.env`, 소스에 박힌 키, `NEXT_PUBLIC_`에 들어간 시크릿 | `.env` 커밋·고신뢰 패턴은 **critical** |
-| **깨진 페이지** | 빌드는 통과하지만 실제로는 500인 화면 | 로그인 없이 GET으로 열어 확인 |
-| **인증 없는 쓰기 API** | `POST`·`PUT`·`PATCH`·`DELETE`인데 인증 신호가 없는 라우트 | 소스만 읽습니다. **쓰기 요청은 보내지 않습니다** |
-| **무거워진 페이지** | 지난 실행보다 커진 라우트 | +15% **그리고** +30KB를 동시에 넘을 때 |
-
-코드에는 잠금장치가 있는데 실제로는 열려 있는 경우가 가장 위험합니다. 미들웨어 우회 같은 사고가 여기에 걸립니다.
-
----
-
-## 미리보기
-
-```
-$ kkomkkom --fast
-
-⛔ 배포를 멈추세요 — 문제 2개가 있습니다.
-
-🔴 새로 뚫린 문 2개
-  /api/users        로그인 없이 데이터가 그대로 나옵니다 (200)
-  /api/orders/123   로그인 없이 데이터가 그대로 나옵니다 (200)
-
-🐢 무거워진 페이지 1개
-  /checkout   180KB → 420KB (+240KB, +133%)
-```
-
-결과는 맨 위에 큰 글씨로 나옵니다. 배포해도 되는지 눈으로 먼저 판단하게 만드는 게 목적입니다.
-
----
-
-## 설치
-
-아직 npm에 공개하지 않았습니다. 저장소를 받아서 씁니다.
+**1. 꼼꼼을 받아 빌드합니다.**
 
 ```bash
 git clone https://github.com/hodoi-ing/kkomkkom.git
 cd kkomkkom
-npm install
+npm ci
 npm run build
-npm link          # 이 컴퓨터에서 kkomkkom 명령 사용
 ```
 
-- Node 20 이상
-- 검사할 Next.js 프로젝트 루트에서 실행합니다
-- npm에 공개하면 `npx kkomkkom` 한 줄로 끝납니다
-
----
-
-## 사용법
+**2. 검사할 Next.js 프로젝트 폴더에서 실행합니다.** 두 경로를 자신의 실제 경로로 바꾸세요.
 
 ```bash
-kkomkkom                    # API 인증·비밀키·페이지 오류·쓰기 API + 빌드/무게 검사
-kkomkkom --fast             # 빌드만 생략 (나머지 검사는 모두 실행)
-kkomkkom --json             # JSON 출력
-kkomkkom --explain          # 실패 원인을 로컬 AI CLI로 설명
-kkomkkom --update           # --fast 결과를 기준선에 반영
-kkomkkom --port 3100        # 개발 서버 포트 지정
-kkomkkom --reuse            # 이미 실행 중인 Next 서버 재사용
-kkomkkom --lang ko          # 보고서 언어 (en, ko, ja, zh, es)
-kkomkkom --strict           # 경고만 있어도 종료 코드 1
+cd /absolute/path/to/your-next-app
+node /absolute/path/to/kkomkkom/dist/cli.js --fast --lang ko
 ```
 
-| 옵션 | 하는 일 |
-|---|---|
-| `--fast` | `next build`만 건너뜁니다. 나머지 검사는 그대로 돕니다. CI에서 자주 씁니다. |
-| `--json` | 기계가 읽는 JSON으로 출력합니다. `diff`에 더해 `extra` 배열(비밀키·페이지·쓰기 API)이 붙습니다. |
-| `--explain` | 설치된 AI CLI를 찾아 실패 원인을 설명해 줍니다. `claude`, `codex`, `gemini` 순서로 찾습니다. |
-| `--update` | 이번 `--fast` 결과를 기준선으로 저장합니다. 무게 비교의 출발점을 갱신하는 용도입니다. |
-| `--port` | 검사할 개발 서버 포트를 지정합니다. |
-| `--reuse` | 이미 떠 있는 서버를 씁니다. **같은 프로젝트인지 확인하지 않습니다.** |
-| `--lang` | 보고서 언어를 고릅니다. `--lang` > `KKOMKKOM_LANG` > `LC_ALL` > `LANG` 순으로 적용됩니다. |
-| `--strict` | 경고도 실패로 봅니다. 종료 코드 1이 나옵니다. |
+`--fast`는 새 빌드와 JS 크기 측정을 생략합니다. HTTP·소스 검사는 실행하며, 필요한 경우 개발 서버를 시작합니다. 빌드까지 검사하려면 `--fast`를 빼세요. 빌드가 성공하면 기준선 파일도 자동으로 저장됩니다.
 
-### 종료 코드
+<details>
+<summary>짧은 kkomkkom 명령으로 실행하기</summary>
 
-| 코드 | 의미 |
-|---|---|
-| `0` | 문제 없음 (경고만 있고 `--strict`가 없을 때도 0) |
-| `1` | 배포를 막는 문제 — API 노출, 비밀키 노출, 빌드 실패, `--strict` 경고 |
-| `2` | 검사를 시작하거나 끝내지 못함 — 프로젝트·포트·설정 오류 |
+빌드한 꼼꼼 저장소에서 `npm link`를 실행하면 이 컴퓨터에 CLI 명령이 연결됩니다. 이후 검사할 앱 폴더에서 실행하세요.
 
-### 기준선
+```bash
+# 꼼꼼 저장소에서
+npm link
 
-결과는 `.kkomkkom/baseline.json`에 저장됩니다. 이 파일을 git에 올리면 팀원도 같은 기준으로 비교합니다.
-
-```json
-{
-  "id": "kkomkkom-baseline",
-  "version": 1,
-  "routes": { "/checkout": { "jsBytes": 420000 } }
-}
+# 검사할 Next.js 프로젝트에서
+kkomkkom --fast --lang ko
 ```
 
----
+현재 안내에서는 npm에 공개되지 않은 패키지를 `npx`로 받지 않습니다.
 
-## 위험 등급
+</details>
 
-| 등급 | 무엇 | 보고서 | 종료 코드 |
-|---|---|---|---|
-| 🔴 critical | 로그인 없이 열린 API, git에 올라간 `.env`, 소스에 박힌 비밀키 | ⛔ 배포를 멈추세요 | 1 |
-| 🟡 warning | 확인이 필요한 API, 서버 오류, 인증 없는 쓰기 API, 페이지 오류, 무거워진 페이지 | ⚠️ 배포 전에 확인하세요 | 0 (`--strict`면 1) |
-| ⚪ info | 잠긴 문, 공개 목록, 확인 불가, 페이지 타임아웃 | 목록에만 표시 | 0 |
+## 에이전트 연결 (MCP)
 
----
+직접 명령을 실행하는 대신 에이전트가 같은 검사 엔진을 호출할 수 있습니다. 로컬에서 빌드한 stdio MCP 서버를 사용합니다.
 
-## 안전한 검사 규칙
-
-검사 도구가 프로젝트에 요청을 보낸다는 사실 자체가 리스크입니다. 그래서 다음은 지킵니다.
-
-- **GET만 보냅니다.** `POST`·`PUT`·`PATCH`·`DELETE`는 데이터를 지울 수 있어 보내지 않습니다. 쓰기 API는 소스만 읽습니다.
-- **쿠키와 인증 헤더를 보내지 않습니다.** 로그인 없는 상태 그대로 호출합니다.
-- **localhost만 검사합니다.**
-- **우리가 띄운 개발 서버만 종료합니다.**
-- **비밀값은 가립니다.** 보고서, JSON, AI 설명 프롬프트, 빌드 로그에서 `[redacted]`로 바꿉니다. 파일 이름과 줄 번호만 알려줍니다.
-- **리다이렉트 주소를 보여줄 때 쿼리스트링과 프래그먼트를 뺍니다.** `?token=...` 같은 값이 결과에 남지 않습니다.
-
----
-
-## CI에 붙이기
-
-```yaml
-# .github/workflows/kkomkkom.yml
-- run: npx kkomkkom --fast --strict
-```
-
-npm 공개 전이라면 저장소 경로의 CLI를 직접 실행하세요.
-
-```yaml
-- run: node ./path/to/kkomkkom/dist/cli.js --fast --strict
-```
-
-API 노출이나 비밀키 노출이 있으면 종료 코드가 1이라 워크플로가 실패합니다.
-
----
-
-## MCP로 붙이기
-
-Claude Code, Cursor 같은 에이전트가 검사를 직접 호출하게 할 수 있습니다.
+아래는 `mcpServers` 형식을 사용하는 클라이언트의 설정 예시입니다. `args`의 파일 경로를 바꾸세요. 클라이언트마다 설정 위치와 형식이 다를 수 있습니다.
 
 ```json
 {
   "mcpServers": {
     "kkomkkom": {
-      "command": "npx",
-      "args": ["-y", "-p", "kkomkkom", "kkomkkom-mcp"]
+      "command": "node",
+      "args": ["/absolute/path/to/kkomkkom/dist/mcp.js"]
     }
   }
 }
 ```
 
-도구 이름은 `kkomkkom`이고 `projectPath`, `fast`, `strict`, `reuse`, `lang`을 받습니다.
+도구 이름은 `kkomkkom`입니다. 호출 인자 예시:
 
----
+```json
+{
+  "projectPath": "/absolute/path/to/your-next-app",
+  "fast": true,
+  "lang": "ko"
+}
+```
 
-## 설정
+`strict`, `reuse`도 받을 수 있습니다. **OpenCode·Codex 등 에이전트별 실제 설치·연결·호출 검증은 보류 중**입니다. MCP 서버 제공과 각 에이전트의 호환성 검증 완료를 구분합니다. [재개 체크리스트 →](https://github.com/hodoi-ing/kkomkkom/issues/2)
 
-프로젝트 루트에 `kkomkkom.config.json`을 두면 됩니다.
+## 무엇을 검사하나요?
+
+| 검사 | 제공하는 근거 | 해석할 때 확인할 점 |
+|---|---|---|
+| **API 인증** | 쿠키·인증 헤더 없는 GET 응답과 소스의 인증 신호 | 공개 API의 200 응답만으로 취약점을 확정하지 않습니다. 간접 인증·미들웨어를 추가 확인하세요. |
+| **비밀정보** | git에 추적된 루트 `.env*`, 하드코딩 키 패턴, 의심스러운 `NEXT_PUBLIC_` 이름 | 예제값·공개 설정은 구분해야 하며, 탐지·마스킹 범위에 한계가 있습니다. |
+| **페이지 오류** | 페이지 GET에서 관찰한 오류·타임아웃 | 브라우저 렌더링·클릭·로그인 흐름을 검증하는 검사는 아닙니다. |
+| **쓰기 API** | POST·PUT·PATCH·DELETE 소스의 인증 신호 | 쓰기 요청은 보내지 않습니다. 파일 단위 분석이라 메서드별 인증을 잘못 판단할 수 있습니다. |
+| **JS 크기 증가** | 빌드 산출물·출력에서 구한 라우트별 크기와 이전 기준선 비교 | 기본 경고 조건은 증가율 15% 이상 **그리고** 30,000바이트 이상. 실제 네트워크 전송량·화면 속도 측정은 아닙니다. |
+
+### 결과를 보고 무엇을 하나요?
+
+1. 보고서에 나온 경로·파일과 관찰 내용을 확인합니다.
+2. 공개하도록 만든 API인지, 인증이나 미들웨어가 실제로 적용되는지 확인합니다.
+3. 필요한 수정을 한 뒤 같은 조건으로 다시 검사합니다.
+
+보고서의 `exposed`나 “뚫린 문” 표현도 현재 탐지 규칙의 판정입니다. 실제 권한 우회 여부는 별도 확인해야 합니다. [정확도·오류 처리 개선 항목 →](https://github.com/hodoi-ing/kkomkkom/issues/1)
+
+## 자주 쓰는 명령
+
+아래는 `npm link`로 명령을 연결한 경우입니다. 연결하지 않았다면 `kkomkkom`을 `node /absolute/path/to/kkomkkom/dist/cli.js`로 바꾸세요.
+
+```bash
+kkomkkom --fast --lang ko   # 새 빌드 없이 검사
+kkomkkom --lang ko          # 빌드·JS 크기 비교 포함
+kkomkkom --json             # JSON 보고서
+kkomkkom --strict           # 경고도 종료 코드 1로 처리
+kkomkkom --reuse --port 3100 # 실행 중인 Next 서버 사용
+kkomkkom --explain          # 설치된 AI CLI로 추가 설명 요청
+```
+
+`--reuse`는 같은 프로젝트의 서버인지 확인하지 않습니다. `--explain`은 설치된 AI CLI를 사용하며, 해당 CLI 설정에 따라 외부 모델로 데이터가 전달될 수 있습니다.
+
+<details>
+<summary>전체 옵션과 종료 코드</summary>
+
+| 옵션 | 동작 |
+|---|---|
+| `--fast` | 새 빌드·새 JS 크기 측정을 생략. 나머지 검사는 실행 |
+| `--json` | `diff`, `extra`, `exitCode` 등을 JSON으로 출력 |
+| `--strict` | 현재 warning으로 분류된 항목도 종료 코드 1로 처리 |
+| `--port 3100` | 개발 서버 포트 지정 |
+| `--reuse` | 지정 포트에서 실행 중인 Next 서버 재사용 |
+| `--lang ko` | 보고서 언어: `en`, `ko`, `ja`, `zh`, `es` |
+| `--explain` | `claude`, `codex`, `gemini` 순으로 설치된 AI CLI 탐색 |
+| `--explain-with codex` | 설명에 사용할 AI CLI 우선 지정 (`--explain`과 함께 사용) |
+| `--update` | `--fast` 결과의 API 판정으로 기준선 갱신. 기존 페이지 크기는 유지 |
+| `--help`, `--version` | 사용법·버전 표시 |
+
+언어 적용 순서: `--lang` → `KKOMKKOM_LANG` → `LC_ALL` → `LANG`.
+
+| 종료 코드 | 현재 동작 |
+|---|---|
+| `0` | 현재 규칙상 실행을 막는 결과가 없음. 기본 모드의 warning이나 일부 미검증 결과도 포함될 수 있음 |
+| `1` | API `exposed`, critical 항목, 빌드 실패 또는 `--strict`의 warning |
+| `2` | 프로젝트·포트·설정 오류 등으로 검사를 시작하거나 완료하지 못함 |
+
+`unknown`·생략된 검사까지 `--strict`가 실패로 처리하는 것은 아닙니다. 종료 코드 0과 “배포해도 좋습니다” 문구를 전체 검증 완료로 해석하지 마세요. 관련 동작은 [#1](https://github.com/hodoi-ing/kkomkkom/issues/1)에서 추적합니다.
+
+</details>
+
+<details>
+<summary>설정과 기준선</summary>
+
+검사할 프로젝트 루트에 `kkomkkom.config.json`을 둡니다.
 
 ```json
 {
@@ -205,80 +165,95 @@ Claude Code, Cursor 같은 에이전트가 검사를 직접 호출하게 할 수
 }
 ```
 
-| 키 | 기본값 | 하는 일 |
-|---|---|---|
-| `ignoreRoutes` | `[]` | 검사에서 빼는 경로. 웹훅이나 헬스체크 같은 게 흔합니다. |
-| `sampleParams` | `{}` | 동적 라우트에 넣을 값. `"/api/orders/[id]": { "id": "1" }` |
-| `port` | 자동 | 개발 서버 포트. |
-| `thresholds` | `+15%`, `+30KB` | 무게 증가 기준. 둘 다 넘을 때 경고로 봅니다. |
+| 설정 | 용도 |
+|---|---|
+| `ignoreRoutes` | 검사에서 제외할 경로. 공개 API인지 확인한 뒤 지정 |
+| `sampleParams` | 동적 라우트에 넣을 테스트 값. 값이 없으면 해당 동적 API의 HTTP 검사는 생략 |
+| `port` | 개발 서버 포트 |
+| `thresholds` | JS 크기 증가의 경고 기준. 두 조건을 모두 충족해야 경고 |
 
----
+기준선은 `.kkomkkom/baseline.json`에 저장됩니다. 예시 구조:
 
-## 한계
-
-- **Next.js 전용입니다.**
-- 동적 라우트(`[id]`)는 `sampleParams`에 값을 넣어야 검사합니다.
-- 인증 판정은 소스 코드의 신호를 봅니다. 간접적인 인증이나 미들웨어 인증은 놓칠 수 있습니다.
-- 주석 제거는 가벼운 자체 렉서를 씁니다. 아주 특이한 정규식이나 메서드 표기에서는 인증·쓰기 판정이 틀릴 수 있으니, 경고가 나오면 코드를 한 번 직접 확인하세요.
-- 비밀키 검사는 프로젝트 루트의 `.env*` 파일과 주요 소스 폴더만 봅니다. 하위 폴더의 `.env`는 검사하지 않습니다.
-- 빌드 실패 로그의 비밀값 가림은 `.env*`에서 읽은 8자 이상 값과 정해진 키 패턴만 대상으로 합니다. 그 밖의 셸 환경변수는 가리지 못할 수 있습니다.
-- `NEXT_PUBLIC_` 검사는 이름만 보고 판단합니다. 실제로 공개해도 되는 값이면 경고를 무시해도 됩니다.
-- 페이지 스모크는 8초 안에 응답이 없으면 타임아웃으로 표시합니다. 첫 컴파일이 느린 개발 서버에서는 타임아웃이 날 수 있습니다.
-- v1은 초 단위 체감 속도를 재지 않습니다. 전송량은 정확하지만 화면 렌더 시간은 아닙니다.
-
----
-
-## 자주 묻는 질문
-
-**AI에게 물어보는 것과 뭐가 다른가요?**
-물어보면 그럴듯한 답을 받습니다. 꼼꼼은 라우트를 실제로 부르고 응답 코드를 봅니다. 답이 아니라 증거입니다.
-
-**서버를 띄워도 되나요?**
-포트가 비어 있으면 직접 띄우고, 우리가 띄운 서버만 종료합니다. 이미 떠 있는 서버를 쓰려면 `--reuse`를 명시해야 합니다.
-
-**비밀키 값이 보고서에 나오나요?**
-나오지 않습니다. `[redacted]`로 가리고 파일 이름과 줄 번호만 알려줍니다.
-
-**Next.js가 아니면 어떻게 되나요?**
-다른 프레임워크 프로젝트면 unsupported로 끝납니다. Next.js만 다룹니다.
-
----
-
-## 개발
-
-```bash
-npm install
-npm test          # 빌드 + 단위 테스트 89개
-npm run verify    # 빌드 + 단위 테스트 + 실제 Next 앱 e2e 17개
-npm run build
-node dist/cli.js --port 3199 --fast   # fixtures/mini-app 에서
+```json
+{
+  "version": 1,
+  "createdAt": "2026-10-22T00:00:00.000Z",
+  "routes": { "/api/secret": { "verdict": "locked" } },
+  "pages": { "/checkout": { "firstLoadJs": 180000 } }
+}
 ```
 
-push할 때마다 GitHub Actions가 단위 테스트(Node 20·22·24)와 실제 앱 e2e를 자동으로 돌립니다.
+일반 실행은 빌드 성공 시 기준선을 자동 갱신합니다. 크기 증가 경고가 있어도 저장될 수 있으므로, 팀 기준으로 공유하기 전에 변경 내용을 검토하세요. `--fast --update`는 API 판정만 갱신하고 기존 페이지 크기를 유지합니다.
 
----
+</details>
 
-## 라이선스
+<details>
+<summary>CI에서 실행하기</summary>
 
-MIT
+현재는 npm 배포판 대신 빌드한 로컬 CLI를 사용합니다. 다음은 워크플로의 **단계 예시**이며, 두 저장소 체크아웃·의존성 설치·꼼꼼 빌드를 먼저 구성해야 합니다. 두 경로를 러너의 실제 경로로 바꾸세요.
 
----
+```yaml
+- name: Run kkomkkom
+  working-directory: /absolute/path/to/your-next-app
+  run: node /absolute/path/to/kkomkkom/dist/cli.js --fast --strict --lang ko
+```
 
+비공개 저장소를 가져오는 접근 권한도 필요합니다. `--fast`에서는 새 빌드·JS 크기를 검증하지 않으며, 일부 미검증 결과는 현재 종료 코드에 반영되지 않습니다.
+
+</details>
+
+## 실행 범위와 데이터 처리
+
+- HTTP 검사는 `127.0.0.1`에 **GET만** 보내며 쿠키·인증 헤더를 넣지 않습니다. GET 핸들러에 부수효과가 있는 앱은 개발용 데이터로 검사하세요.
+- 직접 시작한 개발 서버만 종료합니다. 현재 서버 시작 코드는 localhost 전용 바인딩을 명시하지 않습니다. 네트워크 바인딩 개선은 [#1](https://github.com/hodoi-ing/kkomkkom/issues/1)에 기록되어 있습니다.
+- 소스·설정을 자동 수정하는 기능은 없습니다. 개발 서버·빌드가 생성물을 만들고, 기준선 저장·잘못된 기준선의 `.bak` 이동이 발생할 수 있습니다.
+- 보고서·JSON·AI 설명용 프롬프트·빌드 오류 로그에 탐지 범위 내 비밀값을 `[redacted]`로 가립니다. 모든 비밀값의 제거를 보장하지 않습니다.
+- `--explain`은 선택 기능입니다. 기본 검사는 AI 계정 없이 실행되지만, Next 도구 실행과 의존성 준비 과정에는 별도 설치·네트워크 사용이 필요할 수 있습니다.
+
+## 지원·검증 상태
+
+| 항목 | 현재 상태 |
+|---|---|
+| 프레임워크 | Next.js 대상. 다른 프레임워크 지원은 제공하지 않음 |
+| 실행 방식 | CLI와 로컬 stdio MCP 서버 제공 |
+| 자동 검증 구성 | GitHub Actions에 Node 20·22·24 단위 테스트와 실제 Next fixture e2e 구성. 실행 결과는 상단 Tests 배지에서 확인 |
+| 에이전트별 검증 | **보류**. OpenCode·Codex 등 개별 클라이언트 호환성 완료를 보장하지 않음 |
+| 배포 | npm 미공개. 저장소 접근 권한과 로컬 빌드 필요 |
+| 추가 앱 보호 | 소스맵·불필요한 배포 파일·클라이언트 번들 노출 점검, 선택형 보호 적용은 **로드맵** |
+
+### 현재 한계
+
+- 인증·쓰기 API 판정은 가벼운 소스 분석이라 문자열·간접 호출·메서드별 인증을 잘못 해석할 수 있습니다.
+- 비밀정보 검사는 루트 `.env*`와 주요 소스 폴더 중심이며, 하위 `.env`와 모든 셸 환경변수를 다루지 않습니다. `NEXT_PUBLIC_`는 이름 기반 신호입니다.
+- 개발 서버 HTTP 결과는 production 배포 검증과 다릅니다. 페이지 타임아웃·검사 생략·지원하지 않는 빌드 형식도 확인해야 합니다.
+- JS 크기는 압축 전 파일 크기 등의 비교값입니다. 빌드 출력 단위·누락 청크 처리에 알려진 개선 항목이 있습니다.
+
+[정확도·오류 처리 개선 #1](https://github.com/hodoi-ing/kkomkkom/issues/1) · [제품 로드맵·검증 재개 체크리스트 #2](https://github.com/hodoi-ing/kkomkkom/issues/2)
+
+## 개발과 참여
+
+```bash
+npm ci
+npm test          # 빌드 + 단위 테스트
+npm run verify    # 빌드 + 단위 테스트 + 실제 Next fixture e2e
+```
+
+오탐·누락을 발견했다면 실제 비밀값을 제거한 최소 예제와 명령, 예상 결과, 실제 결과를 [이슈](https://github.com/hodoi-ing/kkomkkom/issues)에 남겨주세요.
+
+[데모 영상 편집·삽입 가이드](docs/demo.md) · [MIT 라이선스](LICENSE)
+
+<a id="english"></a>
 <details>
 <summary><b>English</b></summary>
 
-**kkomkkom** — a pre-commit checkup for Next.js apps. It finds API routes that answer without authentication, secrets that leaked into git, pages that return 500, write APIs without auth, and routes that got heavier than the last run.
+**kkomkkom** is a local CLI and stdio MCP tool for checking Next.js apps before a commit or deployment. It combines unauthenticated HTTP GET probes, source-based auth and secret signals, page error checks, and JS size comparisons against a saved baseline.
 
-```bash
-git clone https://github.com/hodoi-ing/kkomkkom.git
-cd kkomkkom && npm install && npm run build && npm link
-kkomkkom --fast
-```
+The package is not published to npm. Clone an accessible copy of this repository, run `npm ci` and `npm run build`, then run `node /absolute/path/to/kkomkkom/dist/cli.js --fast` from your Next.js app. Replace the absolute path with your local checkout. Remove `--fast` to build and measure JS size; a successful build automatically updates the baseline.
 
-Exit codes: `0` clean, `1` deploy-blocking problem, `2` the check could not run. Results are saved to `.kkomkkom/baseline.json` — commit it so the whole team compares against the same baseline.
+For MCP, launch `node /absolute/path/to/kkomkkom/dist/mcp.js`. The tool is named `kkomkkom`; pass the app's absolute `projectPath`. Individual agent connection tests are deferred, not completed.
 
-Safety: GET requests only, no cookies or auth headers, localhost only, secrets redacted as `[redacted]`.
+The preview above uses sample data, not a recorded app scan. Findings require review: a 200 response does not by itself prove an auth bypass, and exit code 0 is not a security guarantee. Sources and settings are not automatically fixed; dev/build artifacts and baseline files can change. Redaction has limits. Optional AI explanations may send data to the configured model provider.
 
-Next.js only. MIT licensed.
+See [known issues](https://github.com/hodoi-ing/kkomkkom/issues/1) and the [roadmap](https://github.com/hodoi-ing/kkomkkom/issues/2). Additional exposure checks and protection features are planned, not implemented. MIT licensed.
 
 </details>
