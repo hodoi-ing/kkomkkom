@@ -3,7 +3,7 @@ export type Lang = (typeof LANGS)[number];
 
 const en = {
   reportTitle: "kkomkkom — pre-commit check",
-  firstRunNote: "First run, so everything is shown. This becomes your baseline.",
+  firstRunNote: "First run, so everything is shown. Run --update to save this as your baseline.",
   stopBanner: "⛔ Stop the deploy — {count} problem(s) found.",
   warnBanner: "⚠️  Check before deploy — {count} warning(s).",
   okBanner: "✅ No blocking problems in the checked scope.",
@@ -56,6 +56,11 @@ const en = {
   errConfigField: "kkomkkom.config.json has an invalid field: {field}.",
   errConfigRead: "Could not read kkomkkom.config.json. Check that it is a readable file.",
   errConfig: "kkomkkom.config.json is not valid.",
+  errBaseline: "The baseline file is not valid. It was left unchanged; fix or remove it explicitly.",
+  errBaselineRead: "Could not read the baseline file. Check that it is a readable file.",
+  errBaselineWrite: "Could not write the baseline file.",
+  errBaselineLock: "Another process is updating the baseline. Try again.",
+  errUpdateRefused: "Refused to update the baseline because the check did not complete ({reason}). The existing baseline was not changed.",
   errLang: 'Unknown language "{lang}". Use one of: en, ko, ja, zh, es.',
 } as const;
 
@@ -63,7 +68,7 @@ export type MessageKey = keyof typeof en;
 
 const ko: Record<MessageKey, string> = {
   reportTitle: "꼼꼼 — 커밋 전 점검",
-  firstRunNote: "첫 실행이라 전체를 보여줍니다. 이 상태를 기준으로 저장합니다.",
+  firstRunNote: "첫 실행이라 전체를 보여줍니다. 기준선으로 저장하려면 --update를 실행하세요.",
   stopBanner: "⛔ 배포를 멈추세요 — 문제 {count}개가 있습니다.",
   warnBanner: "⚠️  배포 전에 확인하세요 — 경고 {count}개.",
   okBanner: "✅ 검사한 범위에서 차단 문제가 없습니다.",
@@ -116,12 +121,17 @@ const ko: Record<MessageKey, string> = {
   errConfigField: "kkomkkom.config.json의 필드가 올바르지 않습니다: {field}.",
   errConfigRead: "kkomkkom.config.json을 읽지 못했습니다. 읽을 수 있는 파일인지 확인하세요.",
   errConfig: "kkomkkom.config.json 형식이 올바르지 않습니다.",
+  errBaseline: "기준선 파일 형식이 올바르지 않습니다. 원본은 그대로 두었으니 직접 고치거나 지우세요.",
+  errBaselineRead: "기준선 파일을 읽지 못했습니다. 읽을 수 있는 파일인지 확인하세요.",
+  errBaselineWrite: "기준선 파일을 쓰지 못했습니다.",
+  errBaselineLock: "다른 프로세스가 기준선을 갱신 중입니다. 다시 시도하세요.",
+  errUpdateRefused: "검사가 완료되지 않아 기준선 갱신을 거부했습니다 ({reason}). 기존 기준선은 바뀌지 않았습니다.",
   errLang: "알 수 없는 언어입니다: {lang}. en, ko, ja, zh, es 중 하나를 쓰세요.",
 };
 
 const ja: Record<MessageKey, string> = {
   reportTitle: "꼼꼼 — コミット前チェック",
-  firstRunNote: "初回実行のため全体を表示します。この状態を基準として保存します。",
+  firstRunNote: "初回実行のため全体を表示します。基準として保存するには --update を実行してください。",
   stopBanner: "⛔ デプロイを止めてください — 問題が{count}件あります。",
   warnBanner: "⚠️  デプロイ前に確認してください — 警告{count}件。",
   okBanner: "✅ 検査範囲にブロックする問題はありません。",
@@ -174,12 +184,17 @@ const ja: Record<MessageKey, string> = {
   errConfigField: "kkomkkom.config.json のフィールドが正しくありません: {field}。",
   errConfigRead: "kkomkkom.config.json を読み込めませんでした。読み取り可能なファイルか確認してください。",
   errConfig: "kkomkkom.config.jsonの形式が正しくありません。",
+  errBaseline: "基準ファイルの形式が正しくありません。元のファイルは変更していません。手動で修正または削除してください。",
+  errBaselineRead: "基準ファイルを読み込めませんでした。読み取り可能なファイルか確認してください。",
+  errBaselineWrite: "基準ファイルを書き込めませんでした。",
+  errBaselineLock: "別のプロセスが基準を更新しています。もう一度お試しください。",
+  errUpdateRefused: "検査が完了していないため基準の更新を拒否しました ({reason})。既存の基準は変更されていません。",
   errLang: "不明な言語です: {lang}。en, ko, ja, zh, es のいずれかを使用してください。",
 };
 
 const zh: Record<MessageKey, string> = {
   reportTitle: "꼼꼼 — 提交前检查",
-  firstRunNote: "首次运行，显示全部结果。将此状态保存为基准。",
+  firstRunNote: "首次运行，显示全部结果。要保存为基准，请运行 --update。",
   stopBanner: "⛔ 请停止部署 — 发现 {count} 个问题。",
   warnBanner: "⚠️  部署前请确认 — {count} 个警告。",
   okBanner: "✅ 检查范围内没有阻断问题。",
@@ -232,12 +247,17 @@ const zh: Record<MessageKey, string> = {
   errConfigField: "kkomkkom.config.json 的字段无效：{field}。",
   errConfigRead: "无法读取 kkomkkom.config.json。请确认它是可读文件。",
   errConfig: "kkomkkom.config.json 格式无效。",
+  errBaseline: "基准文件格式无效。原文件未改动，请手动修复或删除。",
+  errBaselineRead: "无法读取基准文件。请确认它是可读文件。",
+  errBaselineWrite: "无法写入基准文件。",
+  errBaselineLock: "另一个进程正在更新基准。请重试。",
+  errUpdateRefused: "检查未完成，已拒绝更新基准 ({reason})。现有基准未改动。",
   errLang: "未知语言：{lang}。请使用 en、ko、ja、zh、es 之一。",
 };
 
 const es: Record<MessageKey, string> = {
   reportTitle: "꼼꼼 — revisión antes del commit",
-  firstRunNote: "Primera ejecución: se muestra todo. Se guardará como referencia.",
+  firstRunNote: "Primera ejecución: se muestra todo. Ejecuta --update para guardarlo como referencia.",
   stopBanner: "⛔ Detén el despliegue — hay {count} problema(s).",
   warnBanner: "⚠️  Revisa antes de desplegar — {count} advertencia(s).",
   okBanner: "✅ Sin problemas bloqueantes en el alcance revisado.",
@@ -290,6 +310,11 @@ const es: Record<MessageKey, string> = {
   errConfigField: "kkomkkom.config.json tiene un campo no válido: {field}.",
   errConfigRead: "No se pudo leer kkomkkom.config.json. Comprueba que sea un archivo legible.",
   errConfig: "El formato de kkomkkom.config.json no es válido.",
+  errBaseline: "El archivo de referencia no es válido. No se modificó; corrígelo o elimínalo explícitamente.",
+  errBaselineRead: "No se pudo leer el archivo de referencia. Comprueba que sea un archivo legible.",
+  errBaselineWrite: "No se pudo escribir el archivo de referencia.",
+  errBaselineLock: "Otro proceso está actualizando la referencia. Inténtalo de nuevo.",
+  errUpdateRefused: "Se rechazó la actualización de la referencia porque la revisión no se completó ({reason}). La referencia existente no cambió.",
   errLang: "Idioma desconocido: {lang}. Usa uno de: en, ko, ja, zh, es.",
 };
 

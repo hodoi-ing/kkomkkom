@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { readFile, readdir, stat } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, readFile, readdir, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { nextEnv, resolveNextCli } from "./next.js";
 import { installInterrupt, terminateGroup } from "./process.js";
@@ -9,9 +10,26 @@ const BOX = /[┌├└│─┐┘┴┬╭╮╰╯]/g;
 const ICONS = new Set(["○", "ƒ", "λ", "●", "◐", "◍", "◌"]);
 const CHUNK = /(static\/chunks\/[^"']+\.js)/g;
 
+export type MeasurementReason = "missing" | "read" | "directory" | "manifest";
+
+export class MeasurementError extends Error {
+  readonly reason: MeasurementReason;
+  readonly chunk?: string;
+
+  constructor(reason: MeasurementReason, chunk?: string) {
+    super(`Measurement failed (${reason})${chunk ? `: ${chunk}` : ""}`);
+    this.name = "MeasurementError";
+    this.reason = reason;
+    this.chunk = chunk;
+  }
+}
+
+const UNITS: Record<string, number> = { b: 1, kb: 1000, mb: 1_000_000 };
+
 function toBytes(value: string, unit: string): number {
   const n = Number.parseFloat(value);
-  return Math.round(n * (unit.toLowerCase().startsWith("k") ? 1000 : 1));
+  const scale = UNITS[unit.toLowerCase()];
+  return Math.round(n * scale);
 }
 
 /** Fallback for older Next versions that print a Size / First Load JS table. */
@@ -29,29 +47,56 @@ export function parseFirstLoadJs(output: string): Record<string, PageWeight> {
     if (!route?.startsWith("/")) continue;
     if (route.startsWith("/api")) continue;
 
-    const match = line.match(/([\d.]+)\s*([kKM]?B)\s+([\d.]+)\s*([kKM]?B)\s*$/);
+    const match = line.match(/([\d.]+)\s*([kKmM]?[bB])\s+([\d.]+)\s*([kKmM]?[bB])\s*$/);
     if (!match) continue;
 
-    pages[route] = { firstLoadJs: toBytes(match[3], match[4]) };
+    const bytes = toBytes(match[3], match[4]);
+    if (!Number.isFinite(bytes)) continue;
+    pages[route] = { firstLoadJs: bytes, method: "next-output" };
   }
 
   return pages;
 }
 
+function normalizeChunk(chunk: string): string {
+  return chunk.replace(/^\/_next\//, "").replace(/^\/+/, "");
+}
+
 async function sizeOf(root: string, chunk: string): Promise<number> {
-  const file = join(root, ".next", chunk.replace(/^\/_next\//, "").replace(/^\/+/, ""));
-  const info = await stat(file).catch(() => null);
-  return info?.size ?? 0;
+  const relativePath = normalizeChunk(chunk);
+  if (!relativePath || relativePath.split("/").includes("..") || relativePath.startsWith("/")) {
+    throw new MeasurementError("missing", chunk);
+  }
+  const file = join(root, ".next", relativePath);
+  let info;
+  try {
+    info = await stat(file);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    throw new MeasurementError(code === "ENOENT" ? "missing" : "read", chunk);
+  }
+  if (info.isDirectory()) throw new MeasurementError("directory", chunk);
+  try {
+    await access(file, constants.R_OK);
+  } catch {
+    throw new MeasurementError("read", chunk);
+  }
+  return info.size;
 }
 
 async function sumChunks(root: string, chunks: string[]): Promise<number> {
-  const unique = [...new Set(chunks)];
-  const sizes = await Promise.all(unique.map((chunk) => sizeOf(root, chunk)));
-  return sizes.reduce((total, size) => total + size, 0);
+  const unique = new Map<string, string>();
+  for (const chunk of chunks) unique.set(normalizeChunk(chunk), chunk);
+  let total = 0;
+  for (const chunk of unique.values()) total += await sizeOf(root, chunk);
+  return total;
 }
 
 async function findManifests(dir: string, out: string[]): Promise<void> {
-  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  const entries = await readdir(dir, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  });
   for (const entry of entries) {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) await findManifests(path, out);
@@ -65,8 +110,13 @@ async function findManifests(dir: string, out: string[]): Promise<void> {
  * print a size table in `next build` output.
  */
 export async function measurePages(root: string): Promise<Record<string, PageWeight>> {
-  const raw = await readFile(join(root, ".next", "build-manifest.json"), "utf8").catch(() => null);
-  if (!raw) return {};
+  let raw: string;
+  try {
+    raw = await readFile(join(root, ".next", "build-manifest.json"), "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+    throw error;
+  }
 
   let manifest: {
     rootMainFiles?: string[];
@@ -76,10 +126,11 @@ export async function measurePages(root: string): Promise<Record<string, PageWei
   try {
     manifest = JSON.parse(raw);
   } catch {
-    return {};
+    throw new MeasurementError("manifest");
   }
 
   const shared = [...(manifest.rootMainFiles ?? []), ...(manifest.polyfillFiles ?? [])];
+  const sharedKeys = new Set(shared.map(normalizeChunk));
   const sharedBytes = await sumChunks(root, shared);
   const pages: Record<string, PageWeight> = {};
 
@@ -95,20 +146,20 @@ export async function measurePages(root: string): Promise<Record<string, PageWei
 
     const content = await readFile(file, "utf8");
     const chunks = [...content.matchAll(CHUNK)].map((match) => match[1]);
-    const extra = await sumChunks(root, chunks.filter((chunk) => !shared.includes(chunk)));
-    pages[route] = { firstLoadJs: sharedBytes + extra };
+    const extra = await sumChunks(root, chunks.filter((chunk) => !sharedKeys.has(normalizeChunk(chunk))));
+    pages[route] = { firstLoadJs: sharedBytes + extra, method: "manifest-file" };
   }
 
   for (const [route, chunks] of Object.entries(manifest.pages ?? {})) {
     if (route.startsWith("/_") || route.startsWith("/api")) continue;
-    const extra = await sumChunks(root, chunks.filter((chunk) => !shared.includes(chunk)));
-    pages[route] = { firstLoadJs: sharedBytes + extra };
+    const extra = await sumChunks(root, chunks.filter((chunk) => !sharedKeys.has(normalizeChunk(chunk))));
+    pages[route] = { firstLoadJs: sharedBytes + extra, method: "manifest-file" };
   }
 
   return pages;
 }
 
-export type BuildFailure = "missing" | "spawn" | "compile" | "signal" | "timeout" | "internal";
+export type BuildFailure = "missing" | "spawn" | "compile" | "signal" | "timeout" | "internal" | "measure";
 
 export interface BuildResult {
   ok: boolean;
@@ -214,8 +265,12 @@ export function runBuild(root: string, options: BuildOptions = {}): Promise<Buil
           let pages = await measurePages(root);
           if (Object.keys(pages).length === 0) pages = parseFirstLoadJs(output);
           finish({ ok: true, output, pages });
-        } catch {
-          finish({ ok: false, failure: "internal", output, pages: {} });
+        } catch (error) {
+          if (error instanceof MeasurementError) {
+            finish({ ok: false, failure: "measure", output: output + `\n${error.message}`, pages: {} });
+          } else {
+            finish({ ok: false, failure: "internal", output, pages: {} });
+          }
         }
       } catch {
         finish({ ok: false, failure: "internal", output, pages: {} });

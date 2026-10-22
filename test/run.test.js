@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runCheck } from "../dist/run.js";
+import { runCheck, summarizeCoverage } from "../dist/run.js";
 
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -192,4 +192,219 @@ test("CLI JSON exposes schemaVersion 2 and coverage", async (t) => {
   assert.equal(payload.schemaVersion, 2);
   assert.equal(payload.coverage.status, "complete");
   assert.equal(payload.exitCode, 0);
+});
+
+function baselineFile(root) {
+  return join(root, ".kkomkkom", "baseline.json");
+}
+
+async function writeBaselineRaw(root, raw) {
+  await mkdir(join(root, ".kkomkkom"), { recursive: true });
+  await writeFile(baselineFile(root), raw);
+}
+
+const legacyBaseline = (pages = {}) => JSON.stringify({
+  version: 1,
+  createdAt: "2026-01-01T00:00:00.000Z",
+  routes: {},
+  pages,
+});
+
+async function addMissingChunkManifest(root) {
+  await mkdir(join(root, ".next", "static", "chunks"), { recursive: true });
+  await writeFile(
+    join(root, ".next", "build-manifest.json"),
+    JSON.stringify({ rootMainFiles: ["static/chunks/missing.js"], polyfillFiles: [] }),
+  );
+}
+
+test("build and secret failures make a non-empty scope incomplete", () => {
+  const route = { rule: "api-auth", path: "/api/a", method: "GET", status: "checked" };
+  const buildFailed = summarizeCoverage([
+    route,
+    { rule: "build", status: "failed", reason: "compile" },
+    { rule: "secrets", status: "checked", reason: "source-scan" },
+  ]);
+  assert.equal(buildFailed.status, "incomplete");
+
+  const secretsFailed = summarizeCoverage([
+    route,
+    { rule: "build", status: "checked", reason: "build" },
+    { rule: "secrets", status: "failed", reason: "scan" },
+  ]);
+  assert.equal(secretsFailed.status, "incomplete");
+});
+
+test("deliberate fast skips stay non-blocking", () => {
+  const summary = summarizeCoverage([
+    { rule: "api-auth", path: "/api/a", method: "GET", status: "checked" },
+    { rule: "build", status: "skipped", reason: "fast" },
+    { rule: "secrets", status: "checked", reason: "source-scan" },
+  ]);
+  assert.equal(summary.status, "complete");
+});
+
+test("a failed check outside routes does not turn an empty route scope into a pass", () => {
+  const summary = summarizeCoverage([
+    { rule: "secrets", status: "failed", reason: "scan" },
+    { rule: "build", status: "failed", reason: "measure" },
+  ]);
+  assert.equal(summary.status, "empty");
+});
+
+test("a normal check never writes a baseline, even on the first run", async (t) => {
+  const root = await project(t, "ok");
+  await config(root, { routePolicies: { "/api/health": { GET: "public" } } });
+  const result = await runCheck({ root, fast: false, strict: false, port: await freePort() });
+  assert.equal(result.buildFailed, false);
+  assert.equal(result.coverage.status, "complete");
+  assert.equal(await readFile(baselineFile(root), "utf8").catch(() => null), null);
+});
+
+test("only an explicit update writes, and later checks keep it byte-identical", async (t) => {
+  const root = await project(t, "ok");
+  await config(root, { routePolicies: { "/api/health": { GET: "public" } } });
+  await runCheck({ root, fast: false, update: true, strict: false, port: await freePort() });
+  const saved = await readFile(baselineFile(root), "utf8");
+
+  await runCheck({ root, fast: false, strict: false, port: await freePort() });
+  assert.equal(await readFile(baselineFile(root), "utf8"), saved);
+  assert.deepEqual((await readdir(join(root, ".kkomkkom"))).sort(), ["baseline.json"]);
+});
+
+test("a fast update preserves the existing page weights", async (t) => {
+  const root = await project(t, "ok");
+  await config(root, { routePolicies: { "/api/health": { GET: "public" } } });
+  await writeBaselineRaw(root, legacyBaseline({ "/": { firstLoadJs: 123456, method: "manifest-file" } }));
+
+  await runCheck({ root, fast: true, update: true, strict: false, port: await freePort() });
+  const saved = JSON.parse(await readFile(baselineFile(root), "utf8"));
+  assert.equal(saved.pages["/"].firstLoadJs, 123456);
+  assert.equal(saved.pages["/"].method, "manifest-file");
+});
+
+test("an explicit update still saves when findings exist, and the run stays blocking", async (t) => {
+  const root = await project(t, "ok");
+  await config(root, { routePolicies: { "/api/health": { GET: "protected" } } });
+  const result = await runCheck({ root, fast: true, update: true, strict: false, port: await freePort() });
+  assert.equal(result.exitCode, 1);
+  const saved = JSON.parse(await readFile(baselineFile(root), "utf8"));
+  assert.equal(saved.routes["/api/health"].verdict, "exposed");
+});
+
+test("an update with a missing required sample is refused and preserves the original", async (t) => {
+  const root = await project(t, "ok");
+  await mkdir(join(root, "app", "api", "orders", "[id]"), { recursive: true });
+  await writeFile(
+    join(root, "app", "api", "orders", "[id]", "route.ts"),
+    "export function GET() { return Response.json({ id: 1 }); }",
+  );
+  await config(root, { routePolicies: { "/api/health": { GET: "public" } } });
+  const original = legacyBaseline();
+  await writeBaselineRaw(root, original);
+
+  const port = await freePort();
+  await assert.rejects(
+    () => runCheck({ root, fast: true, update: true, strict: false, port }),
+    (error) => error.key === "errUpdateRefused",
+  );
+  assert.equal(await readFile(baselineFile(root), "utf8"), original);
+});
+
+test("an update after a build failure is refused and preserves the original", async (t) => {
+  const root = await project(t, "compile-fail");
+  await config(root, { routePolicies: { "/api/health": { GET: "public" } } });
+  const original = legacyBaseline();
+  await writeBaselineRaw(root, original);
+
+  const port = await freePort();
+  await assert.rejects(
+    () => runCheck({ root, fast: false, update: true, strict: false, port }),
+    (error) => error.key === "errUpdateRefused",
+  );
+  assert.equal(await readFile(baselineFile(root), "utf8"), original);
+});
+
+test("a missing chunk is incomplete coverage, not a zero weight", async (t) => {
+  const root = await project(t, "ok");
+  await config(root, { routePolicies: { "/api/health": { GET: "public" } } });
+  await addMissingChunkManifest(root);
+
+  const result = await runCheck({ root, fast: false, strict: false, port: await freePort() });
+  assert.equal(result.coverage.status, "incomplete");
+  assert.ok(result.coverage.checks.some(
+    (check) => check.rule === "build" && check.status === "failed" && check.reason === "measure",
+  ));
+  assert.equal(await readFile(baselineFile(root), "utf8").catch(() => null), null);
+});
+
+test("an update with a failed measurement is refused and preserves the original", async (t) => {
+  const root = await project(t, "ok");
+  await config(root, { routePolicies: { "/api/health": { GET: "public" } } });
+  await addMissingChunkManifest(root);
+  const original = legacyBaseline();
+  await writeBaselineRaw(root, original);
+
+  const port = await freePort();
+  await assert.rejects(
+    () => runCheck({ root, fast: false, update: true, strict: false, port }),
+    (error) => error.key === "errUpdateRefused",
+  );
+  assert.equal(await readFile(baselineFile(root), "utf8"), original);
+});
+
+test("a corrupt baseline is a tool error and stays untouched", async (t) => {
+  const root = await project(t, "ok");
+  await config(root, { routePolicies: { "/api/health": { GET: "public" } } });
+  await writeBaselineRaw(root, "{not json");
+
+  const port = await freePort();
+  await assert.rejects(
+    () => runCheck({ root, fast: true, strict: false, port }),
+    (error) => error.key === "errBaseline",
+  );
+  assert.equal(await readFile(baselineFile(root), "utf8"), "{not json");
+});
+
+test("an explicit update accepts a heavier page and records the new weight", async (t) => {
+  const root = await project(t, "ok");
+  await config(root, { routePolicies: { "/api/health": { GET: "public" } } });
+  await mkdir(join(root, ".next", "static", "chunks"), { recursive: true });
+  await writeFile(join(root, ".next", "static", "chunks", "page.js"), "x".repeat(50_000));
+  await writeFile(
+    join(root, ".next", "build-manifest.json"),
+    JSON.stringify({ rootMainFiles: [], polyfillFiles: [], pages: { "/": ["static/chunks/page.js"] } }),
+  );
+  await writeBaselineRaw(root, legacyBaseline({ "/": { firstLoadJs: 1000, method: "manifest-file" } }));
+
+  const result = await runCheck({ root, fast: false, update: true, strict: false, port: await freePort() });
+  assert.equal(result.diff.pages.find((page) => page.path === "/").heavy, true);
+  assert.equal(result.exitCode, 0);
+  const saved = JSON.parse(await readFile(baselineFile(root), "utf8"));
+  assert.equal(saved.pages["/"].firstLoadJs, 50_000);
+  assert.equal(saved.pages["/"].method, "manifest-file");
+});
+
+test("CLI JSON mode reports a corrupt baseline as a tool error (exit 2)", async (t) => {
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const run = promisify(execFile);
+  const root = await project(t, "ok");
+  await config(root, { routePolicies: { "/api/health": { GET: "public" } } });
+  await writeBaselineRaw(root, "{not json");
+  const cli = new URL("../dist/cli.js", import.meta.url).pathname;
+  const port = await freePort();
+
+  await assert.rejects(
+    () => run(process.execPath, [cli, "--fast", "--json", "--port", String(port)], {
+      cwd: root,
+      env: { ...process.env, KKOMKKOM_LANG: "en" },
+    }),
+    (error) => {
+      assert.equal(error.code, 2);
+      assert.match(error.stderr, /baseline/i);
+      assert.equal(error.stdout, "");
+      return true;
+    },
+  );
 });
