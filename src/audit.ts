@@ -36,7 +36,7 @@ export function hasHighConfidenceSecret(text: string): boolean {
   return [...text.matchAll(SECRET)].some((match) => !PLACEHOLDER.test(match[0]));
 }
 
-function isEnvEntry(entry: Dirent): boolean {
+export function isEnvEntry(entry: Dirent): boolean {
   return (
     (entry.isFile() || entry.isSymbolicLink()) &&
     entry.name.startsWith(".env") &&
@@ -84,6 +84,17 @@ function envPairs(content: string): Array<{ key: string; value: string }> {
     pairs.push({ key, value });
   }
   return pairs;
+}
+
+/** Values from bounded env-file text that are safe to search for in free text. */
+export function envSecretValues(content: string): string[] {
+  const values = new Set<string>();
+  for (const { value } of envPairs(content)) {
+    if (value.length < 8) continue;
+    if (/^(?:true|false|null|undefined|localhost|development|production|test)$/i.test(value)) continue;
+    values.add(value);
+  }
+  return [...values];
 }
 
 function git(root: string, args: string[]): Promise<{ code: number | null; stdout: string }> {
@@ -346,26 +357,26 @@ export async function auditProject(
     .sort((a, b) => rank[a.severity] - rank[b.severity] || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
-export async function redactSecrets(root: string, text: string): Promise<string> {
-  if (!text) return text;
-
+export function maskSecrets(text: string, values: Iterable<string> = []): string {
   let out = text.replace(PEM_BLOCK, "[redacted]");
   out = out.replace(PEM_UNCLOSED, "[redacted]");
   out = out.replace(SECRET, "[redacted]");
-  const values = new Set<string>();
-
-  for (const entry of await envEntries(root)) {
-    const content = await readFile(join(root, entry.name), "utf8").catch(() => "");
-    for (const { value } of envPairs(content)) {
-      if (value.length < 8) continue;
-      if (/^(?:true|false|null|undefined|localhost|development|production|test)$/i.test(value)) continue;
-      values.add(value);
-    }
-  }
 
   // Longer values first so a short value cannot split a longer secret.
   for (const value of [...values].sort((a, b) => b.length - a.length)) {
     out = out.split(value).join("[redacted]");
   }
   return out;
+}
+
+export async function redactSecrets(root: string, text: string): Promise<string> {
+  if (!text) return text;
+
+  const values = new Set<string>();
+
+  for (const entry of await envEntries(root)) {
+    const content = await readFile(join(root, entry.name), "utf8").catch(() => "");
+    for (const value of envSecretValues(content)) values.add(value);
+  }
+  return maskSecrets(text, values);
 }

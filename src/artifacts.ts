@@ -1,7 +1,9 @@
 import { open, readdir, realpath, stat } from "node:fs/promises";
 import { dirname, extname, isAbsolute, join, relative, sep } from "node:path";
 import * as ts from "typescript";
-import { hasHighConfidenceSecret, redactSecrets } from "./audit.js";
+import {
+  envSecretValues, hasHighConfidenceSecret, isEnvEntry, maskSecrets, redactSecrets,
+} from "./audit.js";
 import { runBuild } from "./build.js";
 import { loadConfig } from "./config.js";
 import { KkomkkomError } from "./errors.js";
@@ -52,6 +54,11 @@ interface ParsedSource {
 interface ConfigAnalysis {
   reason?: string;
   sourceMaps?: boolean;
+}
+
+interface MaskContext {
+  values: string[];
+  complete: boolean;
 }
 
 export interface ArtifactRunOptions {
@@ -160,6 +167,13 @@ async function directoryState(
   }
 }
 
+export function rangeChangeReason(initial: number, read: number, final: number): string | null {
+  if (final > initial) return "file-grew";
+  if (final < initial) return "file-shrunk";
+  if (read < initial) return "file-short";
+  return null;
+}
+
 async function readBounded(
   real: string,
   display: string,
@@ -189,14 +203,54 @@ async function readBounded(
       failure(coverage, undefined, "total-budget");
       return null;
     }
-    const buffer = Buffer.alloc(info.size);
+    const initial = info.size;
+    let buffer = Buffer.alloc(initial);
     let offset = 0;
     while (offset < buffer.length) {
       const { bytesRead } = await handle.read(buffer, offset, buffer.length - offset, offset);
       if (bytesRead === 0) break;
       offset += bytesRead;
     }
+    // Keep reading past the stat size on the same handle so a growing file is observed, not guessed.
+    for (;;) {
+      if (offset > FILE_LIMIT) break;
+      const remainingTotal = TOTAL_LIMIT - state.bytes - offset;
+      if (remainingTotal < 0) {
+        state.bytes += offset;
+        state.budgetHit = true;
+        failure(coverage, undefined, "total-budget");
+        return null;
+      }
+      const chunk = Math.min(65536, FILE_LIMIT + 1 - offset, remainingTotal + 1);
+      if (chunk <= 0) break;
+      const extra = Buffer.alloc(chunk);
+      const { bytesRead } = await handle.read(extra, 0, chunk, offset);
+      if (bytesRead === 0) break;
+      if (state.bytes + offset + bytesRead > TOTAL_LIMIT) {
+        state.bytes += offset + bytesRead;
+        state.budgetHit = true;
+        failure(coverage, undefined, "total-budget");
+        return null;
+      }
+      if (offset + bytesRead > buffer.length) {
+        const grown = Buffer.alloc(offset + bytesRead);
+        buffer.copy(grown, 0, 0, offset);
+        buffer = grown;
+      }
+      extra.copy(buffer, offset, 0, bytesRead);
+      offset += bytesRead;
+    }
     state.bytes += offset;
+    if (offset > FILE_LIMIT) {
+      failure(coverage, display, "file-size");
+      return null;
+    }
+    const final = await handle.stat();
+    const changed = rangeChangeReason(initial, offset, final.size);
+    if (changed !== null) {
+      failure(coverage, display, changed);
+      return null;
+    }
     const bytes = buffer.subarray(0, offset);
     if (bytes.includes(0)) return null;
     return bytes.toString("utf8");
@@ -288,6 +342,16 @@ function isMapFile(display: string): boolean {
   return extname(display).toLowerCase() === ".map";
 }
 
+function basicSourceMap(value: Record<string, unknown>): { sourcesContent: boolean } | null {
+  if (value.version !== 3 || !Array.isArray(value.sources) || typeof value.mappings !== "string") {
+    return null;
+  }
+  return {
+    sourcesContent: Array.isArray(value.sourcesContent)
+      && value.sourcesContent.some((item) => typeof item === "string" && item.length > 0),
+  };
+}
+
 function parseSourceMap(text: string): { sourcesContent: boolean } | null {
   let parsed: unknown;
   try {
@@ -297,13 +361,32 @@ function parseSourceMap(text: string): { sourcesContent: boolean } | null {
   }
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return null;
   const value = parsed as Record<string, unknown>;
-  if (value.version !== 3 || !Array.isArray(value.sources) || typeof value.mappings !== "string") {
+  const basic = basicSourceMap(value);
+  if (basic !== null) return basic;
+  if (value.version !== 3 || !Array.isArray(value.sections) || value.sections.length === 0) {
     return null;
   }
-  return {
-    sourcesContent: Array.isArray(value.sourcesContent)
-      && value.sourcesContent.some((item) => typeof item === "string" && item.length > 0),
-  };
+  let sourcesContent = false;
+  for (const section of value.sections) {
+    if (section === null || typeof section !== "object" || Array.isArray(section)) return null;
+    const entry = section as Record<string, unknown>;
+    const offset = entry.offset;
+    if (offset === null || typeof offset !== "object" || Array.isArray(offset)) return null;
+    const { line, column } = offset as Record<string, unknown>;
+    if (!Number.isInteger(line) || (line as number) < 0
+      || !Number.isInteger(column) || (column as number) < 0) {
+      return null;
+    }
+    if (entry.map !== undefined) {
+      if (entry.map === null || typeof entry.map !== "object" || Array.isArray(entry.map)) return null;
+      const nested = basicSourceMap(entry.map as Record<string, unknown>);
+      if (nested === null) return null;
+      sourcesContent ||= nested.sourcesContent;
+    } else if (typeof entry.url !== "string" || entry.url === "") {
+      return null;
+    }
+  }
+  return { sourcesContent };
 }
 
 function parseInlineMap(target: string): { sourcesContent: boolean } | null {
@@ -371,17 +454,20 @@ function commentsIn(text: string, display: string): string[] {
   const extension = extname(display).toLowerCase();
   if (extension === ".css") return cssComments(text);
   if (!COMMENT_EXTENSIONS.has(extension)) return [];
-  const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.Standard, text);
-  const comments: string[] = [];
-  for (;;) {
-    const token = scanner.scan();
-    if (token === ts.SyntaxKind.EndOfFileToken) break;
-    if (token === ts.SyntaxKind.SingleLineCommentTrivia
-      || token === ts.SyntaxKind.MultiLineCommentTrivia) {
-      comments.push(scanner.getTokenText());
-    }
+  const source = parseText(display, text);
+  const ranges = new Map<number, ts.CommentRange>();
+  const collect = (node: ts.Node): void => {
+    for (const range of ts.getLeadingCommentRanges(text, node.pos) ?? []) ranges.set(range.pos, range);
+    for (const range of ts.getTrailingCommentRanges(text, node.end) ?? []) ranges.set(range.pos, range);
+    ts.forEachChild(node, collect);
+  };
+  collect(source);
+  for (const range of ts.getLeadingCommentRanges(text, source.endOfFileToken.pos) ?? []) {
+    ranges.set(range.pos, range);
   }
-  return comments;
+  return [...ranges.values()]
+    .sort((a, b) => a.pos - b.pos)
+    .map((range) => text.slice(range.pos, range.end));
 }
 
 function mapFinding(
@@ -457,8 +543,8 @@ function hasUseClient(file: ts.SourceFile): boolean {
 function runtimeSpecifier(node: ts.ImportDeclaration): string | null {
   if (node.importClause?.isTypeOnly === true) return null;
   const bindings = node.importClause?.namedBindings;
-  if (bindings !== undefined && ts.isNamedImports(bindings) && bindings.elements.length > 0
-    && bindings.elements.every((element) => element.isTypeOnly)) {
+  if (node.importClause?.name === undefined && bindings !== undefined && ts.isNamedImports(bindings)
+    && bindings.elements.length > 0 && bindings.elements.every((element) => element.isTypeOnly)) {
     return null;
   }
   return ts.isStringLiteralLike(node.moduleSpecifier) ? node.moduleSpecifier.text : null;
@@ -1041,9 +1127,8 @@ async function inspectClientGraph(
   return [...findings.values()];
 }
 
-function maskFreeText(text: string): string {
-  return text
-    .replace(/-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*/g, "[redacted]")
+function maskFreeText(text: string, values: readonly string[]): string {
+  return maskSecrets(text, values)
     .replace(/sk_live_[A-Za-z0-9]+/g, "[redacted]")
     .replace(/sk-proj-[A-Za-z0-9_-]+/g, "[redacted]")
     .replace(/AKIA[0-9A-Z]+/g, "[redacted]")
@@ -1054,11 +1139,58 @@ function maskFreeText(text: string): string {
     .replace(/(\b(?:api[_-]?key|secret|token|password|passwd)\s*[:=]\s*)[^\s,;]+/gi, "$1[redacted]");
 }
 
-async function applyExceptions(
+async function loadMaskValues(
+  root: string,
+  state: ScanState,
+  coverage: CoverageCheck[],
+): Promise<MaskContext> {
+  let entries;
+  try {
+    entries = (await readdir(root, { withFileTypes: true })).filter(isEnvEntry);
+  } catch {
+    failure(coverage, undefined, "masking-context");
+    return { values: [], complete: false };
+  }
+  const values = new Set<string>();
+  let complete = true;
+  for (const entry of entries) {
+    if (state.budgetHit || state.countHit) {
+      complete = false;
+      break;
+    }
+    const real = await realpath(join(root, entry.name)).catch(() => null);
+    if (real === null) {
+      failure(coverage, entry.name, "read");
+      complete = false;
+      continue;
+    }
+    if (!inside(root, real)) {
+      unsupported(coverage, "symlink-escape", entry.name);
+      complete = false;
+      continue;
+    }
+    if (!reserve(real, state, coverage)) {
+      complete = false;
+      continue;
+    }
+    const before = coverage.length;
+    const text = await readBounded(real, entry.name, state, coverage);
+    if (text === null) {
+      if (coverage.length === before) failure(coverage, entry.name, "read");
+      complete = false;
+      continue;
+    }
+    for (const value of envSecretValues(text)) values.add(value);
+  }
+  return { values: [...values], complete };
+}
+
+function applyExceptions(
   findings: ExtraFinding[],
   config: Config,
   coverage: CoverageCheck[],
-): Promise<ExtraFinding[]> {
+  mask: MaskContext,
+): ExtraFinding[] {
   if (config.artifactExceptions.length === 0) return findings;
   const exceptions = new Map(
     config.artifactExceptions.map((entry) => [`${entry.ruleId}:${entry.file}`, entry]),
@@ -1069,7 +1201,7 @@ async function applyExceptions(
       ? exceptions.get(`${finding.rule}:${finding.file}`)
       : undefined;
     if (exception) {
-      const reason = maskFreeText(exception.reason);
+      const reason = mask.complete ? maskFreeText(exception.reason, mask.values) : "unconfirmed";
       coverage.push({
         rule: "artifacts",
         path: finding.file,
@@ -1093,6 +1225,7 @@ async function inspect(
   const state: ScanState = {
     files: 0, bytes: 0, countHit: false, budgetHit: false, reserved: new Set(),
   };
+  const mask = await loadMaskValues(root, state, coverage);
   const scanStatic = await detectSupport(root, state, coverage, findings);
   await checkBuildId(root, state, coverage);
 
@@ -1136,7 +1269,15 @@ async function inspect(
   const sorted = [...findings.values()]
     .sort((a, b) => rank(a.severity) - rank(b.severity) ||
       (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  return applyExceptions(sorted, config, coverage);
+  const masked = sorted.map((finding) => {
+    const target = finding.messageVars?.target;
+    if (typeof target !== "string") return finding;
+    return {
+      ...finding,
+      messageVars: { ...finding.messageVars, target: maskFreeText(target, mask.values) },
+    };
+  });
+  return applyExceptions(masked, config, coverage, mask);
 }
 
 export async function runArtifactCheck(options: ArtifactRunOptions): Promise<RunResult> {
