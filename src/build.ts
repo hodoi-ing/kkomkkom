@@ -1,6 +1,8 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
+import { nextEnv, resolveNextCli } from "./next.js";
+import { terminateGroup } from "./process.js";
 import type { PageWeight } from "./types.js";
 
 const BOX = /[┌├└│─┐┘┴┬╭╮╰╯]/g;
@@ -106,39 +108,126 @@ export async function measurePages(root: string): Promise<Record<string, PageWei
   return pages;
 }
 
+export type BuildFailure = "missing" | "spawn" | "compile" | "timeout" | "internal";
+
 export interface BuildResult {
   ok: boolean;
+  failure?: BuildFailure;
   output: string;
   pages: Record<string, PageWeight>;
 }
 
-export function runBuild(root: string): Promise<BuildResult> {
-  return new Promise((resolve) => {
-    const child = spawn("npx", ["next", "build"], {
+export interface BuildOptions {
+  timeoutMs?: number;
+  stopTimeoutMs?: number;
+  /** Test seam; defaults to node:child_process.spawn. */
+  spawnImpl?: typeof spawn;
+}
+
+export function runBuild(root: string, options: BuildOptions = {}): Promise<BuildResult> {
+  const cli = resolveNextCli(root);
+  if (!cli) {
+    return Promise.resolve({
+      ok: false,
+      failure: "missing",
+      output: "Next.js is not installed in this project.",
+      pages: {},
+    });
+  }
+
+  const spawnImpl = options.spawnImpl ?? spawn;
+  let child: ChildProcess;
+  try {
+    child = spawnImpl(process.execPath, [cli, "build"], {
       cwd: root,
       stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1" },
+      detached: process.platform !== "win32",
+      env: nextEnv(),
+      windowsHide: true,
     });
+  } catch {
+    return Promise.resolve({
+      ok: false,
+      failure: "spawn",
+      output: "The Next.js build process could not be started.",
+      pages: {},
+    });
+  }
 
+  return new Promise((resolve) => {
     let output = "";
+    let settled = false;
+    let timedOut = false;
+    let timer: NodeJS.Timeout | undefined;
+
+    const finish = (result: BuildResult) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve(result);
+    };
+
+    const cleanup = () =>
+      terminateGroup(child.pid, options.stopTimeoutMs ?? 1000, 1000);
+
+    const handleClose = async (code: number | null) => {
+      if (settled || timedOut) return;
+      try {
+        const cleaned = await cleanup();
+        if (!cleaned) {
+          finish({
+            ok: false,
+            failure: "internal",
+            output: output + "\nThe Next.js build process group could not be stopped.",
+            pages: {},
+          });
+          return;
+        }
+        if (code !== 0) {
+          finish({ ok: false, failure: "compile", output, pages: {} });
+          return;
+        }
+        try {
+          let pages = await measurePages(root);
+          if (Object.keys(pages).length === 0) pages = parseFirstLoadJs(output);
+          finish({ ok: true, output, pages });
+        } catch {
+          finish({ ok: false, failure: "internal", output, pages: {} });
+        }
+      } catch {
+        finish({ ok: false, failure: "internal", output, pages: {} });
+      }
+    };
+
     child.stdout?.on("data", (chunk) => (output += chunk));
     child.stderr?.on("data", (chunk) => (output += chunk));
 
-    const timer = setTimeout(() => child.kill("SIGTERM"), 300_000);
+    timer = setTimeout(() => {
+      timedOut = true;
+      void (async () => {
+        let cleaned = false;
+        try {
+          cleaned = await cleanup();
+        } catch {
+          // reported below as an incomplete cleanup
+        }
+        finish({
+          ok: false,
+          failure: "timeout",
+          output: output + (cleaned
+            ? "\nbuild timed out"
+            : "\nbuild timed out; process cleanup incomplete"),
+          pages: {},
+        });
+      })();
+    }, options.timeoutMs ?? 300_000);
 
-    child.on("close", async (code) => {
-      clearTimeout(timer);
-      let pages: Record<string, PageWeight> = {};
-      if (code === 0) {
-        pages = await measurePages(root);
-        if (Object.keys(pages).length === 0) pages = parseFirstLoadJs(output);
-      }
-      resolve({ ok: code === 0, output, pages });
+    child.on("close", (code) => {
+      void handleClose(code);
     });
 
     child.on("error", (error) => {
-      clearTimeout(timer);
-      resolve({ ok: false, output: output + String(error), pages: {} });
+      finish({ ok: false, failure: "spawn", output: output + String(error), pages: {} });
     });
   });
 }

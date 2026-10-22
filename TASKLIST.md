@@ -5,7 +5,12 @@
 사용자 승인: 탭1은 설계·독립 검수·통합, Herdr 탭 `2`는 구현·테스트를 담당한다. 추가 사용자 승인 없이 검수된 변경을 GitHub와 이 로컬 소스에 동일하게 반영한다. 공개 전환·배포는 금지한다. 아래 작업이 과거 `다음` 목록보다 우선한다.
 
 - [x] #1: 설계·회귀 검증 계획 확정 — 2026-10-22 specs/plans 작성, 이슈별 조건·호환성·안전 경계·검증 매핑 자체 검토.
-- [ ] #1: 서버 바인딩·프로세스 실패/정리 및 입력 검증 수정.
+- [ ] #1: 서버 바인딩·프로세스 실패/정리 및 입력 검증 수정 — **작업중 (2026-10-22, 탭2 컨텍스트 77%로 중단, 총괄 검수 전 완료 표시 금지)**.
+  - 구현: `src/next.ts` Next CLI 직접 실행(서버·빌드 공유), `src/process.ts` 프로세스 그룹 bounded terminate(exit/close 분리, 부모 선종료 후 후손 정리, SIGINT 130, 최종 정리 실패 `errDevStop`), `src/server.ts`, `src/build.ts` `BuildFailure` 분류+`measurePages` reject 처리, `src/config.ts` ENOENT만 default/EACCES·EISDIR `errConfigRead`+`routePolicies` 검증, `src/mcp.ts` frame/tool arg 방어, `src/run.ts` compile=exit1 vs runner/tool=`errBuildRun`(exit2), `src/i18n.ts` 키 추가.
+  - 검증: `npm run build` 통과. `node --test test/server.test.js test/config.test.js test/mcp.test.js test/build.test.js test/i18n.test.js test/run.test.js` → **43 pass / 0 fail** (2026-10-22).
+  - 남은 총괄 검수: (1) Windows `taskkill` 실제 미검증(에러 이벤트만 처리), (2) `terminateGroup` 최종 wait 실패 시 서버 `errDevStop`/빌드 `internal`·timeout cleanup incomplete 표시 의도 확인, (3) build timeout·cleanup 및 runner/도구실패 exit2 매핑, (4) config EACCES/EISDIR sanitized message, (5) `routePolicies`는 경계 검증만이며 Task2 AST 소비는 미착수.
+  - 다음 세션 시작 명령: `cd /home/dev/workspace/next-preflight && git status --short && npm run build && node --test test/server.test.js test/config.test.js test/mcp.test.js test/build.test.js test/i18n.test.js test/run.test.js`
+  - 참고: 작업 트리의 untracked `docs/superpowers/specs/2026-10-22-issue2-artifact-protection-design.md`는 총괄 작업물로 보고 Task1 커밋에서 제외.
 - [ ] #1: 메서드별 인증 분석·명시적 접근 정책·관찰/판정 분리.
 - [ ] #1: coverage·strict·CLI/JSON/MCP 공통 결과 및 미완료 표시.
 - [ ] #1: 크기 측정·기준선 명시적/원자적 갱신·실제 패키지/빌드/MCP 통합 검증.

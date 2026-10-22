@@ -29,11 +29,16 @@ export interface Baseline {
   pages: Record<string, PageWeight>;
 }
 
+export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+export type RoutePolicy = "public" | "protected";
+export type RoutePolicies = Record<string, Partial<Record<HttpMethod, RoutePolicy>>>;
+
 export interface Config {
   ignoreRoutes: string[];
   sampleParams: Record<string, Record<string, string>>;
   port: number;
   thresholds: { jsPercent: number; jsBytes: number };
+  routePolicies: RoutePolicies;
 }
 
 export type RouteState = "new" | "fixed" | "same" | "changed";

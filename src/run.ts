@@ -56,8 +56,13 @@ export async function runCheck(options: RunOptions): Promise<RunResult> {
     const build = await runBuild(options.root);
     pages = build.pages;
     if (!build.ok) {
-      buildFailed = true;
-      buildTail = await redactSecrets(options.root, build.output).catch(() => "");
+      if (build.failure === undefined || build.failure === "compile") {
+        buildFailed = true;
+        buildTail = await redactSecrets(options.root, build.output).catch(() => "");
+      } else {
+        const buildTail = await redactSecrets(options.root, build.output).catch(() => "");
+        throw new KkomkkomError("errBuildRun", { reason: build.failure, log: buildTail });
+      }
     }
   }
 
