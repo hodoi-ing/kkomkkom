@@ -1,0 +1,92 @@
+{
+  "date": "2026-10-22T14:49:36.162Z",
+  "node": "v26.10.0",
+  "os": "6.18.33.2-microsoft-standard-WSL2",
+  "arch": "x64",
+  "load": [
+    0.31,
+    0.58,
+    0.57
+  ],
+  "memory": 6212427776,
+  "rootCommit": "ffd093af5c31605ec9aa88cc0bc86cc4a8b5a9d4",
+  "modes": {
+    "pack": {
+      "command": [
+        "npm",
+        "pack",
+        "--ignore-scripts",
+        "--json",
+        "--pack-destination",
+        "/tmp/opencode/kk-task3-measure.YNCOXW/pack"
+      ],
+      "cwd": "/home/dev/workspace/next-preflight",
+      "exit": 0
+    },
+    "install": {
+      "command": [
+        "npm",
+        "install",
+        "--offline",
+        "--ignore-scripts",
+        "--omit=dev",
+        "--no-audit",
+        "--no-fund",
+        "/tmp/opencode/kk-task3-measure.YNCOXW/pack/kkomkkom-0.1.0.tgz"
+      ],
+      "cwd": "/tmp/opencode/kk-task3-measure.YNCOXW/consumer",
+      "exit": 0
+    },
+    "static": {
+      "command": [
+        "/home/dev/.nvm/versions/node/v26.10.0/bin/node",
+        "/home/dev/workspace/next-preflight/dist/cli.js",
+        "--artifacts",
+        "--json"
+      ],
+      "cwd": "/tmp/opencode/kk-task3-measure.YNCOXW/fixture",
+      "exit": 0,
+      "coverage": "complete",
+      "findings": 0,
+      "httpMatches": 0
+    },
+    "http": {
+      "command": [
+        "/home/dev/.nvm/versions/node/v26.10.0/bin/node",
+        "/home/dev/workspace/next-preflight/dist/cli.js",
+        "--artifacts",
+        "--production-url",
+        "http://127.0.0.1:37845",
+        "--json"
+      ],
+      "cwd": "/tmp/opencode/kk-task3-measure.YNCOXW/fixture",
+      "exit": 0,
+      "coverage": "complete",
+      "findings": 10,
+      "httpMatches": 9
+    },
+    "fresh": {
+      "command": [
+        "/home/dev/.nvm/versions/node/v26.10.0/bin/node",
+        "/home/dev/workspace/next-preflight/dist/cli.js",
+        "--artifacts",
+        "--fresh",
+        "--json"
+      ],
+      "cwd": "/tmp/opencode/kk-task3-measure.YNCOXW/fixture",
+      "exit": 0,
+      "coverage": "complete",
+      "findings": 0,
+      "httpMatches": 0
+    }
+  },
+  "package": {
+    "size": 76663,
+    "unpackedSize": 267164,
+    "entries": 51,
+    "filename": "kkomkkom-0.1.0.tgz"
+  },
+  "installedBytes": 23893353,
+  "typescriptBytes": 23625066,
+  "baselinePreserved": true
+}

@@ -106,3 +106,25 @@ Not claimed as supported or verified:
 ## What the numbers mean
 
 The current rework adds about 15.5 KB compressed and 69.3 KB unpacked versus the pre-feature package, and about 69 KB to a production install (+0.29% of the installed tree). Install wall/RSS changes are within warm-cache noise. Static inspection costs about 0.83 s and 198 MB RSS on this fixture after TypeScript AST parsing and source tracing, still cheaper than starting a dev server (2.18 s/481 MB) or running a build (4.70–6.46 s/938–988 MB), but it inspects a smaller scope. The earlier 0.21 s/122 MB figure belongs to the prototype and is not current evidence. These observations do not promise a universal 1-second or 0-MB budget, and source KB is not converted to install MB.
+
+## Task3 latest observation — production HTTP and packed consumer
+
+The sections above remain historical measurements, not results to rerun. The latest measurement used security-fix commit `ffd093a` plus the Task3 README/integration WIP, Node v26.10.0/npm 12.1.0 on the same Linux/WSL host and `fixtures/mini-app` Next 16.4.2. A new unique `/tmp/opencode/kk-task3-measure.YNCOXW/fixture` copied the same fixture, dependencies and existing `.next` cache; no repository fixture was modified or installed into. The original measurement driver is preserved as inert text at [`measurement-logs/2026-10-22-task3-driver-source.txt`](measurement-logs/2026-10-22-task3-driver-source.txt). Reruns must use a new unique directory, not overwrite this run.
+
+Raw provenance/commands/results: [`measurement-logs/2026-10-22-task3-observations.json`](measurement-logs/2026-10-22-task3-observations.json). Each mode also has the original `/usr/bin/time -v` output in `measurement-logs/2026-10-22-task3-{pack,install,static,http,fresh}.time`; the driver summary is `2026-10-22-task3-driver-summary.txt`.
+
+| Mode | Actual command/policy | Wall | Max RSS (KB) | Exit / observation |
+|---|---|---:|---:|---|
+| Pack | `npm pack --ignore-scripts --json --pack-destination <unique pack dir>` | 0.37 s | 110,800 | 0; **76,663 B compressed, 267,164 B unpacked, 51 entries** |
+| Consumer install | local tarball, `--offline --ignore-scripts --omit=dev --no-audit --no-fund` | 0.59 s | 194,596 | 0; **23,893,353 B node_modules**, TypeScript 23,625,066 B |
+| Static | `node <CLI> --artifacts --json` | 0.48 s | 187,824 | 0; complete, zero findings |
+| Explicit production HTTP | `node <CLI> --artifacts --production-url http://127.0.0.1:<port> --json` | 0.54 s | 206,148 | 0; complete, nine exact file matches plus one identity-uncertainty info observation |
+| Fresh | `node <CLI> --artifacts --fresh --json` | 4.34 s | 936,452 | 0; complete, zero findings, real local Next build |
+
+The production server was explicitly started by the measurement harness before the HTTP measurement and stopped before fresh-build measurement. Startup/idle server time and its RSS are not included in the HTTP CLI process observation. `/usr/bin/time` reports the CLI/reaped-child maximum, not a summed process-tree RSS; fresh build grandchildren are not fully accounted for. All five commands and the driver exited 0; baseline bytes stayed identical.
+
+Compared with the recorded Task2 rework `e5e6aa3`, package size is +8,186 B compressed and +26,855 B unpacked; installed tree is +26,885 B, with the same TypeScript bytes and no new dependency. Compared with the reviewed pre-artifact issue #1 baseline, this is +23,713 B compressed and +96,153 B installed. Historical wall/RSS differences are not a controlled speedup claim: these are single warm-cache samples with different temporary roots and system load, not cold/repeated A/B trials. Static 0.48 s and HTTP 0.54 s do not promise a universal budget. The observation JSON records load/host memory; `/tmp` approached capacity after the retained measurements, and a later scoped fixture copy hit ENOSPC before any test ran. Only this run's generated dependency copies were removed to recover space; original timing/provenance/build/output logs remain.
+
+Network/install limits: npm `--offline --ignore-scripts` used only the local tarball and existing cache; no registry fallback or install hook was allowed. Packet/download bytes were not instrumented. HTTP verification addressed only numeric loopback, with no cookies/auth/redirects. Next build ran with `NEXT_TELEMETRY_DISABLED=1`; arbitrary user-build network activity, cold cache, CDN/proxy behavior, Windows/macOS and agent-specific client installation remain unmeasured/unverified.
+
+The local-read contract has advanced since the historical Task1 I/O table: `kkomkkom.config.json` now conservatively reserves its maximum 1 MiB and one entry from 32 MiB/2000, even when absent/small. The remaining reads share 31 MiB/1999. HTTP separately admits at most 32 MiB payload, 1 MiB/body, 50 URLs, five workers, 5 seconds/request through body completion and 60 seconds overall. This does not bound transport/OS buffering. Normal static mode still has no HTTP/build/server/install; explicit production HTTP confirms selected file bytes only, not project identity or Internet deployment.
