@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="443" viewBox="0 0 1200 443" role="img" aria-labelledby="title desc">
+<title id="title">꼼꼼 보고서 미리보기 — 예시 데이터</title>
+<desc id="desc">꼼꼼 — 커밋 전 점검
+
+⛔ 배포를 멈추세요 — 문제 1개가 있습니다.
+
+🔎 프로젝트 점검 2개
+  🔴 .env이(가) git에 올라가 있습니다. 파일을 지우고 키를 교체하세요.
+  🟡 /api/orders는 인증 확인 없이 쓰기 요청을 받습니다. 미들웨어나 auth()를 확인하세요. 실제 앱 검사 녹화가 아니라 예시 데이터를 현재 보고서 렌더러로 출력한 화면입니다.</desc>
+<rect x="1" y="1" width="1198" height="441" rx="18" fill="#101821" stroke="#344456"/>
+<path d="M19 1H1181Q1199 1 1199 19V57H1V19Q1 1 19 1Z" fill="#1c2835"/>
+<circle cx="28" cy="29" r="6" fill="#ff747b"/><circle cx="50" cy="29" r="6" fill="#f4c570"/><circle cx="72" cy="29" r="6" fill="#7ccaa0"/>
+<g font-family="'Noto Sans KR','DejaVu Sans',sans-serif" font-size="21">
+<text x="600" y="37" text-anchor="middle" fill="#b9c7d7" font-size="16">kkomkkom · CLI report preview</text>
+<text x="38" y="111" fill="#91d9b1">$ kkomkkom --fast --lang ko</text>
+<text x="38" y="166" fill="#dce5ef" xml:space="preserve">꼼꼼 — 커밋 전 점검</text>
+<text x="38" y="200" fill="#dce5ef" xml:space="preserve"></text>
+<text x="38" y="234" fill="#ff8b91" xml:space="preserve">⛔ 배포를 멈추세요 — 문제 1개가 있습니다.</text>
+<text x="38" y="268" fill="#dce5ef" xml:space="preserve"></text>
+<text x="38" y="302" fill="#91b7ff" xml:space="preserve">🔎 프로젝트 점검 2개</text>
+<text x="38" y="336" fill="#ff8b91" xml:space="preserve">  🔴 .env이(가) git에 올라가 있습니다. 파일을 지우고 키를 교체하세요.</text>
+<text x="38" y="370" fill="#f7cd78" xml:space="preserve">  🟡 /api/orders는 인증 확인 없이 쓰기 요청을 받습니다. 미들웨어나 auth()를 확인하세요.</text>
+<text x="38" y="418" fill="#8f9eaf" font-size="16">예시 데이터 · 실제 검사 결과는 프로젝트와 설정에 따라 달라집니다.</text>
+</g></svg>
