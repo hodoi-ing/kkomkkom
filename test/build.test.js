@@ -46,6 +46,18 @@ test("returns empty map for unreadable output", () => {
   assert.deepEqual(parseFirstLoadJs("some unrelated log"), {});
 });
 
+test("parses decimal MB sizes case-insensitively", () => {
+  const output = `
+Route (app)                                 Size  First Load JS
+┌ ○ /big                                  1.2 MB         2.5 MB
+└ ○ /mixed                                1.2 MB          3 Mb
+`;
+  const pages = parseFirstLoadJs(output);
+  assert.equal(pages["/big"].firstLoadJs, 2_500_000);
+  assert.equal(pages["/mixed"].firstLoadJs, 3_000_000);
+  assert.equal(pages["/big"].method, "next-output");
+});
+
 test("measurePages sums shared and route-specific chunks", async () => {
   const root = await mkdtemp(join(tmpdir(), "kkomkkom-build-"));
   await mkdir(join(root, ".next", "static", "chunks"), { recursive: true });
@@ -84,6 +96,119 @@ test("measurePages finds chunks written without the /_next prefix", async () => 
   const pages = await measurePages(root);
   assert.equal(pages["/checkout"].firstLoadJs, 1500);
   await rm(root, { recursive: true, force: true });
+});
+
+test("a real zero-byte chunk is a measured zero with method metadata", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "kkomkkom-build-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, ".next", "static", "chunks"), { recursive: true });
+  await writeFile(join(root, ".next", "static", "chunks", "zero.js"), "");
+  await writeFile(
+    join(root, ".next", "build-manifest.json"),
+    JSON.stringify({ rootMainFiles: ["static/chunks/zero.js"], polyfillFiles: [], pages: { "/zero": ["static/chunks/zero.js"] } }),
+  );
+
+  const pages = await measurePages(root);
+  assert.equal(pages["/zero"].firstLoadJs, 0);
+  assert.equal(pages["/zero"].method, "manifest-file");
+});
+
+test("a missing chunk is a measurement error, not zero", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "kkomkkom-build-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, ".next", "static", "chunks"), { recursive: true });
+  await writeFile(
+    join(root, ".next", "build-manifest.json"),
+    JSON.stringify({ rootMainFiles: ["static/chunks/missing.js"], polyfillFiles: [] }),
+  );
+
+  await assert.rejects(
+    () => measurePages(root),
+    (error) => {
+      assert.equal(error.name, "MeasurementError");
+      assert.equal(error.reason, "missing");
+      return true;
+    },
+  );
+});
+
+test("a chunk path that is a directory is a measurement error, not its size", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "kkomkkom-build-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, ".next", "static", "chunks", "shared.js"), { recursive: true });
+  await writeFile(
+    join(root, ".next", "build-manifest.json"),
+    JSON.stringify({ rootMainFiles: ["static/chunks/shared.js"], polyfillFiles: [] }),
+  );
+
+  await assert.rejects(
+    () => measurePages(root),
+    (error) => {
+      assert.equal(error.name, "MeasurementError");
+      assert.equal(error.reason, "directory");
+      return true;
+    },
+  );
+});
+
+test("an unreadable chunk is a measurement error, not zero", { skip: process.getuid?.() === 0 || process.platform === "win32" }, async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "kkomkkom-build-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, ".next", "static", "chunks"), { recursive: true });
+  await writeFile(join(root, ".next", "static", "chunks", "blocked.js"), "x".repeat(100));
+  await chmod(join(root, ".next", "static", "chunks", "blocked.js"), 0o000);
+  await writeFile(
+    join(root, ".next", "build-manifest.json"),
+    JSON.stringify({ rootMainFiles: ["static/chunks/blocked.js"], polyfillFiles: [] }),
+  );
+
+  await assert.rejects(
+    () => measurePages(root),
+    (error) => {
+      assert.equal(error.name, "MeasurementError");
+      assert.equal(error.reason, "read");
+      return true;
+    },
+  );
+});
+
+test("duplicate chunk references are counted once even with mixed prefixes", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "kkomkkom-build-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, ".next", "static", "chunks"), { recursive: true });
+  await writeFile(join(root, ".next", "static", "chunks", "shared.js"), "x".repeat(1000));
+  await writeFile(join(root, ".next", "static", "chunks", "route.js"), "x".repeat(500));
+  await writeFile(
+    join(root, ".next", "build-manifest.json"),
+    JSON.stringify({
+      rootMainFiles: ["/_next/static/chunks/shared.js", "static/chunks/shared.js"],
+      polyfillFiles: [],
+      pages: {
+        "/dup": [
+          "/_next/static/chunks/shared.js",
+          "/_next/static/chunks/route.js",
+          "static/chunks/route.js",
+        ],
+      },
+    }),
+  );
+
+  const pages = await measurePages(root);
+  assert.equal(pages["/dup"].firstLoadJs, 1500);
+});
+
+test("runBuild reports a missing chunk as a measurement failure", async (t) => {
+  const root = await fakeNextProject(t, 'console.log("fake build ok");');
+  await mkdir(join(root, ".next", "static", "chunks"), { recursive: true });
+  await writeFile(
+    join(root, ".next", "build-manifest.json"),
+    JSON.stringify({ rootMainFiles: ["static/chunks/missing.js"], polyfillFiles: [] }),
+  );
+
+  const result = await runBuild(root);
+  assert.equal(result.ok, false);
+  assert.equal(result.failure, "measure");
+  assert.deepEqual(result.pages, {});
 });
 
 async function waitForExit(child, timeout = 15000) {

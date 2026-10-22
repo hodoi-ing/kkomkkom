@@ -20,7 +20,7 @@ Usage
   kkomkkom --json             machine-readable JSON
   kkomkkom --explain          explain problems with a local AI CLI
   kkomkkom --explain-with claude
-  kkomkkom --update           save a --fast result as the baseline
+  kkomkkom --update           save this completed result as the baseline
   kkomkkom --port 3100        dev server port
   kkomkkom --reuse            use a Next server already running on the port
   kkomkkom --lang ko          report language: en, ko, ja, zh, es
@@ -39,7 +39,7 @@ Config
   kkomkkom --fast             빌드만 생략 (나머지 검사는 모두 실행)
   kkomkkom --json             기계가 읽는 JSON 출력
   kkomkkom --explain          문제 원인을 로컬 AI CLI로 설명
-  kkomkkom --update           --fast 결과를 기준선에 반영
+  kkomkkom --update           완료된 검사 결과를 기준선에 저장
   kkomkkom --port 3100        개발 서버 포트 지정
   kkomkkom --reuse            이미 실행 중인 Next 서버 재사용 (프로젝트 확인 안 함)
   kkomkkom --lang ko          보고서 언어: en, ko, ja, zh, es

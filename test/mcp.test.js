@@ -205,6 +205,30 @@ async function fakeProject() {
   return root;
 }
 
+test("a corrupt baseline is a tool error and the MCP stream survives", async () => {
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  const server = startServer();
+  const root = await fakeProject();
+  await mkdir(join(root, ".kkomkkom"), { recursive: true });
+  await writeFile(join(root, ".kkomkkom", "baseline.json"), "{not json");
+  try {
+    server.send({
+      jsonrpc: "2.0", id: 60, method: "tools/call",
+      params: { name: "kkomkkom", arguments: { projectPath: root, fast: true } },
+    });
+    const response = await server.next(20000);
+    assert.equal(response.result.isError, true);
+    assert.match(response.result.content[0].text, /baseline/i);
+    assert.ok(!response.result.content[0].text.includes("{not json"));
+
+    server.send({ jsonrpc: "2.0", id: 61, method: "ping" });
+    assert.equal((await server.next()).id, 61);
+  } finally {
+    server.child.kill();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("tools/call returns structured coverage and concurrent calls stay ordered", async () => {
   const server = startServer();
   const root = await fakeProject();

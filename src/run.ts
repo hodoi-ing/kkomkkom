@@ -41,15 +41,15 @@ export function summarizeCoverage(checks: CoverageCheck[]): CoverageSummary {
 
   // Secrets and build are not route coverage; route checks decide empty.
   // Ignored and skipped are deliberate scope choices (ignoreRoutes, --fast,
-  // a statically GET-less route). Missing evidence is failed/unsupported.
+  // a statically GET-less route). Missing evidence is failed/unsupported and
+  // counts from every rule once the route scope itself is meaningful.
   const routeChecks = checks.filter((check) => check.rule !== "secrets" && check.rule !== "build");
-  const completed = routeChecks.filter(
-    (check) => check.status === "checked" || check.status === "static-only",
+  const attempted = routeChecks.filter(
+    (check) => check.status !== "ignored" && check.status !== "skipped",
   ).length;
-  const problems = routeChecks.filter(
+  const problems = checks.filter(
     (check) => check.status === "failed" || check.status === "unsupported",
   ).length;
-  const attempted = completed + problems;
 
   const status: CoverageSummary["status"] = attempted === 0
     ? "empty"
@@ -62,6 +62,8 @@ export function summarizeCoverage(checks: CoverageCheck[]): CoverageSummary {
 export async function runCheck(options: RunOptions): Promise<RunResult> {
   const config = await loadConfig(options.root);
   const port = options.port ?? config.port;
+  // A damaged baseline is a tool error before any server or build side effect.
+  const previous = await loadBaseline(options.root);
 
   const routes = await discoverRoutes(options.root);
   if (routes.length === 0) {
@@ -86,6 +88,7 @@ export async function runCheck(options: RunOptions): Promise<RunResult> {
 
   let pages: Record<string, { firstLoadJs: number }> = {};
   let buildFailed = false;
+  let measurementFailed = false;
   let buildTail = "";
   if (options.fast) {
     coverage.push({ rule: "build", status: "skipped", reason: "fast" });
@@ -93,7 +96,10 @@ export async function runCheck(options: RunOptions): Promise<RunResult> {
     const build = await runBuild(options.root);
     pages = build.pages;
     if (!build.ok) {
-      if (build.failure === undefined || build.failure === "compile") {
+      if (build.failure === "measure") {
+        measurementFailed = true;
+        coverage.push({ rule: "build", status: "failed", reason: "measure" });
+      } else if (build.failure === undefined || build.failure === "compile") {
         buildFailed = true;
         coverage.push({ rule: "build", status: "failed", reason: "compile" });
         buildTail = await redactSecrets(options.root, build.output).catch(() => "");
@@ -106,17 +112,23 @@ export async function runCheck(options: RunOptions): Promise<RunResult> {
     }
   }
 
-  const previous = await loadBaseline(options.root);
   const effectivePages = options.fast && previous ? previous.pages : pages;
   const diff = diffBaseline(previous, findings, effectivePages, config.thresholds);
+  const summary = summarizeCoverage(coverage);
 
-  if (!options.fast && !buildFailed) {
-    await saveBaseline(options.root, buildBaseline(findings, pages));
-  } else if (options.fast && options.update) {
-    await saveBaseline(options.root, buildBaseline(findings, previous?.pages ?? {}));
+  if (options.update === true) {
+    const refusal = buildFailed
+      ? "build"
+      : measurementFailed
+        ? "measurement"
+        : summary.status === "complete"
+          ? null
+          : summary.status;
+    if (refusal) throw new KkomkkomError("errUpdateRefused", { reason: refusal });
+    const savedPages = options.fast ? previous?.pages ?? {} : pages;
+    await saveBaseline(options.root, buildBaseline(findings, savedPages));
   }
 
-  const summary = summarizeCoverage(coverage);
   const exposed = diff.routes.filter((route) => route.to === "exposed").length;
   const criticalExtras = extras.filter((extra) => extra.severity === "critical").length;
   const warnings =

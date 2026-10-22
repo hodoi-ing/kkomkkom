@@ -6,19 +6,25 @@
 
 - [x] #1: 설계·회귀 검증 계획 확정 — 2026-10-22 specs/plans 작성, 이슈별 조건·호환성·안전 경계·검증 매핑 자체 검토.
 - [x] #1: 서버 바인딩·프로세스 실패/정리 및 입력 검증 수정 — 총괄 독립검수 승인(2026-10-22): 기존 focused 43/43 + de8a6b1 회귀 3/3 직접 통과, mini-app startDevServer→GET /api/health 200→stop→포트 closed(43821) 확인, 원격 main 반영. Windows `taskkill` 실경로와 build SIGINT의 Windows 동작은 미검증.
-- [ ] #1: 메서드별 인증 분석·명시적 접근 정책·관찰/판정 분리 — 총괄검수중(미승인). 총괄 지적 5개를 `e567b00`에서 실패 회귀→수정→통과로 반영. 총괄 PASS 전 [x] 금지.
+- [x] #1: 메서드별 인증 분석·명시적 접근 정책·관찰/판정 분리 — 총괄 PASS(2026-10-22): `e567b00` Task2/3 재작업을 독립 108/108 회귀+코드검토로 확인. 총괄 PASS 전 [x] 금지 규칙에 따라 이 항목만 [x].
   - 구현: `src/classify.ts` TypeScript AST 기반 `analyzeRoute`(App Router export/로컬 alias 메서드별 분석, pages/api `req.method` 비교·switch 분기, 공통가드/불명확 흐름·wrapper/re-export·미호출 nested auth는 `unknown`), `src/probe.ts` GET 전용 관찰과 판정 분리(명시 `protected`+2xx만 `exposed`(빈 204 포함), 명시 `public` 2xx는 `public`, 미지정 2xx는 `check`, 401/403·로그인 리다이렉트 유지), 샘플 파라미터 세그먼트 인코딩(`.`→`%2E`, `/?#` 인코딩)으로 경로/오리진 이탈 방지, `src/audit.ts` 쓰기 경고를 메서드별 `none` 근거로만 발생, `src/types.ts`/`src/baseline.ts` 결과에 method/status/policy/auth 보존, i18n `detailPolicyExposed`/`detailPublic` 5개 언어.
   - 검증: `npm run build` 통과. `node --test test/classify.test.js test/probe.test.js test/audit.test.js test/config.test.js test/i18n.test.js test/baseline.test.js test/report.test.js test/run.test.js` → **94 pass / 0 fail**. Task1 focused 43/43은 총괄 검수로 갈음(재실행 안 함).
   - 의존성/비용 실측(2026-10-22, Linux/WSL, warm npm cache·로컬 tarball): `typescript`를 dependencies로 이동(^5.9.3). pack 42KB, 소비자 설치 0.57s/max RSS 196MB, `node_modules` 23,644KB 중 typescript 23,388KB. cold network 설치·Windows/macOS는 미측정.
   - 총괄 지적 수정(2026-10-22, `76e68a9`): ① 공용 `params.ts`가 `.`/`..` 세그먼트·미치환·optional/catchall을 거부하고 API/페이지 모두 HTTP 요청 0으로 unknown 처리, ② `auditWrites`가 명시 public을 경고하지 않고 메서드별 `write-no-auth:<path>:<method>`·미확인 `write-unknown` 근거를 유지, ③ `discoverRoutes`가 router를 명시해 `app/api/pages/route.ts` 오판 회귀, ④ 미사용 `hasAuthSignal`/`classify`/자체 렉서 제거. 신규 회귀 포함 144 pass.
   - 총괄 지적 5개 수정(`e567b00`): ① ignored/skipped(의도적 fast·ignore·정적 GET 없는 405)와 failed/unsupported 구분, unknown 쓰기 분석은 명시 public만 static-only, ② 본문 전송 실패를 failed/unknown으로 보존하고 `readBody`가 남은 바이트만 보존·전송 오류 reject, ③ app/pages 쓰기 테스트 루프 분리, ④ 빈/undefined 샘플 값은 요청 0회로 거부, ⑤ pages 분기 미해석은 `unsupported` coverage+info finding.
-  - 남은 항목: 총괄 독립검수 PASS 대기. Task4 미착수. 원격 push 금지(Task2/3 보고 후 총괄 담당).
-  - 다음 세션: Task4 TDD부터. 기존 155개 전체를 기계적으로 재실행하지 말고 Task4 focused 실패를 먼저 기록. 시작 전 `git status --short`로 미커밋 보존 확인.
+  - 남은 항목: Task3 aggregate 보완·Task4 구현은 완료, 총괄 독립검수 PASS 대기. 원격 push 금지(총괄 담당).
+  - 다음 세션: Task5 통합/README/소비자 검증. 총괄 PASS 전 Task3/4 [x] 금지. 시작 전 `git status --short`로 미커밋 보존 확인.
   - 주의: issue2 문서 2개는 총괄이 `e9eea72`로 커밋했고 작업 브랜치 원격 snapshot도 총괄이 저장함. 건드리지 않음.
 - [ ] #1: coverage·strict·CLI/JSON/MCP 공통 결과 및 미완료 표시 — 총괄검수중(미승인). `e567b00`에서 의도적 제외와 필수 누락을 분리했고 재검증 완료, PASS 대기.
+  - 보완(2026-10-22, 탭2): `summarizeCoverage`가 build/secrets의 failed·unsupported도 모든 rule에서 `incomplete`에 반영하도록 수정. route 검사가 0개면 `empty` 유지, fast/ignore는 계속 비차단. Task4 측정 실패도 같은 coverage를 사용. run 신규 회귀 3개 포함 focused 66/66.
   - 구현: `CoverageCheck`(checked/static-only/ignored/skipped/failed/unsupported + reason)와 `CoverageSummary`(complete/incomplete/empty)를 run 엔진에서 계산. API GET·페이지 스모크·쓰기 정적분석·secrets·build를 모두 기록하고 fast/build 실패/405/전부 제외/유의미 0을 구분. 일반 실행은 incomplete여도 exit 0, strict는 incomplete/경고 시 1, 도구 오류는 기존 2. JSON `schemaVersion: 2`+`coverage`, MCP `structuredContent` 동일 결과. HTTP 본문은 공용 `readBody`가 바이트 상한에서 읽기를 중단·취소. MCP tools/call은 단일 큐로 직렬화.
   - 검증(`e567b00`): `npm test` exit 0, 155 pass / 0 fail (`/tmp/kk-task23-full.HY0Zct.log`). `npm run verify` exit 0, unit 155 + real app e2e 전체 통과 (`/tmp/kk-task23-verify.3psmGO.log`).
-- [ ] #1: 크기 측정·기준선 명시적/원자적 갱신·실제 패키지/빌드/MCP 통합 검증.
+- [ ] #1: 크기 측정·기준선 명시적/원자적 갱신·실제 패키지/빌드/MCP 통합 검증 — 탭2 구현 완료, 총괄 PASS 대기(미승인).
+  - 구현(`src/build.ts`): B/kB/MB를 1/1000/1000000으로 환산하고 단위 대소문자 허용. 0바이트 chunk는 실측 0으로 유지. 누락/읽기권한/디렉터리 chunk는 `MeasurementError(missing|read|directory)`로 실패하며 runBuild `measure` 실패→coverage `build:failed/measure`. 중복 chunk는 `/_next/` 접두어를 정규화해 한 번만 합산. Next 표 측정은 `method: next-output`, manifest 합산은 `method: manifest-file`로 기록.
+  - 구현(`src/baseline.ts`): ENOENT만 기준선 없음으로 처리하고 읽기 실패는 `errBaselineRead`, JSON/형상/verdict/비음수 유한 수치/method 오류는 원본 무변경 `errBaseline`. 다른 측정 방식끼리는 delta/heavy 비교를 하지 않고(`comparable:false`), method 없는 구 baseline은 호환 비교. `--update`만 `.baseline.lock` 배타 lock + 고유 임시파일+rename으로 원자 저장하며 fast update는 기존 page weight를 보존. 저장 전 형상 검증.
+  - 구현(`src/run.ts`): 일반/최초 검사는 기준선을 쓰지 않음. 명시 `--update`는 검사 완료(`complete`)일 때만 저장하고 필수 누락·빌드 실패·측정 실패·empty/incomplete는 `errUpdateRefused`로 원본 보존. 노출/경고 finding은 저장을 막지 않으며 exitCode 1은 유지.
+  - 검증(2026-10-22, 탭2): 실패 회귀를 먼저 실행해 exit 1(신규 23개 실패, `/tmp/kk-task4.WVz9k0/red2.log`). 구현 후 `npm run build` exit 0, `node --test test/build.test.js test/baseline.test.js test/run.test.js test/mcp.test.js` 66/66 pass exit 0(`/tmp/kk-task4.WVz9k0/green2.log`), `node --test test/i18n.test.js test/report.test.js` 15/15 pass exit 0(`/tmp/kk-task4.WVz9k0/connected.log`), 최종 연결 6파일 `build/baseline/run/mcp/i18n/report` 81/81 pass exit 0(`/tmp/kk-task4.WVz9k0/final.log`). CLI `--json` 손상 baseline exit 2, MCP tools/call 오류 응답·스트림 생존 확인.
+  - 제한: Windows/macOS, 실제 Next production build, npm pack 소비자 설치는 미검증(Task5). lock stale 임계값은 30초. MCP에는 update 인자가 없어 원자 갱신 검증은 CLI/엔진 경로에서만 수행.
 - [ ] #1: 총괄 독립 검수·필요한 재작업·GitHub 반영 및 로컬 동기화.
 - [ ] #2 단계 0: 설치 크기·시간·메모리·네트워크 실측 기준선 및 계약 정리.
 - [ ] #2 단계 1: Next production 배포물 점검 설계·구현·검수 (소스맵/배포 파일/클라이언트 비밀정보/지원 범위).

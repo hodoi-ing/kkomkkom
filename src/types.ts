@@ -25,8 +25,11 @@ export interface Finding {
   auth?: AuthState;
 }
 
+export type MeasurementMethod = "manifest-file" | "next-output";
+
 export interface PageWeight {
   firstLoadJs: number;
+  method?: MeasurementMethod;
 }
 
 export interface Baseline {
@@ -70,6 +73,9 @@ export interface WeightChange {
   deltaBytes: number;
   deltaPercent: number;
   heavy: boolean;
+  fromMethod?: MeasurementMethod;
+  toMethod?: MeasurementMethod;
+  comparable: boolean;
 }
 
 export interface Diff {
