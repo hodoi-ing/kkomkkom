@@ -1,0 +1,92 @@
+npm notice run kkomkkom@0.1.0 verify
+npm notice run node scripts/verify.mjs
+✔ build
+✘ unit tests (290)
+      AssertionError [ERR_ASSERTION]: en/errProtectRun left a placeholder: Protection refused (exit 1); config changed by this operation: {changed}. Re-preview or inspect the saved transaction before retrying.
+          at TestContext.<anonymous> (file:///home/hodol/workspace/next-preflight/test/i18n.test.js:51:14)
+          at Test.runInAsyncScope (node:async_hooks:226:14)
+          at Test.run (node:internal/test_runner/test:1402:25)
+          at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+          at Test.postRun (node:internal/test_runner/test:1542:19)
+          at Test.run (node:internal/test_runner/test:1467:12)
+          at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+        generatedMessage: false,
+        code: 'ERR_ASSERTION',
+        actual: false,
+        expected: true,
+        operator: '==',
+        diff: 'simple'
+      }
+✔ real app: an open API exits 1
+✔ real app: the open API is critical
+✔ real app: JSON includes an extra array
+✔ real app: detail follows --lang ko
+✔ real app: report follows --lang ja
+✔ first --fast --update writes a baseline
+✔ warnings alone exit 0
+✔ --strict turns warnings into exit 1
+✔ real app: a hardcoded secret stops the deploy
+✔ real app: a public secret warns
+✔ real app: a write API without auth warns
+✔ real app: a broken page warns
+✔ real app: extra detail follows --lang ko
+✔ real app: warning-only project checks exit 0
+✔ real app: --strict applies to project-check warnings
+✔ production build: complete non-fast run exits 0
+✔ production build: measured weights for every page
+✔ production build: real build and client-reference manifests exist
+✔ production build: a default check does not modify sources or the baseline
+✔ production build: explicit update stores measured page methods
+✔ production build: a later default check keeps the baseline byte-identical
+✔ production build: source bytes are still unchanged
+✔ MCP tools/call: normal fast run returns the shared result
+✔ MCP tools/call: invalid input is a tool error
+✔ MCP tools/call: a non-Next project is a tool error
+✔ MCP tools/call: invalid config names the field
+✔ MCP stream survives tool errors
+✔ protection: initial real production output contains browser maps
+✔ protection repo: preview is token-only and read-only
+✔ protection repo: stale approval is refused without changes
+✔ protection repo: apply builds and verifies owned production, maps and cleanup
+✔ protection repo: exact token change with durable original backup
+✔ protection repo: emitted browser maps are absent after rebuild
+✔ protection repo: MCP exposes no protection mutation tool
+✔ protection repo: restore refuses later user edits
+✔ protection repo: restore is byte-exact and preserves unrelated source/env/baseline
+✔ protection repo: result does not claim generated build output was restored
+✔ artifacts: real production build produces browser maps
+✔ artifacts repo: static and explicit production HTTP share masked findings
+✔ artifacts repo: stdout/stderr JSON and translated report contain no credential values
+✔ artifacts repo: CLI rejects unsafe origin without echo
+✔ artifacts repo: reviewed fake-provider exception permits a normal CLI result
+✔ artifacts repo: MCP normal/input/config-error tools/call and stream survival
+✔ artifacts repo: errors and MCP output contain no credential values
+✔ artifacts repo: explanation input contains no credential values (no AI invoked)
+✔ artifacts repo: source/config/env/public and baseline bytes remain unchanged
+✔ pack: npm pack succeeds
+✔ pack: tarball carries dist, not src or tests
+✔ pack: production-only consumer install succeeds
+✔ pack: production install has typescript but no dev-only types
+✔ pack: consumer CLI runs
+✔ pack: consumer CLI checks the app with production dependencies
+✔ pack: consumer MCP tools/call returns the shared result
+✔ artifacts packed consumer: static and explicit production HTTP share masked findings
+✔ artifacts packed consumer: stdout/stderr JSON and translated report contain no credential values
+✔ artifacts packed consumer: CLI rejects unsafe origin without echo
+✔ artifacts packed consumer: reviewed fake-provider exception permits a normal CLI result
+✔ artifacts packed consumer: MCP normal/input/config-error tools/call and stream survival
+✔ artifacts packed consumer: errors and MCP output contain no credential values
+✔ artifacts packed consumer: explanation input contains no credential values (no AI invoked)
+✔ artifacts packed consumer: source/config/env/public and baseline bytes remain unchanged
+✔ protection packed consumer: preview is token-only and read-only
+✔ protection packed consumer: stale approval is refused without changes
+✔ protection packed consumer: apply builds and verifies owned production, maps and cleanup
+✔ protection packed consumer: exact token change with durable original backup
+✔ protection packed consumer: emitted browser maps are absent after rebuild
+✔ protection packed consumer: MCP exposes no protection mutation tool
+✔ protection packed consumer: restore refuses later user edits
+✔ protection packed consumer: restore is byte-exact and preserves unrelated source/env/baseline
+✔ protection packed consumer: result does not claim generated build output was restored
+  · packed 90884 bytes; consumer install 553 ms
+
+1 check(s) failed

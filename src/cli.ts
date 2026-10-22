@@ -30,7 +30,7 @@ Usage
                                 explicitly apply, build and verify owned production
   kkomkkom --restore TRANSACTION_ID
                                 restore config only if applied bytes still match
-  kkomkkom --json             machine-readable JSON (schemaVersion 2)
+  kkomkkom --json             inspection JSON (schemaVersion 2), or protection action result
   kkomkkom --explain          explain problems with a local AI CLI
   kkomkkom --explain-with claude
   kkomkkom --update           save a complete check as the baseline
@@ -56,8 +56,14 @@ Config
   kkomkkom --artifacts --fresh
                                먼저 빌드한 뒤 새 배포물 검사
   kkomkkom --artifacts --production-url http://127.0.0.1:3000
-                               명시한 로컬 서버에 GET으로 실제 제공 여부 확인
-  kkomkkom --json             기계가 읽는 JSON 출력 (schemaVersion 2)
+                                명시한 로컬 서버에 GET으로 실제 제공 여부 확인
+  kkomkkom --protect-sourcemaps
+                                소스맵 설정 token 변경 미리보기만 실행
+  kkomkkom --protect-sourcemaps --apply --expected-hash HASH
+                                명시 적용 후 production 빌드·소유 서버 검증
+  kkomkkom --restore TRANSACTION_ID
+                                hash가 일치하는 설정만 원본으로 복원
+  kkomkkom --json             일반 검사 JSON(schemaVersion 2) 또는 보호 작업 결과
   kkomkkom --explain          문제 원인을 로컬 AI CLI로 설명
   kkomkkom --update           완료된 검사 결과를 기준선으로 저장
   kkomkkom --port 3100        개발 서버 포트 (기본: 설정값 또는 3100)
@@ -143,13 +149,14 @@ async function main(): Promise<number> {
         if ("diff" in result && result.diff) console.log(`${result.file}:${result.diff.line}:${result.diff.column}\n- true\n+ false`);
         if (expectedHash) console.log(`expected hash: ${expectedHash}\nkkomkkom --protect-sourcemaps --apply --expected-hash ${expectedHash}`);
         if ("verification" in result) console.log(`verification: ${JSON.stringify(result.verification)}\nrollback: ${result.rollback}`);
+        if ("rollbackFailureReason" in result && result.rollbackFailureReason) console.log(`rollback detail: ${result.rollbackFailureReason}`);
         console.log(payload.notes.join("\n"));
         console.log(payload.restoreCommand);
       }
       return result.exitCode;
     } catch (error) {
       throw new KkomkkomError("errProtectRun", {
-        reason: error instanceof ProtectionError ? error.reason : "unsafe-or-unreadable-state",
+        reason: error instanceof ProtectionError ? `${error.configRestored ? "config-restored/" : ""}${error.reason}${error.transactionId ? `; kkomkkom --restore ${error.transactionId}` : ""}` : "unsafe-or-unreadable-state",
         changed: error instanceof ProtectionError && error.configChanged ? "yes" : "no",
       });
     }

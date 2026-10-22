@@ -4,6 +4,7 @@ import { mkdtemp, writeFile, readFile, rm, chmod, stat, mkdir, symlink, readdir 
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { watch, chmodSync } from "node:fs";
 
 const engine = await import("../dist/protect.js").catch(() => ({}));
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
@@ -96,6 +97,33 @@ test("protection preserves all original Unix permission bits across apply and re
   assert.equal((await stat(target)).mode & 0o7777, 0o1640);
   await engine.restoreProtection(root, applied.transactionId);
   assert.equal((await stat(target)).mode & 0o7777, 0o1640);
+});
+
+test("protection final recheck refuses a concurrent chmod after the durable backup", async (t) => {
+  const root = await fixture(t);
+  const target = join(root, "next.config.js");
+  await chmod(target, 0o640);
+  let changed = false;
+  const watcher = watch(root, (_event, name) => {
+    if (!changed && name?.startsWith(".kkomkkom-protect-")) { chmodSync(target, 0o600); changed = true; }
+  });
+  try { await assert.rejects(engine.applyProtection(root, hash(original))); }
+  finally { watcher.close(); }
+  assert.equal(changed, true, "race must occur before replacement");
+  assert.equal((await stat(target)).mode & 0o7777, 0o600);
+  assert.deepEqual(await readFile(target), original);
+});
+
+test("protection restore refuses later user permission changes even when content hash matches", async (t) => {
+  const root = await fixture(t);
+  const target = join(root, "next.config.js");
+  await chmod(target, 0o640);
+  const applied = await engine.applyProtection(root, hash(original));
+  const before = await readFile(target);
+  await chmod(target, 0o600);
+  await assert.rejects(engine.restoreProtection(root, applied.transactionId));
+  assert.deepEqual(await readFile(target), before);
+  assert.equal((await stat(target)).mode & 0o7777, 0o600);
 });
 
 test("protection refuses dirty/index/untracked targets, missing Git, and preview races", async (t) => {
@@ -194,7 +222,7 @@ test("protection refuses non-private transaction metadata without changing confi
 
 test("protection restore refuses user edits, corrupt backup, malicious metadata and transaction IDs", async (t) => {
   assert.equal(typeof engine.applyProtection, "function");
-  for (const kind of ["user-edit", "backup", "metadata-path", "metadata-root", "metadata-large", "backup-symlink", "metadata-symlink"]) {
+  for (const kind of ["user-edit", "backup", "metadata-path", "metadata-root", "metadata-other-config", "metadata-large", "backup-symlink", "metadata-symlink"]) {
     const root = await fixture(t);
     const result = await engine.applyProtection(root, hash(original));
     const target = join(root, "next.config.js");
@@ -212,11 +240,16 @@ test("protection restore refuses user edits, corrupt backup, malicious metadata 
       const metadata = JSON.parse(await readFile(path, "utf8"));
       if (kind === "metadata-path") metadata.file = "../next.config.js";
       if (kind === "metadata-root") metadata.root = "/tmp/opencode/another-root";
+      if (kind === "metadata-other-config") {
+        await writeFile(join(root, "next.config.cjs"), await readFile(target));
+        metadata.file = "next.config.cjs";
+      }
       await writeFile(path, kind === "metadata-large" ? " ".repeat(16385) : JSON.stringify(metadata));
     }
     const before = await readFile(target);
     await assert.rejects(engine.restoreProtection(root, result.transactionId));
     assert.deepEqual(await readFile(target), before);
+    if (kind === "metadata-other-config") assert.deepEqual(await readFile(join(root, "next.config.cjs")), before);
     await assert.rejects(engine.restoreProtection(root, "../escape"));
   }
 });

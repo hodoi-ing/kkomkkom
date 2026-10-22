@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 
 const cli = fileURLToPath(new URL("../dist/cli.js", import.meta.url));
+const mcp = fileURLToPath(new URL("../dist/mcp.js", import.meta.url));
 const original = "module.exports = { productionBrowserSourceMaps: true, env: { PASSWORD: 'PRIVATE_SENTINEL' } };\n";
 async function fixture(t) {
   const root = await mkdtemp("/tmp/opencode/kk-protect-cli-");
@@ -22,6 +23,26 @@ async function fixture(t) {
   return root;
 }
 const invoke = (cwd, ...args) => spawnSync(process.execPath, [cli, ...args], { cwd, encoding: "utf8", timeout: 20000, env: { ...process.env, CI: "1", NO_COLOR: "1" } });
+
+test("MCP rejects protection arguments before inspection and keeps its stream alive", async (t) => {
+  const root = await fixture(t);
+  const keys = ["protectSourcemaps", "protect-sourcemaps", "apply", "expectedHash", "expected-hash", "restore"];
+  const calls = keys.map((key, id) => ({ jsonrpc: "2.0", id, method: "tools/call", params: {
+    name: "kkomkkom", arguments: { projectPath: root, artifacts: true, lang: "en", [key]: true },
+  } }));
+  calls.push({ jsonrpc: "2.0", id: 99, method: "ping" });
+  const result = spawnSync(process.execPath, [mcp], { cwd: root, input: calls.map((call) => JSON.stringify(call)).join("\n") + "\n", encoding: "utf8", timeout: 20000 });
+  assert.equal(result.status, 0, result.stderr);
+  const responses = result.stdout.trim().split("\n").map((line) => JSON.parse(line));
+  for (const id of keys.keys()) {
+    const response = responses.find((message) => message.id === id);
+    assert.equal(response.result.isError, true, keys[id]);
+    assert.match(response.result.content[0].text, /protection/);
+  }
+  assert.ok(responses.find((message) => message.id === 99).result);
+  assert.deepEqual(await readFile(join(root, "next.config.js")), Buffer.from(original));
+  assert.equal((await readdir(root)).includes(".kkomkkom"), false);
+});
 
 test("protection CLI unsupported preview agrees with its JSON exit code; false is a no-op", async (t) => {
   const root = await fixture(t);
