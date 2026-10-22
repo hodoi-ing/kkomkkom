@@ -2,9 +2,10 @@
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline";
+import { redactSecrets } from "./audit.js";
 import { findProjectRoot } from "./discover.js";
 import { KkomkkomError } from "./errors.js";
-import { resolveLang, t } from "./i18n.js";
+import { isLang, resolveLang, t, type Lang } from "./i18n.js";
 import { renderReport } from "./report.js";
 import { runCheck } from "./run.js";
 
@@ -27,17 +28,65 @@ const TOOL = {
   },
 };
 
-function send(message: unknown): void {
-  process.stdout.write(JSON.stringify(message) + "\n");
-}
-
-async function callTool(args: {
+interface ToolArgs {
   projectPath?: string;
   fast?: boolean;
   strict?: boolean;
   reuse?: boolean;
   lang?: string;
-}) {
+}
+
+type JsonRpcId = string | number | null;
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function send(message: unknown): void {
+  process.stdout.write(JSON.stringify(message) + "\n");
+}
+
+function sendError(id: JsonRpcId | undefined, code: number, message: string): void {
+  if (id === undefined) return;
+  send({ jsonrpc: "2.0", id, error: { code, message } });
+}
+
+function invalid(field: string): never {
+  throw new KkomkkomError("errMcpArgs", { field });
+}
+
+function validateArgs(value: unknown): ToolArgs {
+  if (value === undefined) return {};
+  if (!isPlainObject(value)) invalid("arguments");
+
+  const args: ToolArgs = {};
+  if ("projectPath" in value) {
+    if (typeof value.projectPath !== "string" || value.projectPath.trim() === "") invalid("projectPath");
+    args.projectPath = value.projectPath;
+  }
+  for (const key of ["fast", "strict", "reuse"] as const) {
+    if (key in value) {
+      if (typeof value[key] !== "boolean") invalid(key);
+      args[key] = value[key];
+    }
+  }
+  if ("lang" in value) {
+    if (typeof value.lang !== "string" || !isLang(value.lang.toLowerCase().split(/[._-]/)[0])) {
+      invalid("lang");
+    }
+    args.lang = value.lang;
+  }
+  return args;
+}
+
+function cwdOf(value: unknown): string {
+  if (isPlainObject(value) && typeof value.projectPath === "string") {
+    return resolve(value.projectPath);
+  }
+  return process.cwd();
+}
+
+async function callTool(args: ToolArgs) {
   const cwd = args.projectPath ? resolve(args.projectPath) : process.cwd();
   const root = await findProjectRoot(cwd);
   const lang = resolveLang(args.lang);
@@ -57,27 +106,63 @@ async function callTool(args: {
   return { content: [{ type: "text", text }], isError: result.exitCode !== 0 };
 }
 
-const rl = createInterface({ input: process.stdin });
+async function sendToolError(
+  id: JsonRpcId | undefined,
+  error: unknown,
+  lang: Lang,
+  cwd: string,
+): Promise<void> {
+  let text: string;
+  if (error instanceof KkomkkomError) {
+    text = t(lang, error.key, error.vars);
+  } else {
+    text = error instanceof Error ? error.message : String(error);
+  }
+  text = await redactSecrets(cwd, text).catch(() => text);
+  send({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text }], isError: true } });
+}
 
-rl.on("line", async (line) => {
+async function handleLine(line: string): Promise<void> {
   if (!line.trim()) return;
 
-  let message: { id?: number | string; method?: string; params?: Record<string, unknown> };
+  let message: unknown;
   try {
     message = JSON.parse(line);
   } catch {
+    sendError(null, -32700, "Parse error");
+    return;
+  }
+  if (!isPlainObject(message)) {
+    sendError(null, -32600, "Invalid Request");
     return;
   }
 
-  const { id, method, params } = message;
+  const rawId = message.id;
+  if (rawId !== undefined && rawId !== null && typeof rawId !== "string" && typeof rawId !== "number") {
+    sendError(null, -32600, "Invalid Request");
+    return;
+  }
+  const id = rawId as JsonRpcId | undefined;
+  const method = message.method;
+  if (typeof method !== "string") {
+    sendError(id, -32600, "Invalid Request");
+    return;
+  }
+  const params = message.params;
+
+  // JSON-RPC notifications never get a response and are not executed here.
+  if (id === undefined) return;
   if (method === "notifications/initialized") return;
 
   if (method === "initialize") {
+    const protocolVersion = isPlainObject(params) && typeof params.protocolVersion === "string"
+      ? params.protocolVersion
+      : "2024-11-05";
     send({
       jsonrpc: "2.0",
       id,
       result: {
-        protocolVersion: (params?.protocolVersion as string) ?? "2024-11-05",
+        protocolVersion,
         capabilities: { tools: {} },
         serverInfo: { name: "kkomkkom", version: pkg.version },
       },
@@ -95,39 +180,43 @@ rl.on("line", async (line) => {
     return;
   }
 
-  if (method === "tools/call" && params?.name === TOOL.name) {
+  if (method === "tools/call") {
+    if (!isPlainObject(params) || typeof params.name !== "string") {
+      sendError(id, -32602, "Invalid params");
+      return;
+    }
+    if (params.name !== TOOL.name) {
+      sendError(id, -32602, "Invalid params");
+      return;
+    }
+    if (params.arguments !== undefined && !isPlainObject(params.arguments)) {
+      await sendToolError(id, new KkomkkomError("errMcpArgs", { field: "arguments" }), resolveLang(), cwdOf(params.arguments));
+      return;
+    }
+
+    let args: ToolArgs;
     try {
-      const result = await callTool(
-        (params.arguments as {
-          projectPath?: string;
-          fast?: boolean;
-          strict?: boolean;
-          reuse?: boolean;
-          lang?: string;
-        }) ?? {},
-      );
+      args = validateArgs(params.arguments);
+    } catch (error) {
+      await sendToolError(id, error, resolveLang(), cwdOf(params.arguments));
+      return;
+    }
+
+    try {
+      const result = await callTool(args);
       send({ jsonrpc: "2.0", id, result });
     } catch (error) {
-      const lang = resolveLang((params.arguments as { lang?: string } | undefined)?.lang);
-      const text =
-        error instanceof KkomkkomError
-          ? t(lang, error.key, error.vars)
-          : error instanceof Error
-            ? error.message
-            : String(error);
-      send({
-        jsonrpc: "2.0",
-        id,
-        result: {
-          content: [{ type: "text", text }],
-          isError: true,
-        },
-      });
+      await sendToolError(id, error, resolveLang(args.lang), cwdOf(args));
     }
     return;
   }
 
-  if (id !== undefined) {
-    send({ jsonrpc: "2.0", id, error: { code: -32601, message: "Method not found" } });
-  }
+  sendError(id, -32601, "Method not found");
+}
+
+const rl = createInterface({ input: process.stdin });
+rl.on("line", (line) => {
+  void handleLine(line).catch(() => {
+    sendError(null, -32603, "Internal error");
+  });
 });

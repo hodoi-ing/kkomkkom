@@ -2,6 +2,9 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { createConnection } from "node:net";
 import { redactSecrets } from "./audit.js";
 import { KkomkkomError } from "./errors.js";
+import { resolveLang, t } from "./i18n.js";
+import { nextEnv, resolveNextCli } from "./next.js";
+import { terminateGroup } from "./process.js";
 
 export interface DevServer {
   url: string;
@@ -11,7 +14,20 @@ export interface DevServer {
 
 export interface DevServerOptions {
   reuse?: boolean;
+  /** Bounded readiness wait (default 60s). */
+  startupTimeoutMs?: number;
+  /** Bounded graceful shutdown before force-killing (default 5s). */
+  stopTimeoutMs?: number;
+  /** Test seam; defaults to the project's installed Next CLI. */
+  nextCli?: string;
+  /** Test seam; defaults to node:child_process.spawn. */
+  spawnImpl?: typeof spawn;
 }
+
+const READY_POLL_MS = 250;
+const DEFAULT_STARTUP_MS = 60_000;
+const DEFAULT_STOP_MS = 5_000;
+const MAX_LOG = 16_384;
 
 export function isPortOpen(port: number, host = "127.0.0.1"): Promise<boolean> {
   return new Promise((resolve) => {
@@ -27,31 +43,55 @@ export function isPortOpen(port: number, host = "127.0.0.1"): Promise<boolean> {
   });
 }
 
-function stopChild(child: ChildProcess): void {
-  if (child.exitCode !== null || child.pid === undefined) return;
-  if (process.platform === "win32") {
-    spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
-    return;
-  }
-  try {
-    process.kill(-child.pid, "SIGTERM");
-  } catch {
-    child.kill("SIGTERM");
-  }
+function installInterrupt(stop: () => Promise<void>): () => void {
+  const handler = () => {
+    process.off("SIGINT", handler);
+    void stop()
+      .catch((error: unknown) => {
+        if (error instanceof KkomkkomError) {
+          process.stderr.write(`kkomkkom: ${t(resolveLang(), error.key, error.vars)}\n`);
+        }
+      })
+      .finally(() => process.exit(130));
+  };
+  process.once("SIGINT", handler);
+  return () => process.off("SIGINT", handler);
 }
 
-async function waitForHttp(url: string, timeoutMs: number): Promise<boolean> {
+async function waitForHttp(
+  url: string,
+  exited: Promise<void>,
+  exitInfo: () => string | null,
+  timeoutMs: number,
+): Promise<{ timeout: true } | { reason: string } | null> {
   const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(2000), redirect: "manual" });
-      if (res.status < 500) return true;
-    } catch {
-      // not ready yet
+  for (;;) {
+    const exitedFirst = exitInfo();
+    if (exitedFirst !== null) return { reason: exitedFirst };
+
+    const fetched: { response: Response | null; exited?: boolean } = await Promise.race([
+      fetch(url, { signal: AbortSignal.timeout(2000), redirect: "manual" })
+        .then((response) => ({ response }))
+        .catch(() => ({ response: null })),
+      exited.then(() => ({ response: null, exited: true })),
+    ]);
+
+    if (fetched.exited) return { reason: exitInfo() ?? "exit" };
+    if (fetched.response !== null) {
+      const status = fetched.response.status;
+      await fetched.response.body?.cancel().catch(() => {});
+      // Let a queued exit event land before deciding this reply proves readiness.
+      await new Promise((resolve) => setImmediate(resolve));
+      // A descendant can answer after its parent died; never call that ready.
+      const exitedAfterReply = exitInfo();
+      if (exitedAfterReply !== null) return { reason: exitedAfterReply };
+      if (status < 500) return null;
     }
-    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    if (Date.now() >= deadline) return { timeout: true };
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.min(READY_POLL_MS, Math.max(0, deadline - Date.now()))));
   }
-  return false;
 }
 
 async function looksLikeNext(url: string): Promise<boolean> {
@@ -78,31 +118,72 @@ export async function startDevServer(
     return { url, owned: false, stop: async () => {} };
   }
 
-  const child = spawn("npx", ["next", "dev", "-p", String(port)], {
-    cwd: root,
-    stdio: ["ignore", "pipe", "pipe"],
-    detached: process.platform !== "win32",
-    env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1" },
-  });
+  const cli = options.nextCli ?? resolveNextCli(root);
+  if (!cli) throw new KkomkkomError("errNextMissing");
 
-  let log = "";
-  child.stdout?.on("data", (chunk) => (log += chunk));
-  child.stderr?.on("data", (chunk) => (log += chunk));
-
-  const ready = await waitForHttp(url, 60_000);
-  if (!ready) {
-    stopChild(child);
-    throw new KkomkkomError("errDevTimeout", {
-      log: await redactSecrets(root, log.slice(-1500)).catch(() => ""),
+  const spawnImpl = options.spawnImpl ?? spawn;
+  let child: ChildProcess;
+  try {
+    child = spawnImpl(process.execPath, [cli, "dev", "--hostname", "127.0.0.1", "-p", String(port)], {
+      cwd: root,
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: process.platform !== "win32",
+      env: nextEnv(),
+      windowsHide: true,
     });
+  } catch {
+    throw new KkomkkomError("errDevStart", { reason: "spawn", log: "" });
   }
 
-  return {
-    url,
-    owned: true,
-    stop: async () => {
-      stopChild(child);
-      await new Promise((resolve) => setTimeout(resolve, 300));
-    },
+  let log = "";
+  const append = (chunk: Buffer | string) => {
+    log = (log + String(chunk)).slice(-MAX_LOG);
   };
+  child.stdout?.on("data", append);
+  child.stderr?.on("data", append);
+
+  let exitInfo: string | null = null;
+  let markExited = () => {};
+  const exited = new Promise<void>((resolve) => {
+    let done = false;
+    markExited = () => {
+      if (done) return;
+      done = true;
+      resolve();
+    };
+  });
+  child.once("error", (error) => {
+    if (exitInfo === null) exitInfo = `spawn ${error.name}`;
+    markExited();
+  });
+  child.once("exit", (code, signal) => {
+    if (exitInfo === null) exitInfo = `exit ${code ?? signal ?? "unknown"}`;
+    markExited();
+  });
+
+  let removeInterrupt = () => {};
+  let stopPromise: Promise<void> | null = null;
+  const stop = (): Promise<void> => {
+    if (stopPromise) return stopPromise;
+    removeInterrupt();
+    stopPromise = (async () => {
+      const stopped = await terminateGroup(child.pid, options.stopTimeoutMs ?? DEFAULT_STOP_MS);
+      if (!stopped) throw new KkomkkomError("errDevStop");
+    })();
+    return stopPromise;
+  };
+  removeInterrupt = installInterrupt(stop);
+
+  let failure = await waitForHttp(url, exited, () => exitInfo, options.startupTimeoutMs ?? DEFAULT_STARTUP_MS);
+  if (failure === null && exitInfo !== null) failure = { reason: exitInfo };
+  if (failure !== null) {
+    await stop();
+    const logText = await redactSecrets(root, log.slice(-1500)).catch(() => "");
+    if ("timeout" in failure) {
+      throw new KkomkkomError("errDevTimeout", { log: logText });
+    }
+    throw new KkomkkomError("errDevStart", { reason: failure.reason, log: logText });
+  }
+
+  return { url, owned: true, stop };
 }
