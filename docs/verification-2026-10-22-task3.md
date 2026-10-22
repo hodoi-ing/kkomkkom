@@ -69,6 +69,14 @@ README Korean/English documents origin-only opt-in syntax, runtime restrictions,
 
 **Task3 implementation evidence is ready for coordinator final independent review; `[ ]` remains until coordinator PASS.** Earlier pending lists in this document are historical status at the engine milestone, not claims that these integration checks are still unexecuted.
 
+## Coordinator final PASS (2026-10-23)
+
+- Previously independently ran the 18 HTTP cases successfully; did not repeat them after approval.
+- Independently ran the new `^production HTTP redaction` regression: **1 pass / 0 fail, exit 0**. Raw routing/exception matching and separate masked observations remain intact.
+- Independently ran `node scripts/verify.mjs --artifacts-only` with `TMPDIR=/tmp/opencode/kk-task3-coordinator.ec2x7wx8`: **exit 0**, actual browser-map production build, owned loopback server, repo/production-only packed CLI/MCP success/input/config-error/masking/explanation input, and exact byte preservation all passed. Log: `/tmp/opencode/kk-task3-coordinator.ec2x7wx8/scoped.log`.
+- Reviewed the original full 267-test verification log, measurement provenance/time logs, snapshot/masking flow, and `7c0012e`'s explicit CI fixture install plus offline-consumer cache preparation. The isolated tarball-only cache reproduction establishes why the metadata step is necessary; registry access is explicit in preparation only.
+- Task3 is approved and Task4 may start. Remote Node20/22/24 CI remains the final integration gate; no claim of Windows/macOS production checks or agent-specific MCP-client installation is made.
+
 ## CI preparation correction (2026-10-23)
 
 Coordinator identified that fresh GitHub e2e runners only installed root dependencies while verification now intentionally refuses to auto-install the fixture. `.github/workflows/test.yml` now explicitly runs `npm ci --prefix fixtures/mini-app --no-audit --no-fund` before verify. It also primes `typescript@<package.json runtime range>` with `npm cache add`, so the packed consumer keeps strict `--offline` behavior. Using the range, rather than only the locked version, prepares both range metadata and whichever satisfying tarball the consumer selects. No product auto-install, hidden `prefer-offline` network fallback or new dependency was added. README Korean/English preparation commands match CI; `verify` already includes unit tests.
