@@ -271,6 +271,7 @@ test("an empty sample map or an exact dot segment never requests a fallback path
     const route = apiRoute("/api/orders/[id]", "", true);
     for (const params of [{}, { id: "." }, { id: ".." }]) {
       const findings = await probeRoutes(baseUrl, [route], config({
+        routePolicies: { "/api/orders/[id]": { GET: "protected" } },
         sampleParams: { "/api/orders/[id]": params },
       }));
       assert.equal(findings[0].verdict, "unknown");

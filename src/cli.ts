@@ -117,9 +117,11 @@ async function main(): Promise<number> {
 
   if (values.json) {
     const payload = {
+      schemaVersion: result.schemaVersion,
       lang,
       exitCode: result.exitCode,
       buildFailed: result.buildFailed,
+      coverage: result.coverage,
       diff: {
         ...result.diff,
         routes: result.diff.routes.map((route) => ({
@@ -132,6 +134,7 @@ async function main(): Promise<number> {
         id: extra.id,
         severity: extra.severity,
         message: t(lang, extra.messageKey, extra.messageVars),
+        ...(extra.evidence ? { evidence: extra.evidence } : {}),
       })),
       explanation,
     };
@@ -144,6 +147,7 @@ async function main(): Promise<number> {
         buildFailed: result.buildFailed,
         buildTail: result.buildTail,
         extras: result.extras,
+        coverage: result.coverage,
       }),
     );
 

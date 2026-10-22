@@ -1,5 +1,5 @@
 import { t, type Lang } from "./i18n.js";
-import type { Diff, ExtraFinding, RouteDiff } from "./types.js";
+import type { CoverageSummary, Diff, ExtraFinding, RouteDiff } from "./types.js";
 
 export interface ReportOptions {
   lang: Lang;
@@ -7,6 +7,7 @@ export interface ReportOptions {
   buildFailed?: boolean;
   buildTail?: string;
   extras?: ExtraFinding[];
+  coverage?: CoverageSummary;
 }
 
 const DIM = "\u001b[2m";
@@ -42,6 +43,8 @@ export function renderReport(diff: Diff, options: ReportOptions): string {
 
   const critical = exposed.length + criticalExtras;
   const warnings = check.length + errors.length + heavy.length + extraWarnings;
+  const coverage = options.coverage;
+  const incomplete = coverage !== undefined && coverage.status !== "complete";
 
   const list = (items: RouteDiff[]): string[] => {
     const width = Math.max(...items.map((item) => item.path.length));
@@ -66,8 +69,18 @@ export function renderReport(diff: Diff, options: ReportOptions): string {
   } else if (warnings > 0) {
     lines.push(paint(t(lang, "warnBanner", { count: warnings }), YELLOW, color));
     lines.push("");
-  } else if (!options.buildFailed) {
+  } else if (!options.buildFailed && !incomplete) {
     lines.push(paint(t(lang, "okBanner"), GREEN, color));
+    lines.push("");
+  }
+
+  if (coverage && incomplete) {
+    const vars = { ...coverage.counts };
+    lines.push(paint(
+      t(lang, coverage.status === "empty" ? "coverageEmpty" : "coverageIncomplete", vars),
+      coverage.status === "empty" ? YELLOW : DIM,
+      color,
+    ));
     lines.push("");
   }
 

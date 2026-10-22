@@ -102,8 +102,20 @@ async function callTool(args: ToolArgs) {
     buildFailed: result.buildFailed,
     buildTail: result.buildTail,
     extras: result.extras,
+    coverage: result.coverage,
   });
-  return { content: [{ type: "text", text }], isError: result.exitCode !== 0 };
+  return {
+    content: [{ type: "text", text }],
+    structuredContent: {
+      schemaVersion: result.schemaVersion,
+      exitCode: result.exitCode,
+      buildFailed: result.buildFailed,
+      coverage: result.coverage,
+      diff: result.diff,
+      extra: result.extras,
+    },
+    isError: result.exitCode !== 0,
+  };
 }
 
 async function sendToolError(
@@ -215,8 +227,11 @@ async function handleLine(line: string): Promise<void> {
 }
 
 const rl = createInterface({ input: process.stdin });
+let queue: Promise<void> = Promise.resolve();
 rl.on("line", (line) => {
-  void handleLine(line).catch(() => {
-    sendError(null, -32603, "Internal error");
-  });
+  // One inspection at a time: concurrent runs would race over dev-server ports
+  // and SIGINT ownership in this single process.
+  queue = queue
+    .then(() => handleLine(line))
+    .catch(() => sendError(null, -32603, "Internal error"));
 });

@@ -229,6 +229,13 @@ function pagesMethods(sourceFile: ts.SourceFile): Partial<Record<HttpMethod, Met
   if (!body || !ts.isBlock(body)) return {};
 
   const { branches, guarded } = pagesBranches(body);
+  if (branches.length === 0) {
+    // A handler with no recognizable method branch can serve every method;
+    // its auth flow is not proven, so report unknown rather than no handler.
+    const methods: Partial<Record<HttpMethod, MethodAuth>> = {};
+    for (const method of METHODS) methods[method] = { method, state: "unknown" };
+    return methods;
+  }
   const states = new Map<HttpMethod, AuthState[]>();
   for (const branch of branches) {
     const list = states.get(branch.method) ?? [];

@@ -101,7 +101,8 @@ test("analyzeRoute marks a pages/api common guard or unclear flow unknown", () =
       return res.end("ok");
     }
   `);
-  assert.equal(state(unclear, "GET"), undefined);
+  assert.equal(state(unclear, "GET"), "unknown");
+  assert.equal(state(unclear, "POST"), "unknown");
 });
 
 test("analyzeRoute reads clear pages/api method comparisons", () => {

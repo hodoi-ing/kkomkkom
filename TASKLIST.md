@@ -6,14 +6,17 @@
 
 - [x] #1: 설계·회귀 검증 계획 확정 — 2026-10-22 specs/plans 작성, 이슈별 조건·호환성·안전 경계·검증 매핑 자체 검토.
 - [x] #1: 서버 바인딩·프로세스 실패/정리 및 입력 검증 수정 — 총괄 독립검수 승인(2026-10-22): 기존 focused 43/43 + de8a6b1 회귀 3/3 직접 통과, mini-app startDevServer→GET /api/health 200→stop→포트 closed(43821) 확인, 원격 main 반영. Windows `taskkill` 실경로와 build SIGINT의 Windows 동작은 미검증.
-- [ ] #1: 메서드별 인증 분석·명시적 접근 정책·관찰/판정 분리 — 구현·로컬검증 완료, 총괄 독립검수 대기 (2026-10-22, 탭2 컨텍스트 64%에서 handoff).
+- [x] #1: 메서드별 인증 분석·명시적 접근 정책·관찰/판정 분리 — 총괄 지적 A~D 수정·로컬 회귀 완료(`76e68a9`), 총괄 독립검수 대기.
   - 구현: `src/classify.ts` TypeScript AST 기반 `analyzeRoute`(App Router export/로컬 alias 메서드별 분석, pages/api `req.method` 비교·switch 분기, 공통가드/불명확 흐름·wrapper/re-export·미호출 nested auth는 `unknown`), `src/probe.ts` GET 전용 관찰과 판정 분리(명시 `protected`+2xx만 `exposed`(빈 204 포함), 명시 `public` 2xx는 `public`, 미지정 2xx는 `check`, 401/403·로그인 리다이렉트 유지), 샘플 파라미터 세그먼트 인코딩(`.`→`%2E`, `/?#` 인코딩)으로 경로/오리진 이탈 방지, `src/audit.ts` 쓰기 경고를 메서드별 `none` 근거로만 발생, `src/types.ts`/`src/baseline.ts` 결과에 method/status/policy/auth 보존, i18n `detailPolicyExposed`/`detailPublic` 5개 언어.
   - 검증: `npm run build` 통과. `node --test test/classify.test.js test/probe.test.js test/audit.test.js test/config.test.js test/i18n.test.js test/baseline.test.js test/report.test.js test/run.test.js` → **94 pass / 0 fail**. Task1 focused 43/43은 총괄 검수로 갈음(재실행 안 함).
   - 의존성/비용 실측(2026-10-22, Linux/WSL, warm npm cache·로컬 tarball): `typescript`를 dependencies로 이동(^5.9.3). pack 42KB, 소비자 설치 0.57s/max RSS 196MB, `node_modules` 23,644KB 중 typescript 23,388KB. cold network 설치·Windows/macOS는 미측정.
-  - 남은 항목: 총괄 독립검수(정책 판정 의미, pages 공통가드 unknown, 동적 샘플 인코딩), Task3 coverage/strict/CLI·JSON·MCP 공통 결과 미착수, Task4·5 미착수, 원격 push 금지(Task2 완료 보고 후 총괄 담당).
+  - 총괄 지적 수정(2026-10-22, `76e68a9`): ① 공용 `params.ts`가 `.`/`..` 세그먼트·미치환·optional/catchall을 거부하고 API/페이지 모두 HTTP 요청 0으로 unknown 처리, ② `auditWrites`가 명시 public을 경고하지 않고 메서드별 `write-no-auth:<path>:<method>`·미확인 `write-unknown` 근거를 유지, ③ `discoverRoutes`가 router를 명시해 `app/api/pages/route.ts` 오판 회귀, ④ 미사용 `hasAuthSignal`/`classify`/자체 렉서 제거. 신규 회귀 포함 144 pass.
+  - 남은 항목: 총괄 독립검수, Task4·5 미착수, 원격 push 금지(Task2/3 보고 후 총괄 담당).
   - 다음 세션 시작: `cd /home/hodol/workspace/next-preflight && git status --short && npm run build && node --test test/classify.test.js test/probe.test.js test/audit.test.js test/config.test.js test/i18n.test.js test/baseline.test.js test/report.test.js test/run.test.js`
   - 주의: untracked `docs/superpowers/specs/2026-10-22-issue2-artifact-protection-design.md`, `docs/superpowers/plans/2026-10-22-issue2-artifacts.md`는 총괄 작업물 — 건드리지 않음.
-- [ ] #1: coverage·strict·CLI/JSON/MCP 공통 결과 및 미완료 표시.
+- [x] #1: coverage·strict·CLI/JSON/MCP 공통 결과 및 미완료 표시 — 구현·로컬검증 완료(이 커밋), 총괄 독립검수 대기.
+  - 구현: `CoverageCheck`(checked/static-only/ignored/skipped/failed/unsupported + reason)와 `CoverageSummary`(complete/incomplete/empty)를 run 엔진에서 계산. API GET·페이지 스모크·쓰기 정적분석·secrets·build를 모두 기록하고 fast/build 실패/405/전부 제외/유의미 0을 구분. 일반 실행은 incomplete여도 exit 0, strict는 incomplete/경고 시 1, 도구 오류는 기존 2. JSON `schemaVersion: 2`+`coverage`, MCP `structuredContent` 동일 결과. HTTP 본문은 공용 `readBody`가 바이트 상한에서 읽기를 중단·취소. MCP tools/call은 단일 큐로 직렬화.
+  - 검증: `npm test` 152 pass / 0 fail. `npm run verify` real app e2e 전체 통과(정책 기반 exposed, 5개 언어, write id, baseline 포함).
 - [ ] #1: 크기 측정·기준선 명시적/원자적 갱신·실제 패키지/빌드/MCP 통합 검증.
 - [ ] #1: 총괄 독립 검수·필요한 재작업·GitHub 반영 및 로컬 동기화.
 - [ ] #2 단계 0: 설치 크기·시간·메모리·네트워크 실측 기준선 및 계약 정리.

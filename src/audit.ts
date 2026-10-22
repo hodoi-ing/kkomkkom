@@ -3,9 +3,10 @@ import type { Dirent } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { extname, join, relative, sep } from "node:path";
 import { analyzeRoute, matchesGlob } from "./classify.js";
+import { readBody } from "./http.js";
 import { sampleTarget } from "./params.js";
 import type {
-  Config, ExtraFinding, HttpMethod, RouteInfo, WriteEvidence,
+  Config, CoverageCheck, ExtraFinding, HttpMethod, RouteInfo, WriteEvidence,
 } from "./types.js";
 
 export interface AuditInput {
@@ -134,12 +135,19 @@ async function auditSecrets(root: string): Promise<ExtraFinding[]> {
   return findings;
 }
 
-function auditWrites(routes: RouteInfo[], config: Config): ExtraFinding[] {
+function auditWrites(
+  routes: RouteInfo[],
+  config: Config,
+  coverage: CoverageCheck[],
+): ExtraFinding[] {
   const findings: ExtraFinding[] = [];
 
   for (const route of routes) {
     if (route.kind !== "api") continue;
-    if (config.ignoreRoutes.some((pattern) => matchesGlob(route.path, pattern))) continue;
+    if (config.ignoreRoutes.some((pattern) => matchesGlob(route.path, pattern))) {
+      coverage.push({ rule: "write-auth", path: route.path, status: "ignored", reason: "ignoreRoutes" });
+      continue;
+    }
 
     const writes = Object.values(analyzeRoute(route).methods).filter(
       (method) => method !== undefined && WRITES.has(method.method),
@@ -150,6 +158,15 @@ function auditWrites(routes: RouteInfo[], config: Config): ExtraFinding[] {
       const policy = config.routePolicies?.[route.path]?.[method.method];
       return { method: method.method, auth: method.state, ...(policy ? { policy } : {}) };
     });
+    for (const item of evidence) {
+      coverage.push({
+        rule: "write-auth",
+        path: route.path,
+        method: item.method,
+        status: "static-only",
+        reason: item.policy === "public" ? "explicit-public" : item.auth,
+      });
+    }
 
     const noAuth = evidence.filter((item) => item.auth === "none" && item.policy !== "public");
     for (const item of noAuth) {
@@ -177,9 +194,23 @@ function auditWrites(routes: RouteInfo[], config: Config): ExtraFinding[] {
   return findings;
 }
 
-async function smokePage(baseUrl: string, route: RouteInfo, config: Config): Promise<ExtraFinding | null> {
+async function smokePage(
+  baseUrl: string,
+  route: RouteInfo,
+  config: Config,
+  coverage: CoverageCheck[],
+): Promise<ExtraFinding | null> {
   const sample = sampleTarget(baseUrl, route.path, config.sampleParams[route.path]);
-  if ("reason" in sample) return null;
+  if ("reason" in sample) {
+    coverage.push({
+      rule: "page-smoke",
+      path: route.path,
+      status: sample.reason === "missing" ? "skipped" : "unsupported",
+      reason: `sample-${sample.reason}`,
+    });
+    return null;
+  }
+
   try {
     const res = await fetch(sample.url, {
       method: "GET",
@@ -189,43 +220,58 @@ async function smokePage(baseUrl: string, route: RouteInfo, config: Config): Pro
     });
     let error = res.status >= 500;
     if (res.status >= 200 && res.status < 300) {
-      const body = (await res.text()).slice(0, 8192).toLowerCase();
+      const body = (await readBody(res, 8192).catch(() => "")).toLowerCase();
       error = /__next_error__|application error|internal server error/.test(body);
     } else {
       await res.body?.cancel().catch(() => {});
     }
+    coverage.push({
+      rule: "page-smoke",
+      path: route.path,
+      status: error ? "failed" : "checked",
+      reason: error ? `status-${res.status}` : "response",
+    });
     if (error) return { id: `page-error:${route.path}`, severity: "warning",
       messageKey: "extraPageError", messageVars: { path: route.path, status: res.status } };
     return null;
   } catch {
+    coverage.push({ rule: "page-smoke", path: route.path, status: "failed", reason: "timeout" });
     return { id: `page-timeout:${route.path}`, severity: "info",
       messageKey: "extraPageTimeout", messageVars: { path: route.path, seconds: 8 } };
   }
 }
 
-async function auditPages(input: AuditInput): Promise<ExtraFinding[]> {
-  const queue = input.routes.filter((route) => route.kind === "page" &&
-    !input.config.ignoreRoutes.some((pattern) => matchesGlob(route.path, pattern)) &&
-    (!route.dynamic || input.config.sampleParams[route.path]),
-  );
+async function auditPages(input: AuditInput, coverage: CoverageCheck[]): Promise<ExtraFinding[]> {
+  const queue = input.routes.filter((route) => {
+    if (route.kind !== "page") return false;
+    if (input.config.ignoreRoutes.some((pattern) => matchesGlob(route.path, pattern))) {
+      coverage.push({ rule: "page-smoke", path: route.path, status: "ignored", reason: "ignoreRoutes" });
+      return false;
+    }
+    return true;
+  });
   const findings: ExtraFinding[] = [];
   await Promise.all(Array.from({ length: 5 }, async () => {
     for (;;) {
       const route = queue.shift();
       if (!route) return;
-      const finding = await smokePage(input.baseUrl, route, input.config);
+      const finding = await smokePage(input.baseUrl, route, input.config, coverage);
       if (finding) findings.push(finding);
     }
   }));
   return findings;
 }
 
-export async function auditProject(input: AuditInput): Promise<ExtraFinding[]> {
+export async function auditProject(
+  input: AuditInput,
+  coverage: CoverageCheck[] = [],
+): Promise<ExtraFinding[]> {
   const findings = [
     ...await auditSecrets(input.root),
-    ...auditWrites(input.routes, input.config),
-    ...await auditPages(input),
+    ...auditWrites(input.routes, input.config, coverage),
+    ...await auditPages(input, coverage),
   ];
+  coverage.push({ rule: "secrets", status: "checked", reason: "source-scan" });
   const rank = { critical: 0, warning: 1, info: 2 };
   return [...new Map(findings.map((finding) => [finding.id, finding])).values()]
     .sort((a, b) => rank[a.severity] - rank[b.severity] || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));

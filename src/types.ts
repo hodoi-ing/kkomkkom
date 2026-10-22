@@ -82,6 +82,30 @@ export type Severity = "critical" | "warning" | "info";
 
 export type ExtraSeverity = "critical" | "warning" | "info";
 
+export type CoverageState =
+  | "checked"
+  | "static-only"
+  | "ignored"
+  | "skipped"
+  | "failed"
+  | "unsupported";
+
+export type CoverageRule = "api-auth" | "page-smoke" | "write-auth" | "secrets" | "build";
+
+export interface CoverageCheck {
+  rule: CoverageRule;
+  path?: string;
+  method?: HttpMethod;
+  status: CoverageState;
+  reason?: string;
+}
+
+export interface CoverageSummary {
+  status: "complete" | "incomplete" | "empty";
+  checks: CoverageCheck[];
+  counts: Record<CoverageState, number>;
+}
+
 export interface WriteEvidence {
   method: HttpMethod;
   auth: AuthState;
