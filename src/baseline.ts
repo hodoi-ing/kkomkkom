@@ -61,6 +61,10 @@ export function diffBaseline(
       state,
       detailKey: finding.detailKey,
       detailVars: finding.detailVars,
+      status: finding.status,
+      method: finding.method,
+      policy: finding.policy,
+      auth: finding.auth,
     };
   });
 

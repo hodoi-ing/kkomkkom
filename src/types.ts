@@ -1,6 +1,7 @@
 import type { MessageKey } from "./i18n.js";
 
 export type Verdict = "locked" | "exposed" | "check" | "public" | "unknown" | "error";
+export type AuthState = "signal" | "none" | "unknown";
 
 export interface RouteInfo {
   path: string;
@@ -16,6 +17,9 @@ export interface Finding {
   status?: number;
   detailKey: MessageKey;
   detailVars?: Record<string, string | number>;
+  method?: HttpMethod;
+  policy?: RoutePolicy;
+  auth?: AuthState;
 }
 
 export interface PageWeight {
@@ -50,6 +54,10 @@ export interface RouteDiff {
   state: RouteState;
   detailKey: MessageKey;
   detailVars?: Record<string, string | number>;
+  status?: number;
+  method?: HttpMethod;
+  policy?: RoutePolicy;
+  auth?: AuthState;
 }
 
 export interface WeightChange {

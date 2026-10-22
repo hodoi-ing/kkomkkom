@@ -1,4 +1,4 @@
-import { classify, hasAuthSignal, matchesGlob } from "./classify.js";
+import { analyzeRoute, matchesGlob } from "./classify.js";
 import type { MessageKey } from "./i18n.js";
 import type { Config, Finding, RouteInfo, Verdict } from "./types.js";
 
@@ -6,30 +6,36 @@ const TIMEOUT_MS = 8_000;
 const CONCURRENCY = 5;
 const REDIRECT_TIMEOUT_MS = 3_000;
 const MAX_REDIRECT_HOPS = 3;
+const DYNAMIC = /\[\.{0,3}([^\]]+)\]/g;
 
-function fillParams(path: string, params: Record<string, string> | undefined): string {
-  return path.replace(/\[\.{0,3}([^\]]+)\]/g, (match, key: string) => params?.[key] ?? match);
+function encodeSegment(value: string): string | null {
+  try {
+    // Encoding '.' keeps '..' from normalizing the URL path before it is sent.
+    return encodeURIComponent(value).replace(/\./g, "%2E");
+  } catch {
+    return null;
+  }
+}
+
+function fillParams(
+  path: string,
+  params: Record<string, string> | undefined,
+): string | null {
+  let valid = true;
+  const filled = path.replace(DYNAMIC, (match, key: string) => {
+    const value = params?.[key];
+    if (value === undefined) return match;
+    const encoded = encodeSegment(value);
+    if (encoded === null) valid = false;
+    return encoded ?? match;
+  });
+  return valid ? filled : null;
 }
 
 function safeLocation(location: string): string {
   const withoutQuery = location.split(/[?#]/, 1)[0];
   const withoutUserInfo = withoutQuery.replace(/\/\/[^/]*@/, "//");
   return withoutUserInfo.slice(0, 80) || "?";
-}
-
-function detailFor(verdict: Verdict): MessageKey {
-  switch (verdict) {
-    case "locked":
-      return "detailLocked";
-    case "exposed":
-      return "detailExposed";
-    case "check":
-      return "detailCheck";
-    case "error":
-      return "detailError";
-    default:
-      return "detailUnknown";
-  }
 }
 
 async function followsToLoginPage(
@@ -93,16 +99,24 @@ async function followsToLoginPage(
 }
 
 async function probeOne(baseUrl: string, route: RouteInfo, config: Config): Promise<Finding> {
+  const policy = config.routePolicies?.[route.path]?.GET;
+  const auth = analyzeRoute(route).methods.GET?.state ?? "unknown";
+  const evidence = { method: "GET" as const, policy, auth };
+
   if (config.ignoreRoutes.some((pattern) => matchesGlob(route.path, pattern))) {
-    return { path: route.path, verdict: "public", detailKey: "detailIgnored" };
+    return { path: route.path, verdict: "public", detailKey: "detailIgnored", ...evidence };
   }
 
   const params = config.sampleParams[route.path];
   if (route.dynamic && !params) {
-    return { path: route.path, verdict: "unknown", detailKey: "detailDynamic" };
+    return { path: route.path, verdict: "unknown", detailKey: "detailDynamic", ...evidence };
   }
 
-  const url = baseUrl + fillParams(route.path, params);
+  const segment = fillParams(route.path, params);
+  if (segment === null) {
+    return { path: route.path, verdict: "unknown", detailKey: "detailDynamic", ...evidence };
+  }
+  const url = baseUrl + segment;
   let res: Response;
   try {
     res = await fetch(url, {
@@ -112,28 +126,47 @@ async function probeOne(baseUrl: string, route: RouteInfo, config: Config): Prom
       headers: { "user-agent": "kkomkkom/0.1" },
     });
   } catch {
-    return { path: route.path, verdict: "unknown", detailKey: "detailTimeout" };
+    return { path: route.path, verdict: "unknown", detailKey: "detailTimeout", ...evidence };
   }
 
   const redirect = res.status >= 300 && res.status < 400;
   const location = redirect ? (res.headers.get("location") ?? "") : "";
-  let verdict = classify(res.status, hasAuthSignal(route.source));
-  if (redirect) verdict = (await followsToLoginPage(url, baseUrl, location)) ? "locked" : "check";
+  const loginRedirect = redirect ? await followsToLoginPage(url, baseUrl, location) : false;
 
-  if (verdict === "exposed" || verdict === "check") {
+  let verdict: Verdict;
+  let detailKey: MessageKey;
+  if (redirect) {
+    verdict = loginRedirect ? "locked" : "check";
+    detailKey = loginRedirect ? "detailLockedRedirect" : "detailRedirect";
+  } else if (res.status === 401 || res.status === 403) {
+    verdict = "locked";
+    detailKey = "detailLocked";
+  } else if (res.status >= 500) {
+    verdict = "error";
+    detailKey = "detailError";
+  } else if (res.status === 404 || res.status === 405) {
+    verdict = "unknown";
+    detailKey = "detailUnknown";
+  } else if (res.status >= 200 && res.status < 300) {
     const body = (await res.text().catch(() => "")).slice(0, 2048);
     if (/__next_error__|Application error|Internal Server Error/i.test(body)) {
       verdict = "error";
-    } else if (body.trim() === "") {
+      detailKey = "detailError";
+    } else if (policy === "protected") {
+      // An explicit protected policy is checked by the response, even an empty 204.
+      verdict = "exposed";
+      detailKey = "detailPolicyExposed";
+    } else if (policy === "public") {
+      verdict = "public";
+      detailKey = "detailPublic";
+    } else {
       verdict = "check";
+      detailKey = "detailCheck";
     }
+  } else {
+    verdict = "unknown";
+    detailKey = "detailUnknown";
   }
-
-  const detailKey = redirect
-    ? verdict === "locked"
-      ? "detailLockedRedirect"
-      : "detailRedirect"
-    : detailFor(verdict);
 
   return {
     path: route.path,
@@ -143,6 +176,7 @@ async function probeOne(baseUrl: string, route: RouteInfo, config: Config): Prom
     detailVars: redirect
       ? { status: res.status, location: safeLocation(location) }
       : { status: res.status },
+    ...evidence,
   };
 }
 
