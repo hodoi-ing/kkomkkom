@@ -74,6 +74,7 @@
   - Task3 CI 준비 수정(2026-10-23): e2e workflow에 fixture npm ci와 현재 TypeScript runtime range의 명시 npm cache add를 추가, README 한/영 준비명령 정합화. 고유 tarball-only 캐시(메타데이터/index 없음)에서 root/fixture ci 각각exit0인데 packedconsumer offline은 ENOTCACHED exit1 재현 → 명시 registry/cache priming exit0 → 별도 새 consumer offline exit0(TS5.9.3). YAML parse·준비순서·Bash syntax exit0, 새의존성/제품자동설치/prefer-offline fallback 없음. `/tmp/opencode/kk-task3-ci-cache.Ytzjxk` 원본명령/로그, docs/verification-logs/2026-10-23-task3-ci-cache.txt 및 Task3 검증문서 추가절. 승인18+마스킹1/full verify 재실행 없음. 실제fresh GitHub Node20 CI는 총괄 원격/PR 검증 대기, Task4 미착수.
 - [ ] #2 단계 3: 제한된 Next 보호 변경의 미리보기·선택 적용·복원·재검증 설계 및 구현/검수.
   - 현재 착수: 계획 Task4와 구체적 안전 계약(`8d7b1f4`). Task3는 승인했으므로 보호 구현을 시작한다. 테스트는 새 고유 임시 Git fixture만 수정하고, 실제 사용자 프로젝트에는 보호를 적용하지 않는다. 탭2는 39% 컨텍스트에서 새 Sol medium 세션으로 전환해 구현하며 TASKLIST의 검증 완료 기록을 신뢰한다.
+  - Task4 안전엔진 체크포인트(2026-10-23, 탭2): 실제 세션 API `openai/gpt-6.1-sol/medium` 확인. AST token-only preview·tracked HEAD/index/worktree clean+hash 승인 apply·private durable transaction+owned lock·backup/metadata/root/hash 검증 restore 추가. 새 임시Git fixture 회귀 **RED6→GREEN6, 방어 보강 최종9/9 exit0**, 검사기 build exit0. `/tmp/opencode/kk-task4-engine-20261023/`, 상세 `docs/verification-2026-10-23-task4.md`. 다음: CLI argv/runtime·실production verification/rollback·packed 연결. 기존 골든/full verify 재실행·실사용자 적용·push 없음. Task4 `[ ]` 유지, 총괄 안전엔진 검토 후에도 연결 구현 계속.
 - [ ] #2 단계 4: 후속 확장 수요/비용 평가 기록 — 난독화·Electron·모바일 구현은 후속 후보로 유지.
 - [ ] 최종 검수 결과·이슈별 완료/보류/한계 기록, GitHub main과 로컬 HEAD 일치 확인.
 
