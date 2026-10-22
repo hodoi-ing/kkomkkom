@@ -53,6 +53,17 @@ Rule IDs: `artifact-source-map`, `artifact-sensitive-file`, `artifact-client-sec
 - [ ] Reuse secret detection/masking; add limited use-client local static-import tracing with server-only evidence. Unknown alias/dynamic imports produce unsupported coverage, not safe/unsafe guesses. Deduplicate same rule/file/location.
 - [ ] Integrate CLI/MCP JSON/text and all 5 languages from the shared engine. Run tests that assert no build/server/AI/installation occurs in static mode and no source/config/dependency writes. Commit for coordinator review.
 
+### Task 2.1: Close the observed client-information gaps before HTTP
+
+Coordinator reproduction on `e5e6aa3`: a plain `PRIVATE_TOKEN` value from root `.env` embedded verbatim in a client bundle, and a use-client → local module → `@prisma/client` runtime import without a `server-only` marker both returned zero findings and complete coverage. These are issue #2 section C requirements, not additional platforms or protection tools.
+
+**Files:** artifact engine, shared env parsing as needed, artifact tests, five-language messages and README support boundaries.
+
+- [ ] Pin a failing fixture for a non-placeholder sensitive server env value found in a client artifact; report the key/location, never its value. Distinguish this known-value observation (warning/uncertainty where privacy intent is not proven) from provider-key pattern criticals and mere name signals. Public `NEXT_PUBLIC_*` values and ordinary version/URL/example values must not be classified as private solely because they occur in an env file.
+- [ ] Pin AST runtime import evidence for a small documented set of server-specific modules: `pg`, `mysql2`, `@prisma/client`, `firebase-admin`, filesystem/process/network Node modules, `@clerk/nextjs/server`, and the `getServerSession` import from `next-auth`. Keep React/client auth and type-only imports clean. This is potential server-boundary misuse evidence, not proof of a deployed leak. Unknown indirect env keys remain unverified.
+- [ ] Account for the separately validated inspection JSON config in the advertised total/count budget. The smallest safe option is to reserve the loader's maximum 1 MiB and one entry from the 32 MiB/2000 allowance, reuse the actual exported config limit, and document the reservation; no new loader abstraction is necessary.
+- [ ] Run the new targeted regressions, preserve existing masking/readonly contracts, then request coordinator review. Do not repeat completed issue #1 checks.
+
 ### Task 3: Explicit loopback production HTTP and integration costs
 
 **Files:** artifacts/probe HTTP helper as appropriate; CLI/MCP arg validation; artifact/MCP/integration tests; verify script; measurements and support documentation.
