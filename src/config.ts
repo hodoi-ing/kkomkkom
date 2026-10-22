@@ -4,7 +4,7 @@ import { KkomkkomError } from "./errors.js";
 import { ARTIFACT_RULE_IDS } from "./types.js";
 import type { ArtifactException, ArtifactRuleId, Config, HttpMethod, RoutePolicies } from "./types.js";
 
-const CONFIG_LIMIT = 1024 * 1024;
+export const CONFIG_LIMIT = 1024 * 1024;
 
 const METHODS: readonly HttpMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 const METHOD_SET = new Set<string>(METHODS);

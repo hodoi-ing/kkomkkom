@@ -2,10 +2,10 @@ import { open, readdir, realpath, stat } from "node:fs/promises";
 import { dirname, extname, isAbsolute, join, relative, sep } from "node:path";
 import * as ts from "typescript";
 import {
-  envSecretValues, hasHighConfidenceSecret, isEnvEntry, maskSecrets, redactSecrets,
+  envSecretValues, envSensitivePairs, hasHighConfidenceSecret, isEnvEntry, maskSecrets, redactSecrets,
 } from "./audit.js";
 import { runBuild } from "./build.js";
-import { loadConfig } from "./config.js";
+import { CONFIG_LIMIT, loadConfig } from "./config.js";
 import { KkomkkomError } from "./errors.js";
 import { displayPath, isMissing } from "./fs.js";
 import { summarizeCoverage, type RunResult } from "./run.js";
@@ -29,6 +29,10 @@ const MAP_REFERENCE = /sourceMappingURL=([^\s*'"]+)/g;
 const SECRET_NAME =
   /NEXT_PUBLIC_[A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PRIVATE|CREDENTIAL|API_KEY|ACCESS_KEY)[A-Z0-9_]*/;
 const SERVER_ONLY = "server-only";
+const SERVER_MODULES = new Set([
+  "pg", "mysql2", "@prisma/client", "firebase-admin", "node:fs", "fs",
+  "node:child_process", "child_process", "node:net", "net", "@clerk/nextjs/server",
+]);
 
 interface ScanState {
   files: number;
@@ -45,10 +49,14 @@ interface ScanFile {
 
 interface ParsedSource {
   client: boolean;
+  serverAction: boolean;
+  conflictingDirectives: boolean;
   staticSpecifiers: string[];
+  serverSpecifiers: string[];
   serverOnly: boolean;
   dynamicImport: boolean;
   dynamicVariable: boolean;
+  dynamicEnv: boolean;
 }
 
 interface ConfigAnalysis {
@@ -58,6 +66,7 @@ interface ConfigAnalysis {
 
 interface MaskContext {
   values: string[];
+  sensitive: Array<{ key: string; value: string }>;
   complete: boolean;
 }
 
@@ -532,12 +541,26 @@ function parseText(file: string, text: string): ts.SourceFile {
   return ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, scriptKind(file));
 }
 
-function hasUseClient(file: ts.SourceFile): boolean {
+function hasDirective(file: ts.SourceFile, directive: string): boolean {
   for (const statement of file.statements) {
     if (!ts.isExpressionStatement(statement) || !ts.isStringLiteral(statement.expression)) break;
-    if (statement.expression.text === "use client") return true;
+    if (statement.expression.text === directive) return true;
   }
   return false;
+}
+
+function importsGetServerSession(node: ts.ImportDeclaration): boolean {
+  const bindings = node.importClause?.namedBindings;
+  return bindings !== undefined && ts.isNamedImports(bindings) && bindings.elements.some((element) =>
+    !element.isTypeOnly && (element.propertyName ?? element.name).text === "getServerSession");
+}
+
+function isServerRuntimeImport(
+  specifier: string,
+  node: ts.ImportDeclaration | ts.ExportDeclaration | ts.ImportEqualsDeclaration,
+): boolean {
+  if (SERVER_MODULES.has(specifier)) return true;
+  return specifier === "next-auth" && ts.isImportDeclaration(node) && importsGetServerSession(node);
 }
 
 function runtimeSpecifier(node: ts.ImportDeclaration): string | null {
@@ -573,12 +596,18 @@ function isLocalSpecifier(specifier: string): boolean {
 
 function sourceInfo(file: string, text: string): ParsedSource {
   const source = parseText(file, text);
+  const client = hasDirective(source, "use client");
+  const serverAction = hasDirective(source, "use server");
   const parsed: ParsedSource = {
-    client: hasUseClient(source),
+    client,
+    serverAction,
+    conflictingDirectives: client && serverAction,
     staticSpecifiers: [],
+    serverSpecifiers: [],
     serverOnly: false,
     dynamicImport: false,
     dynamicVariable: false,
+    dynamicEnv: false,
   };
 
   for (const statement of source.statements) {
@@ -595,6 +624,10 @@ function sourceInfo(file: string, text: string): ParsedSource {
     if (specifier === null) continue;
     parsed.staticSpecifiers.push(specifier);
     if (isServerOnly(specifier)) parsed.serverOnly = true;
+    if ((ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)
+      || ts.isImportEqualsDeclaration(statement)) && isServerRuntimeImport(specifier, statement)) {
+      parsed.serverSpecifiers.push(specifier);
+    }
   }
 
   const visit = (node: ts.Node): void => {
@@ -604,6 +637,14 @@ function sourceInfo(file: string, text: string): ParsedSource {
         if (isLocalSpecifier(argument.text)) parsed.dynamicImport = true;
       } else {
         parsed.dynamicVariable = true;
+      }
+    }
+    if (ts.isElementAccessExpression(node)) {
+      const target = node.expression;
+      if (ts.isPropertyAccessExpression(target) && target.name.text === "env"
+        && ts.isIdentifier(target.expression) && target.expression.text === "process"
+        && !ts.isStringLiteralLike(node.argumentExpression)) {
+        parsed.dynamicEnv = true;
       }
     }
     ts.forEachChild(node, visit);
@@ -818,6 +859,7 @@ async function scanBoundary(
   boundary: string,
   state: ScanState,
   coverage: CoverageCheck[],
+  envValues: readonly { key: string; value: string }[],
   findings: Map<string, ExtraFinding>,
 ): Promise<boolean> {
   let boundaryReal: string;
@@ -876,6 +918,19 @@ async function scanBoundary(
         "artifact-client-secret", name, "artifact", "confirmed", "critical",
         "artifactClientSecret", { file: name },
       ));
+      continue;
+    }
+    const envKeys = new Set(envValues
+      .filter(({ value }) => text.includes(value))
+      .map(({ key }) => key));
+    if (envKeys.size > 0) {
+      for (const key of envKeys) {
+        add(findings, artifact(
+          "artifact-client-secret", name, "artifact", "uncertain", "warning",
+          "artifactClientEnvValue", { file: name, key },
+          `artifact-client-secret:${name}:env:${key}`,
+        ));
+      }
       continue;
     }
     if (isScriptLike(name) && SECRET_NAME.test(text)) {
@@ -1051,7 +1106,11 @@ async function inspectClientGraph(
     }
     const parsed = sourceInfo(file, text);
     cache.set(file, parsed);
-    if (parsed.client) entries.push(file);
+    if (parsed.conflictingDirectives) {
+      unsupported(coverage, "conflicting-directives", displayPath(root, file));
+    } else if (parsed.client) {
+      entries.push(file);
+    }
   }
   if (entries.length === 0) {
     if (!state.budgetHit && !state.countHit) {
@@ -1091,12 +1150,28 @@ async function inspectClientGraph(
       }
       if (parsed === null) continue;
 
+      const currentDisplay = displayPath(root, current);
+      if (parsed.conflictingDirectives) {
+        unsupported(coverage, "conflicting-directives", currentDisplay);
+        continue;
+      }
+      if (parsed.serverAction) {
+        staticOnly(coverage, "server-action-boundary", currentDisplay);
+        continue;
+      }
+      if (parsed.dynamicEnv) unsupported(coverage, "process-env-dynamic", currentDisplay);
       if (parsed.serverOnly) {
-        const target = displayPath(root, current);
         add(findings, artifact(
           "artifact-server-boundary", client, "source-import", "confirmed", "warning",
-          "artifactServerBoundary", { client, target },
-          `artifact-server-boundary:${client}:${target}`,
+          "artifactServerBoundary", { client, target: currentDisplay },
+          `artifact-server-boundary:${client}:${currentDisplay}`,
+        ));
+      }
+      for (const specifier of parsed.serverSpecifiers) {
+        add(findings, artifact(
+          "artifact-server-boundary", client, "source-import", "uncertain", "warning",
+          "artifactServerImport", { client, target: specifier },
+          `artifact-server-boundary:${client}:import:${specifier}`,
         ));
       }
       if (parsed.dynamicImport) unsupported(coverage, "dynamic-import", displayPath(root, current));
@@ -1149,9 +1224,10 @@ async function loadMaskValues(
     entries = (await readdir(root, { withFileTypes: true })).filter(isEnvEntry);
   } catch {
     failure(coverage, undefined, "masking-context");
-    return { values: [], complete: false };
+    return { values: [], sensitive: [], complete: false };
   }
   const values = new Set<string>();
+  const sensitive = new Map<string, { key: string; value: string }>();
   let complete = true;
   for (const entry of entries) {
     if (state.budgetHit || state.countHit) {
@@ -1181,8 +1257,9 @@ async function loadMaskValues(
       continue;
     }
     for (const value of envSecretValues(text)) values.add(value);
+    for (const pair of envSensitivePairs(text)) sensitive.set(`${pair.key}\u0000${pair.value}`, pair);
   }
-  return { values: [...values], complete };
+  return { values: [...values], sensitive: [...sensitive.values()], complete };
 }
 
 function applyExceptions(
@@ -1223,7 +1300,8 @@ async function inspect(
 ): Promise<ExtraFinding[]> {
   const findings = new Map<string, ExtraFinding>();
   const state: ScanState = {
-    files: 0, bytes: 0, countHit: false, budgetHit: false, reserved: new Set(),
+    // Conservative reservation for loadConfig's 1 MiB allowance and one file entry.
+    files: 1, bytes: CONFIG_LIMIT, countHit: false, budgetHit: false, reserved: new Set(),
   };
   const mask = await loadMaskValues(root, state, coverage);
   const scanStatic = await detectSupport(root, state, coverage, findings);
@@ -1235,14 +1313,14 @@ async function inspect(
   const publicDir = join(root, "public");
   const publicState = await directoryState(publicDir, displayPath(root, publicDir), coverage);
   if (publicState === "yes") {
-    publicScanned = await scanBoundary(root, publicDir, state, coverage, findings);
+    publicScanned = await scanBoundary(root, publicDir, state, coverage, mask.sensitive, findings);
   }
 
   if (scanStatic) {
     const staticDir = join(root, ".next", "static");
     const staticState = await directoryState(staticDir, displayPath(root, staticDir), coverage);
     if (staticState === "yes") {
-      staticScanned = await scanBoundary(root, staticDir, state, coverage, findings);
+      staticScanned = await scanBoundary(root, staticDir, state, coverage, mask.sensitive, findings);
       if (staticScanned) {
         coverage.push({
           rule: "artifacts",
@@ -1263,7 +1341,7 @@ async function inspect(
   }
 
   for (const finding of await inspectClientGraph(root, coverage, state)) {
-    add(findings, finding, `${finding.rule}:${finding.file}`);
+    add(findings, finding, finding.id);
   }
 
   const sorted = [...findings.values()]
