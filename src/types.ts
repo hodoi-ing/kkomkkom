@@ -3,12 +3,15 @@ import type { MessageKey } from "./i18n.js";
 export type Verdict = "locked" | "exposed" | "check" | "public" | "unknown" | "error";
 export type AuthState = "signal" | "none" | "unknown";
 
+export type RouterKind = "app" | "pages";
+
 export interface RouteInfo {
   path: string;
   file: string;
   kind: "api" | "page";
   dynamic: boolean;
   source: string;
+  router: RouterKind;
 }
 
 export interface Finding {
@@ -79,9 +82,16 @@ export type Severity = "critical" | "warning" | "info";
 
 export type ExtraSeverity = "critical" | "warning" | "info";
 
+export interface WriteEvidence {
+  method: HttpMethod;
+  auth: AuthState;
+  policy?: RoutePolicy;
+}
+
 export interface ExtraFinding {
   id: string;
   severity: ExtraSeverity;
   messageKey: MessageKey;
   messageVars?: Record<string, string | number>;
+  evidence?: WriteEvidence[];
 }

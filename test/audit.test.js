@@ -30,8 +30,8 @@ function input(root, routes = [], config = {}, baseUrl = "http://127.0.0.1:1") {
   };
 }
 
-function route(path, source = "", kind = "api", dynamic = false, file = "") {
-  return { path, source, kind, dynamic, file };
+function route(path, source = "", kind = "api", dynamic = false, file = "", router = "app") {
+  return { path, source, kind, dynamic, file, router };
 }
 
 async function serve(t, handler) {
@@ -145,18 +145,23 @@ test("root config and middleware sources are scanned", async (t) => {
   ]);
 });
 
-for (const source of [
-  "export async function POST() {}", "export function PUT() {}", "export const PATCH = () => {}",
-  "export let DELETE = () => {}", "function handler() {}\nexport { handler as POST }",
-  'export default function handler(req, res) { if (req.method === "POST") {} }',
-  "export default function handler(req, res) { if (request.method == 'PATCH') {} }",
-  'export default function handler(req, res) { switch (req.method) { case "DELETE": break; } }',
+for (const [method, source] of [
+  ["POST", "export async function POST() {}"],
+  ["PUT", "export function PUT() {}"],
+  ["PATCH", "export const PATCH = () => {}"],
+  ["DELETE", "export let DELETE = () => {}"],
+  ["POST", "function handler() {}\nexport { handler as POST }"],
+])
+for (const [method, source] of [
+  ["POST", 'export default function handler(req, res) { if (req.method === "POST") {} }'],
+  ["PATCH", "export default function handler(req, res) { if (request.method == 'PATCH') {} }"],
+  ["DELETE", 'export default function handler(req, res) { switch (req.method) { case "DELETE": break; } }'],
 ]) {
   test(`write API without auth warns: ${source}`, async (t) => {
     const root = await fixture(t);
-    assert.deepEqual(await auditProject(input(root, [route("/api/orders", source)])), [{
-      id: "write-no-auth:/api/orders", severity: "warning", messageKey: "extraWriteNoAuth",
-      messageVars: { path: "/api/orders" },
+    assert.deepEqual(await auditProject(input(root, [route("/api/orders", source, "api", false, "", "pages")])), [{
+      id: `write-no-auth:/api/orders:${method}`, severity: "warning", messageKey: "extraWriteNoAuth",
+      messageVars: { path: "/api/orders", method }, evidence: [{ method, auth: "none" }],
     }]);
   });
 }
@@ -176,20 +181,37 @@ test("write auth is not shared between methods", async (t) => {
     route("/api/get-auth", "export function GET(){ auth() }\nexport function POST() {}"),
     route("/api/post-auth", "export function GET() {}\nexport function POST(){ auth() }"),
   ])), [{
-    id: "write-no-auth:/api/get-auth", severity: "warning", messageKey: "extraWriteNoAuth",
-    messageVars: { path: "/api/get-auth" },
+    id: "write-no-auth:/api/get-auth:POST", severity: "warning", messageKey: "extraWriteNoAuth",
+    messageVars: { path: "/api/get-auth", method: "POST" },
+    evidence: [{ method: "POST", auth: "none" }],
   }]);
 });
 
 test("wrapper, re-export and uncalled nested auth stay unknown instead of confirmed no-auth", async (t) => {
   const root = await fixture(t);
-  assert.deepEqual(await auditProject(input(root, [
+  assert.deepEqual((await auditProject(input(root, [
     route("/api/wrapper", "export const POST = withAuth(handler)"),
     route("/api/reexport", 'export { POST } from "./other"'),
     route("/api/nested", "export function POST(){ function inner(){ auth() } }"),
     route("/api/ambiguous", 'export default function handler(req, res) { return res.end("ok") }',
-      "api", false, "/project/pages/api/ambiguous.ts"),
-  ])), []);
+      "api", false, "/project/pages/api/ambiguous.ts", "pages"),
+  ]))).map((finding) => finding.id), [
+    "write-unknown:/api/nested",
+    "write-unknown:/api/reexport",
+    "write-unknown:/api/wrapper",
+  ]);
+});
+
+test("an explicit public write policy is not a warning and keeps static evidence", async (t) => {
+  const root = await fixture(t);
+  const findings = await auditProject(input(root, [
+    route("/api/public", "export function POST() {}\nexport function PUT() {}"),
+  ], { routePolicies: { "/api/public": { POST: "public" } } }));
+  assert.deepEqual(findings, [{
+    id: "write-no-auth:/api/public:PUT", severity: "warning", messageKey: "extraWriteNoAuth",
+    messageVars: { path: "/api/public", method: "PUT" },
+    evidence: [{ method: "PUT", auth: "none" }],
+  }]);
 });
 
 test("comments do not create or hide write APIs", async (t) => {
@@ -198,8 +220,9 @@ test("comments do not create or hide write APIs", async (t) => {
     route("/api/comment-only", "// export { POST }\nexport function GET() {}"),
     route("/api/hidden-write", "// auth()\nexport function POST() {}"),
   ])), [{
-    id: "write-no-auth:/api/hidden-write", severity: "warning", messageKey: "extraWriteNoAuth",
-    messageVars: { path: "/api/hidden-write" },
+    id: "write-no-auth:/api/hidden-write:POST", severity: "warning", messageKey: "extraWriteNoAuth",
+    messageVars: { path: "/api/hidden-write", method: "POST" },
+    evidence: [{ method: "POST", auth: "none" }],
   }]);
 });
 
@@ -210,14 +233,17 @@ test("regex literals do not turn comments into auth", async (t) => {
     route("/api/method-division-comment", 'const half = await Promise.resolve(4).catch(() => 0) / 2; // auth()\nexport function POST() {}'),
     route("/api/regex-comment", 'const quote = /"/; // auth()\nexport function POST() {}'),
   ])), [{
-    id: "write-no-auth:/api/if-regex-comment", severity: "warning", messageKey: "extraWriteNoAuth",
-    messageVars: { path: "/api/if-regex-comment" },
+    id: "write-no-auth:/api/if-regex-comment:POST", severity: "warning", messageKey: "extraWriteNoAuth",
+    messageVars: { path: "/api/if-regex-comment", method: "POST" },
+    evidence: [{ method: "POST", auth: "none" }],
   }, {
-    id: "write-no-auth:/api/method-division-comment", severity: "warning", messageKey: "extraWriteNoAuth",
-    messageVars: { path: "/api/method-division-comment" },
+    id: "write-no-auth:/api/method-division-comment:POST", severity: "warning", messageKey: "extraWriteNoAuth",
+    messageVars: { path: "/api/method-division-comment", method: "POST" },
+    evidence: [{ method: "POST", auth: "none" }],
   }, {
-    id: "write-no-auth:/api/regex-comment", severity: "warning", messageKey: "extraWriteNoAuth",
-    messageVars: { path: "/api/regex-comment" },
+    id: "write-no-auth:/api/regex-comment:POST", severity: "warning", messageKey: "extraWriteNoAuth",
+    messageVars: { path: "/api/regex-comment", method: "POST" },
+    evidence: [{ method: "POST", auth: "none" }],
   }]);
 });
 
@@ -226,8 +252,9 @@ test("arrow function regexes do not turn comments into auth", async (t) => {
   assert.deepEqual(await auditProject(input(root, [
     route("/api/arrow-regex-comment", 'const quote = () => /"/; // auth()\nexport function POST() {}'),
   ])), [{
-    id: "write-no-auth:/api/arrow-regex-comment", severity: "warning", messageKey: "extraWriteNoAuth",
-    messageVars: { path: "/api/arrow-regex-comment" },
+    id: "write-no-auth:/api/arrow-regex-comment:POST", severity: "warning", messageKey: "extraWriteNoAuth",
+    messageVars: { path: "/api/arrow-regex-comment", method: "POST" },
+    evidence: [{ method: "POST", auth: "none" }],
   }]);
 });
 
@@ -240,8 +267,8 @@ test("whitespace or comments around a method name do not break division", async 
     route("/api/comment", source(" /* fallback */ ")),
   ]));
   assert.deepEqual(findings.map((finding) => finding.id), [
-    "write-no-auth:/api/comment",
-    "write-no-auth:/api/space",
+    "write-no-auth:/api/comment:POST",
+    "write-no-auth:/api/space:POST",
   ]);
 });
 
@@ -300,7 +327,7 @@ for (const [status, body, expected] of [
   });
 }
 
-test("page smoke skips ignored and unsampled routes, fills dynamic and catch-all params", async (t) => {
+test("page smoke skips ignored and unsampled routes, fills only supported params", async (t) => {
   const root = await fixture(t);
   const seen = [];
   const base = await serve(t, (req, res) => { seen.push(req.url); res.end("OK"); });
@@ -308,7 +335,20 @@ test("page smoke skips ignored and unsampled routes, fills dynamic and catch-all
     route("/orders/[id]", "", "page", true), route("/docs/[...slug]", "", "page", true)];
   assert.deepEqual(await auditProject(input(root, routes, { ignoreRoutes: ["/ignored"],
     sampleParams: { "/orders/[id]": { id: "42" }, "/docs/[...slug]": { slug: "a/b" } } }, base)), []);
-  assert.deepEqual(seen.sort(), ["/docs/a/b", "/orders/42"]);
+  assert.deepEqual(seen.sort(), ["/orders/42"]);
+});
+
+test("page samples that are exact dot segments or empty never request a fallback path", async (t) => {
+  const root = await fixture(t);
+  const seen = [];
+  const base = await serve(t, (req, res) => { seen.push(req.url); res.end("OK"); });
+  const routes = [route("/orders/[id]", "", "page", true)];
+  for (const params of [{}, { id: "." }, { id: ".." }]) {
+    assert.deepEqual(await auditProject(input(root, routes, {
+      sampleParams: { "/orders/[id]": params },
+    }, base)), []);
+  }
+  assert.deepEqual(seen, []);
 });
 
 test("page connection failure becomes info, not an exception", async (t) => {
@@ -339,8 +379,8 @@ test("findings are deduplicated and sorted by severity then id", async (t) => {
   const routes = [route("/z", "export function POST(){}"), route("/a", "export function PUT(){}"),
     route("/z", "export function POST(){}"), route("/slow", "", "page")];
   assert.deepEqual((await auditProject(input(root, routes, {}, base))).map((f) => f.id), [
-    "hardcoded-secret:src/z.ts:1", "public-secret:NEXT_PUBLIC_TOKEN", "write-no-auth:/a",
-    "write-no-auth:/z", "page-timeout:/slow",
+    "hardcoded-secret:src/z.ts:1", "public-secret:NEXT_PUBLIC_TOKEN", "write-no-auth:/a:PUT",
+    "write-no-auth:/z:POST", "page-timeout:/slow",
   ]);
 });
 

@@ -101,7 +101,7 @@ export async function discoverRoutes(root: string): Promise<RouteInfo[]> {
 
     if (!kind) continue;
     const source = kind === "api" ? await readFile(file, "utf8").catch(() => "") : "";
-    routes.push({ path, file, kind, dynamic: isDynamic(path), source });
+    routes.push({ path, file, kind, dynamic: isDynamic(path), source, router: appRoot ? "app" : "pages" });
   }
 
   const seen = new Set<string>();

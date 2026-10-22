@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import { probeRoutes } from "../dist/probe.js";
 
 function apiRoute(path, source = "", dynamic = false) {
-  return { path, file: "", kind: "api", dynamic, source };
+  return { path, file: "", kind: "api", dynamic, source, router: "app" };
 }
 
 function config(overrides = {}) {
@@ -262,6 +262,36 @@ test("probeRoutes respects ignoreRoutes", async () => {
   await withServer(async (baseUrl, seen) => {
     const findings = await probeRoutes(baseUrl, [apiRoute("/api/health")], config({ ignoreRoutes: ["/api/health"] }));
     assert.equal(findings[0].verdict, "public");
+    assert.equal(seen.length, 0);
+  });
+});
+
+test("an empty sample map or an exact dot segment never requests a fallback path", async () => {
+  await withServer(async (baseUrl, seen) => {
+    const route = apiRoute("/api/orders/[id]", "", true);
+    for (const params of [{}, { id: "." }, { id: ".." }]) {
+      const findings = await probeRoutes(baseUrl, [route], config({
+        sampleParams: { "/api/orders/[id]": params },
+      }));
+      assert.equal(findings[0].verdict, "unknown");
+      assert.equal(findings[0].detailKey, "detailDynamic");
+    }
+    assert.equal(seen.length, 0);
+  });
+});
+
+test("catch-all and optional catch-all samples are unsupported without a request", async () => {
+  await withServer(async (baseUrl, seen) => {
+    const findings = await probeRoutes(baseUrl, [
+      apiRoute("/api/docs/[...slug]", "", true),
+      apiRoute("/api/opt/[[...slug]]", "", true),
+    ], config({
+      sampleParams: {
+        "/api/docs/[...slug]": { slug: "a/b" },
+        "/api/opt/[[...slug]]": { slug: "a" },
+      },
+    }));
+    assert.deepEqual(findings.map((f) => f.verdict), ["unknown", "unknown"]);
     assert.equal(seen.length, 0);
   });
 });

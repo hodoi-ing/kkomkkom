@@ -1,4 +1,5 @@
 import { analyzeRoute, matchesGlob } from "./classify.js";
+import { sampleTarget } from "./params.js";
 import type { MessageKey } from "./i18n.js";
 import type { Config, Finding, RouteInfo, Verdict } from "./types.js";
 
@@ -6,32 +7,6 @@ const TIMEOUT_MS = 8_000;
 const CONCURRENCY = 5;
 const REDIRECT_TIMEOUT_MS = 3_000;
 const MAX_REDIRECT_HOPS = 3;
-const DYNAMIC = /\[\.{0,3}([^\]]+)\]/g;
-
-function encodeSegment(value: string): string | null {
-  try {
-    // Encoding '.' keeps '..' from normalizing the URL path before it is sent.
-    return encodeURIComponent(value).replace(/\./g, "%2E");
-  } catch {
-    return null;
-  }
-}
-
-function fillParams(
-  path: string,
-  params: Record<string, string> | undefined,
-): string | null {
-  let valid = true;
-  const filled = path.replace(DYNAMIC, (match, key: string) => {
-    const value = params?.[key];
-    if (value === undefined) return match;
-    const encoded = encodeSegment(value);
-    if (encoded === null) valid = false;
-    return encoded ?? match;
-  });
-  return valid ? filled : null;
-}
-
 function safeLocation(location: string): string {
   const withoutQuery = location.split(/[?#]/, 1)[0];
   const withoutUserInfo = withoutQuery.replace(/\/\/[^/]*@/, "//");
@@ -107,16 +82,11 @@ async function probeOne(baseUrl: string, route: RouteInfo, config: Config): Prom
     return { path: route.path, verdict: "public", detailKey: "detailIgnored", ...evidence };
   }
 
-  const params = config.sampleParams[route.path];
-  if (route.dynamic && !params) {
+  const sample = sampleTarget(baseUrl, route.path, config.sampleParams[route.path]);
+  if ("reason" in sample) {
     return { path: route.path, verdict: "unknown", detailKey: "detailDynamic", ...evidence };
   }
-
-  const segment = fillParams(route.path, params);
-  if (segment === null) {
-    return { path: route.path, verdict: "unknown", detailKey: "detailDynamic", ...evidence };
-  }
-  const url = baseUrl + segment;
+  const url = sample.url;
   let res: Response;
   try {
     res = await fetch(url, {

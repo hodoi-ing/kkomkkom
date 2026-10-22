@@ -77,3 +77,14 @@ test("discoverRoutes marks dynamic routes", async () => {
   assert.match(dynamic.source, /GET/);
   await rm(root, { recursive: true, force: true });
 });
+
+test("discoverRoutes reports the actual router for a nested pages folder in app", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kkomkkom-router-"));
+  await writeFile(join(root, "package.json"), JSON.stringify({ dependencies: { next: "16.0.0" } }));
+  const file = join(root, "app", "api", "pages", "route.ts");
+  await mkdir(join(file, ".."), { recursive: true });
+  await writeFile(file, "export async function POST() { return Response.json({}) }");
+  const route = (await discoverRoutes(root)).find((item) => item.path === "/api/pages");
+  assert.equal(route?.router, "app");
+  await rm(root, { recursive: true, force: true });
+});

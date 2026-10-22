@@ -149,13 +149,13 @@ test("a warning project check uses the warning banner", () => {
           id: "write-no-auth:/api/orders",
           severity: "warning",
           messageKey: "extraWriteNoAuth",
-          messageVars: { path: "/api/orders" },
+          messageVars: { path: "/api/orders", method: "POST" },
         },
       ],
     },
   );
   assert.match(out, /Check before deploy — 1 warning/);
-  assert.match(out, /\/api\/orders handles writes without an auth check/);
+  assert.match(out, /\/api\/orders \(POST\) handles writes without an auth check/);
   assert.doesNotMatch(out, /Stop the deploy/);
 });
 
