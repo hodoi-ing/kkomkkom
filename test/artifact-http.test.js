@@ -8,6 +8,7 @@ import { spawn } from "node:child_process";
 import { runArtifactCheck } from "../dist/artifacts.js";
 import * as httpEngine from "../dist/artifact-http.js";
 import { LANGS, t as translate } from "../dist/i18n.js";
+import { buildPrompt } from "../dist/explain.js";
 
 const map = Buffer.from('{"version":3,"sources":["a"],"mappings":"AAAA"}');
 const MiB = 1024 * 1024;
@@ -347,4 +348,54 @@ test("production HTTP MCP schema and runtime reject malicious arguments, preserv
   const result = await call("tools/call", { name: "kkomkkom", arguments: { projectPath: root, artifacts: true, productionUrl: url } });
   assert.equal(result.result.isError, false);
   assert.equal(matches({ extras: result.result.structuredContent.extra }).length, 1);
+});
+
+test("production HTTP redaction protects every output metadata field without collapsing observations or raw exceptions", async (t) => {
+  const first = ["private", "credential", "0123456789"].join("-");
+  const second = ["other", "credential", "9876543210"].join("-");
+  const provider = "sk_live_" + "ABCDEFGHIJKLMNOPQRST";
+  const rawMapFile = `public/${first}.js.map`;
+  const root = await project(t, {
+    ".env": `PRIVATE_TOKEN=${first}\nOTHER_TOKEN=${second}\n`,
+    [`public/${first}.bin`]: "ok",
+    [`public/${second}.bin`]: "ok",
+    [`public/${provider}.bin`]: "ok",
+    [rawMapFile]: map,
+    "kkomkkom.config.json": JSON.stringify({ artifactExceptions: [{
+      ruleId: "artifact-source-map", file: rawMapFile, reason: "intentional fixture",
+    }] }),
+  });
+  const { url, requests } = await serve(t, (req, res) => res.end(req.url.endsWith(".map") ? map : "ok"));
+  const noValues = (output) => {
+    for (const value of [first, second, provider]) assert.ok(!output.includes(value));
+  };
+  const result = await runArtifactCheck({ root, productionUrl: url });
+  noValues(JSON.stringify(result));
+  const observed = matches(result);
+  assert.equal(observed.length, 4);
+  assert.equal(new Set(observed.map((finding) => finding.id)).size, 4);
+  assert.equal(observed.filter((finding) => finding.file === "public/[redacted].bin").length, 3);
+  assert.ok(!result.extras.some((finding) => finding.rule === "artifact-source-map"));
+  assert.ok(result.coverage.checks.some((check) => check.status === "ignored"));
+  assert.equal(requests.length, 4);
+  assert.ok(requests.some((request) => request.url.includes(first)));
+  noValues(buildPrompt(result.diff, "en", result.extras));
+
+  for (const args of [["--json"], ["--lang", "ko"]]) {
+    const output = await cli(root, ["--artifacts", "--production-url", url, ...args]);
+    assert.equal(output.status, 0);
+    noValues(`${output.stdout}${output.stderr}`);
+    if (args[0] === "--json") {
+      const payload = JSON.parse(output.stdout);
+      assert.equal(payload.extra.filter((finding) => finding.evidenceKind === "local-production-http").length, 4);
+    }
+  }
+  const call = await rpc(t);
+  const response = await call("tools/call", { name: "kkomkkom", arguments: { projectPath: root, artifacts: true, productionUrl: url } });
+  assert.equal(response.result.isError, false);
+  noValues(JSON.stringify(response));
+  const shared = response.result.structuredContent;
+  assert.equal(matches({ extras: shared.extra }).length, 4);
+  assert.equal(new Set(matches({ extras: shared.extra }).map((finding) => finding.id)).size, 4);
+  noValues(buildPrompt(shared.diff, "en", shared.extra));
 });

@@ -1366,15 +1366,25 @@ async function inspect(
   const sorted = [...findings.values()]
     .sort((a, b) => rank(a.severity) - rank(b.severity) ||
       (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  const masked = sorted.map((finding) => {
-    const target = finding.messageVars?.target;
-    if (typeof target !== "string") return finding;
+  const kept = applyExceptions(sorted, config, coverage, mask);
+  const redact = (value: string): string => maskFreeText(value, mask.values);
+  for (const check of coverage) {
+    if (check.path !== undefined) check.path = redact(check.path);
+    if (check.reason !== undefined) check.reason = redact(check.reason);
+  }
+  return kept.map((finding, index) => {
+    const id = redact(finding.id);
     return {
       ...finding,
-      messageVars: { ...finding.messageVars, target: maskFreeText(target, mask.values) },
+      // Ordinals preserve distinct observations whose secret-bearing paths redact identically.
+      id: id === finding.id ? id : `artifact-redacted-observation:${index + 1}`,
+      ...(finding.file !== undefined ? { file: redact(finding.file) } : {}),
+      ...(finding.messageVars !== undefined ? {
+        messageVars: Object.fromEntries(Object.entries(finding.messageVars)
+          .map(([key, value]) => [key, typeof value === "string" ? redact(value) : value])),
+      } : {}),
     };
   });
-  return applyExceptions(masked, config, coverage, mask);
 }
 
 export async function runArtifactCheck(options: ArtifactRunOptions): Promise<RunResult> {
