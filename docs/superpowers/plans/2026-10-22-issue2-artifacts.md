@@ -78,10 +78,10 @@ Coordinator reproduction on `e5e6aa3`: a plain `PRIVATE_TOKEN` value from root `
 - Bound requests to 50 unique candidates, 5 concurrent, 5 seconds per request and 60 seconds overall. Bound response bodies to 1 MiB each and 32 MiB aggregate HTTP payload; this is a separate response budget from the documented local-file scan reservation. Limits and remaining unverified targets are visible coverage, never silent success.
 - Runtime argument validation, normal/error MCP tools/call, exact-boundary body sizes, binary byte mismatches, empty/missing outputs and all five language messages are part of this task's regressions.
 
-- [ ] Add failing tests for localhost exposure, SPA 200 fallback, redirect, mismatched served content, nonloopback/IP tricks/userinfo, body timeout and budget; prove write requests and auth headers never occur.
-- [ ] Add opt-in local HTTP evidence without starting/reconfiguring unrelated servers. Reuse body limits/cancellation; observation limits remain visible.
-- [ ] Run real Next production build → static inspection → explicit local production HTTP; isolated packed consumer CLI/MCP tools/call normal/input/error tests. Exercise invalid exceptions, missing outputs and masking through explanation input/stdout/stderr/JSON/MCP.
-- [ ] Measure size/time/RSS deltas under the same environment/fixture/cache assumptions. Run relevant regressions plus final npm test/verify; document OS limits and commit for review.
+- [x] Add failing tests for localhost exposure, SPA 200 fallback, redirect, mismatched served content, nonloopback/IP tricks/userinfo, body timeout and budget; prove write requests and auth headers never occur.
+- [x] Add opt-in local HTTP evidence without starting/reconfiguring unrelated servers. Reuse body limits/cancellation; observation limits remain visible.
+- [x] Run real Next production build → static inspection → explicit local production HTTP; isolated packed consumer CLI/MCP tools/call normal/input/error tests. Exercise invalid exceptions, missing outputs and masking through explanation input/stdout/stderr/JSON/MCP.
+- [x] Measure size/time/RSS deltas under the same environment/fixture/cache assumptions. Run relevant regressions plus final npm test/verify; document OS limits and commit for review. Coordinator independently passed 18 HTTP cases, one new metadata regression and scoped production/packed-consumer verification; see Task3 report. Remote CI is still a final integration gate.
 
 ### Task 4: Preview, explicit apply, verified restore for one Next setting
 
