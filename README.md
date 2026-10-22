@@ -290,9 +290,18 @@ kkomkkom --explain          # 설치된 AI CLI로 추가 설명 요청
 
 ```bash
 npm ci
-npm test          # 빌드 + 단위 테스트
-npm run verify    # 빌드 + 단위 테스트 + 실제 Next fixture e2e
+npm test          # 단위 테스트만 필요할 때. verify와 중복 실행할 필요 없음
 ```
+
+실제 Next fixture와 packed consumer까지 검증하려면 다음 준비를 명시적으로 수행합니다(Bash 기준). 준비 단계에서는 npm registry 접근이 필요할 수 있습니다. `verify` 자체는 fixture에 자동 설치하지 않으며, 임시 packed consumer는 준비된 캐시만 `--offline`으로 사용합니다.
+
+```bash
+npm ci --prefix fixtures/mini-app --no-audit --no-fund
+npm cache add "typescript@$(node -p "require('./package.json').dependencies.typescript")"
+npm run verify    # 빌드 + 단위 테스트 + 실제 Next fixture + packed CLI/MCP
+```
+
+root `npm ci`가 lockfile의 tarball을 캐시했더라도, 소비자 설치가 runtime range를 해석할 registry 메타데이터까지 있다고 보장하지 않습니다. `npm cache add`는 현재 runtime 의존성인 TypeScript의 range 메타데이터와 선택된 tarball을 함께 준비합니다. 캐시 부족을 숨기는 `prefer-offline` 네트워크 폴백은 사용하지 않습니다.
 
 오탐·누락을 발견했다면 실제 비밀값을 제거한 최소 예제와 명령, 예상 결과, 실제 결과를 [이슈](https://github.com/hodoi-ing/kkomkkom/issues)에 남겨주세요.
 
@@ -305,6 +314,8 @@ npm run verify    # 빌드 + 단위 테스트 + 실제 Next fixture e2e
 **kkomkkom** is a local CLI and stdio MCP tool for checking Next.js apps before a commit or deployment. It combines unauthenticated HTTP GET probes, source-based auth and secret signals, page error checks, and JS size comparisons against a saved baseline.
 
 The package is not published to npm. Clone an accessible copy of this repository, run `npm ci` and `npm run build`, then run `node /absolute/path/to/kkomkkom/dist/cli.js --fast` from your Next.js app. Replace the absolute path with your local checkout. Remove `--fast` to build and measure JS size. A normal check never writes the baseline; pass `--update` to save a complete result. Incomplete coverage, build failures and missing page measurements are refused, and the existing baseline stays byte-identical.
+
+For repository e2e verification, explicitly run `npm ci --prefix fixtures/mini-app --no-audit --no-fund`, then the `npm cache add` command in the development section before `npm run verify`. These preparation steps may use the registry. Root `npm ci` alone can leave a tarball-only cache without runtime-range metadata. Verification never installs into the fixture, and its temporary packed consumer uses `--offline` with no network fallback; cache priming covers the current TypeScript runtime range and the selected tarball.
 
 For MCP, launch `node /absolute/path/to/kkomkkom/dist/mcp.js`. The tool is named `kkomkkom`; pass the app's absolute `projectPath`. A `tools/call` response includes readable text plus `structuredContent` with `schemaVersion: 2`, `coverage`, `diff`, `extra` and `exitCode`. Tool errors set `isError` and keep the stream usable. There is no MCP update argument, so baseline writes stay a CLI operation. `reuse` does not verify that the running server belongs to the project and records `server`/`unsupported` coverage. Individual agent connection tests are deferred, not completed.
 
