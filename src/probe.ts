@@ -169,8 +169,12 @@ async function probeOne(
         detailVars: { status: res.status }, ...evidence,
       };
     }
-  } else {
+  } else if (res.status === 401 || res.status === 403 || res.status >= 500 || redirect) {
     check("checked", "response");
+    await res.body?.cancel().catch(() => {});
+  } else {
+    // A 400/408/429-style response does not confirm the GET check.
+    check("failed", `http-${res.status}`);
     await res.body?.cancel().catch(() => {});
   }
 

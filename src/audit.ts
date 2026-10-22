@@ -3,6 +3,7 @@ import type { Dirent } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { extname, join, relative, sep } from "node:path";
 import { analyzeRoute, matchesGlob } from "./classify.js";
+import { displayPath, isMissing } from "./fs.js";
 import { readBody } from "./http.js";
 import { sampleTarget } from "./params.js";
 import type {
@@ -39,6 +40,25 @@ function isEnvEntry(entry: Dirent): boolean {
   );
 }
 
+function recordReadFailure(root: string, path: string, coverage?: CoverageCheck[]): void {
+  coverage?.push({
+    rule: "secrets", path: displayPath(root, path), status: "failed", reason: "read",
+  });
+}
+
+async function readSourceText(
+  root: string,
+  path: string,
+  coverage?: CoverageCheck[],
+): Promise<string> {
+  try {
+    return await readFile(path, "utf8");
+  } catch (error) {
+    if (!isMissing(error)) recordReadFailure(root, path, coverage);
+    return "";
+  }
+}
+
 async function envEntries(root: string): Promise<Dirent[]> {
   const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
   return entries.filter(isEnvEntry);
@@ -69,19 +89,35 @@ function git(root: string, args: string[]): Promise<{ code: number | null; stdou
   });
 }
 
-async function scanSources(dir: string, files: string[]): Promise<void> {
-  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+async function scanSources(
+  dir: string,
+  root: string,
+  files: string[],
+  coverage?: CoverageCheck[],
+): Promise<void> {
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch (error) {
+    if (!isMissing(error)) recordReadFailure(root, dir, coverage);
+    return;
+  }
   for (const entry of entries) {
     if (entry.name.startsWith(".") || SKIP_DIRS.has(entry.name)) continue;
     const path = join(dir, entry.name);
-    if (entry.isDirectory()) await scanSources(path, files);
+    if (entry.isDirectory()) await scanSources(path, root, files, coverage);
     else if (entry.isFile() && SOURCE_EXTENSIONS.has(extname(entry.name))) files.push(path);
   }
 }
 
-async function auditSecrets(root: string): Promise<ExtraFinding[]> {
+async function auditSecrets(root: string, coverage?: CoverageCheck[]): Promise<ExtraFinding[]> {
   const findings: ExtraFinding[] = [];
-  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+  let entries: Dirent[] = [];
+  try {
+    entries = await readdir(root, { withFileTypes: true });
+  } catch (error) {
+    if (!isMissing(error)) recordReadFailure(root, root, coverage);
+  }
   const envFiles = entries.filter(isEnvEntry);
   const repo = await git(root, ["rev-parse", "--is-inside-work-tree"]);
   const inGit = repo.code === 0 && repo.stdout.trim() === "true";
@@ -103,7 +139,7 @@ async function auditSecrets(root: string): Promise<ExtraFinding[]> {
       }
     }
 
-    const content = await readFile(join(root, file), "utf8").catch(() => "");
+    const content = await readSourceText(root, join(root, file), coverage);
     for (const { key, value } of envPairs(content)) {
       if (key.startsWith("NEXT_PUBLIC_") && PUBLIC_SECRET.test(key) &&
           value.trim() !== "" && !PLACEHOLDER.test(value)) publicKeys.add(key);
@@ -116,13 +152,13 @@ async function auditSecrets(root: string): Promise<ExtraFinding[]> {
   }
 
   const files: string[] = [];
-  for (const dir of SOURCE_DIRS) await scanSources(join(root, dir), files);
+  for (const dir of SOURCE_DIRS) await scanSources(join(root, dir), root, files, coverage);
   for (const entry of entries) {
     if (entry.isFile() && /^(middleware|next\.config)\./.test(entry.name) &&
         SOURCE_EXTENSIONS.has(extname(entry.name))) files.push(join(root, entry.name));
   }
   for (const path of files) {
-    const content = await readFile(path, "utf8").catch(() => "");
+    const content = await readSourceText(root, path, coverage);
     const file = relative(root, path).split(sep).join("/");
     const lines = content.split(/\r?\n/);
     for (let index = 0; index < lines.length; index += 1) {
@@ -290,12 +326,16 @@ export async function auditProject(
   input: AuditInput,
   coverage: CoverageCheck[] = [],
 ): Promise<ExtraFinding[]> {
+  const before = coverage.length;
+  const secretFindings = await auditSecrets(input.root, coverage);
+  if (coverage.length === before) {
+    coverage.push({ rule: "secrets", status: "checked", reason: "source-scan" });
+  }
   const findings = [
-    ...await auditSecrets(input.root),
+    ...secretFindings,
     ...auditWrites(input.routes, input.config, coverage),
     ...await auditPages(input, coverage),
   ];
-  coverage.push({ rule: "secrets", status: "checked", reason: "source-scan" });
   const rank = { critical: 0, warning: 1, info: 2 };
   return [...new Map(findings.map((finding) => [finding.id, finding])).values()]
     .sort((a, b) => rank[a.severity] - rank[b.severity] || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));

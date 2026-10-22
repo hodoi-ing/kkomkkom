@@ -178,6 +178,42 @@ test("a statically GET-less POST-only route answering 405 is complete scope", as
   assert.equal(result.exitCode, 0);
 });
 
+test("an unconfirmed 4xx status is incomplete coverage and fails --strict", async (t) => {
+  const root = await project(t, "ok", 429);
+  const result = await runCheck({ root, fast: true, strict: true, port: await freePort() });
+  assert.equal(result.coverage.status, "incomplete");
+  assert.ok(result.coverage.checks.some(
+    (check) => check.rule === "api-auth" && check.status === "failed" &&
+      check.reason === "http-429",
+  ));
+  assert.equal(result.exitCode, 1);
+});
+
+test("an unreadable secret source fails strict and refuses update without touching the baseline", async (t) => {
+  const root = await project(t, "ok");
+  const file = join(root, "lib", "private.ts");
+  await mkdir(join(root, "lib"), { recursive: true });
+  await writeFile(file, "export const token = 'sk_live_' + 'FAKE0123456789'.repeat(3);");
+  const raw = legacyBaseline();
+  await writeBaselineRaw(root, raw);
+  await chmod(file, 0o000);
+
+  const strict = await runCheck({ root, fast: true, strict: true, port: await freePort() });
+  assert.equal(strict.coverage.status, "incomplete");
+  assert.ok(strict.coverage.checks.some(
+    (check) => check.rule === "secrets" && check.status === "failed" &&
+      check.reason === "read" && check.path === "lib/private.ts",
+  ));
+  assert.equal(strict.exitCode, 1);
+
+  const updatePort = await freePort();
+  await assert.rejects(
+    () => runCheck({ root, fast: true, update: true, port: updatePort }),
+    (error) => error.key === "errUpdateRefused",
+  );
+  assert.equal(await readFile(baselineFile(root), "utf8"), raw);
+});
+
 test("CLI JSON exposes schemaVersion 2 and coverage", async (t) => {
   const { execFile } = await import("node:child_process");
   const { promisify } = await import("node:util");
