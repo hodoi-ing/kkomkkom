@@ -1,0 +1,90 @@
+# Artifact rework measurements — 2026-10-22
+
+Commit under test: e5e6aa3 (issue2/artifacts)
+Environment: Linux/WSL2, Node v26.10.0, npm 12.1.0, warm npm cache
+Fixture: fixtures/mini-app copied to /tmp/kk-rw.5kylgk/fixture (492 MB with node_modules/.next)
+Purpose: replace the 640-line prototype post-feature numbers with current reproducible observations.
+
+## Package
+
+Command from repository root:
+  npm pack --dry-run --ignore-scripts --json
+
+Parsed output (npm returns a keyed object in this version):
+  name=kkomkkom version=0.1.0 size=68477 unpackedSize=240309 entryCount=49 files=49
+
+Reference rows kept in docs/measurements-2026-10-22.md:
+  pre-feature (df10e36): 52950 B compressed, 171022 B unpacked, 47 entries
+  prototype Task 2:      62545 B compressed, 211124 B unpacked, 49 entries (not current)
+
+Tarball used for the install:
+  npm pack --ignore-scripts --pack-destination /tmp/kk-pack
+  /tmp/kk-pack/kkomkkom-0.1.0.tgz
+
+## Production consumer install
+
+  rm -rf /tmp/kk-consumer && mkdir /tmp/kk-consumer
+  cd /tmp/kk-consumer && printf '{"name":"kk-consumer","private":true}\n' > package.json
+  /usr/bin/time -v npm install --omit=dev --ignore-scripts --prefer-offline --no-audit --no-fund /tmp/kk-pack/kkomkkom-0.1.0.tgz
+
+Observed:
+  added 2 packages in 509ms
+  Elapsed (wall clock) time: 0:00.56
+  Maximum resident set size (kbytes): 196592
+  du -sb node_modules: 23866468
+  find node_modules -maxdepth 1 -mindepth 1 | wc -l: 4 (scoped dir + 2 packages + .package-lock)
+  typescript contribution (from the earlier log): 23625066
+  package's installed bytes: 23866468 - 23625066 = 241402
+
+Pre-feature install: 0.53 s, 195744 KB RSS, 23797200 B node_modules.
+Prototype install:    0.61 s, 207312 KB RSS, 23837307 B node_modules (not current).
+
+## Fixed fixture — static artifacts
+
+  cp -a fixtures/mini-app /tmp/kk-rw.5kylgk/fixture
+  cd /tmp/kk-rw.5kylgk/fixture
+  /usr/bin/time -v node /home/dev/workspace/next-preflight/dist/cli.js --artifacts --json
+
+Observed:
+  exit 0
+  Elapsed (wall clock) time: 0:00.83
+  Maximum resident set size (kbytes): 197768
+  coverage.status=complete
+  counts: checked=2, static-only=2, ignored=0, skipped=0, failed=0, unsupported=0
+  extra findings: 0
+
+Prototype static: 0.21 s, 121832 KB RSS (not current).
+
+## Fixed fixture — explicit fresh build
+
+  cd /tmp/kk-rw.5kylgk/fixture
+  /usr/bin/time -v node /home/dev/workspace/next-preflight/dist/cli.js --artifacts --fresh --json
+
+Observed:
+  exit 0
+  Elapsed (wall clock) time: 0:04.70
+  Maximum resident set size (kbytes): 937884
+  coverage.status=complete
+  counts: checked=4, static-only=1, ignored=0, skipped=0, failed=0, unsupported=0
+  build coverage: checked/build
+  extra findings: 0
+
+Prototype fresh: 1.74 s, 370696 KB RSS (not current).
+
+## Static read I/O evidence
+
+Command on the same fixture after adding a root .env and kkomkkom.config.json:
+  strace -f -e trace=openat -o io-context.strace node dist/cli.js --artifacts --json
+
+Opened project paths confirmed:
+  /tmp/kk-rw.5kylgk/fixture/.env
+  /tmp/kk-rw.5kylgk/fixture/kkomkkom.config.json
+
+The unmodified fixture has neither file, so its run only lists the project root for them. The same strace run opened:
+  .next/BUILD_ID
+  .next/static/** (manifest files and chunks)
+  app/** source files used for the use-client graph
+  lib/auth.ts (resolved local import)
+  typescript runtime from the installed package
+
+No public/ directory exists in this fixture. No .next/server, next.config.* or source-map target content was opened.
