@@ -27,7 +27,9 @@ function fillPath(
       return "";
     }
     const value = params?.[single];
-    if (value === undefined) {
+    // An empty segment would fall back to a sibling route (for example
+    // /orders/[id] becoming /orders/), so it is a missing sample.
+    if (value === undefined || value === "") {
       failure ??= "missing";
       return "";
     }

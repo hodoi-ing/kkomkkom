@@ -149,7 +149,21 @@ function auditWrites(
       continue;
     }
 
-    const writes = Object.values(analyzeRoute(route).methods).filter(
+    const analysis = analyzeRoute(route);
+    if (analysis.unsupported) {
+      coverage.push({
+        rule: "write-auth", path: route.path, status: "unsupported", reason: "unsupported-handler",
+      });
+      findings.push({
+        id: `write-unsupported:${route.path}`,
+        severity: "info",
+        messageKey: "extraWriteUnsupported",
+        messageVars: { path: route.path },
+      });
+      continue;
+    }
+
+    const writes = Object.values(analysis.methods).filter(
       (method) => method !== undefined && WRITES.has(method.method),
     );
     if (writes.length === 0) continue;
@@ -159,12 +173,15 @@ function auditWrites(
       return { method: method.method, auth: method.state, ...(policy ? { policy } : {}) };
     });
     for (const item of evidence) {
+      const explicitPublic = item.policy === "public";
       coverage.push({
         rule: "write-auth",
         path: route.path,
         method: item.method,
-        status: "static-only",
-        reason: item.policy === "public" ? "explicit-public" : item.auth,
+        // Unproven flows stay visible as unsupported; only explicit public
+        // policy makes an unknown flow a completed static check.
+        status: item.auth === "unknown" && !explicitPublic ? "unsupported" : "static-only",
+        reason: explicitPublic ? "explicit-public" : item.auth,
       });
     }
 
@@ -205,7 +222,7 @@ async function smokePage(
     coverage.push({
       rule: "page-smoke",
       path: route.path,
-      status: sample.reason === "missing" ? "skipped" : "unsupported",
+      status: sample.reason === "missing" ? "failed" : "unsupported",
       reason: `sample-${sample.reason}`,
     });
     return null;
@@ -219,9 +236,16 @@ async function smokePage(
       headers: { "user-agent": "kkomkkom/0.1" },
     });
     let error = res.status >= 500;
+    let limited = false;
     if (res.status >= 200 && res.status < 300) {
-      const body = (await readBody(res, 8192).catch(() => "")).toLowerCase();
-      error = /__next_error__|application error|internal server error/.test(body);
+      try {
+        const read = await readBody(res, 8192);
+        limited = read.truncated;
+        error = /__next_error__|application error|internal server error/.test(read.text.toLowerCase());
+      } catch {
+        coverage.push({ rule: "page-smoke", path: route.path, status: "failed", reason: "body-read" });
+        return null;
+      }
     } else {
       await res.body?.cancel().catch(() => {});
     }
@@ -229,7 +253,7 @@ async function smokePage(
       rule: "page-smoke",
       path: route.path,
       status: error ? "failed" : "checked",
-      reason: error ? `status-${res.status}` : "response",
+      reason: error ? `status-${res.status}` : limited ? "response-limited" : "response",
     });
     if (error) return { id: `page-error:${route.path}`, severity: "warning",
       messageKey: "extraPageError", messageVars: { path: route.path, status: res.status } };

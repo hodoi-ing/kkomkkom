@@ -216,7 +216,7 @@ test("tools/call returns structured coverage and concurrent calls stay ordered",
     const response = await server.next(20000);
     assert.equal(response.id, 50);
     assert.equal(response.result.structuredContent.schemaVersion, 2);
-    assert.equal(response.result.structuredContent.coverage.status, "incomplete");
+    assert.equal(response.result.structuredContent.coverage.status, "complete");
     assert.ok(Array.isArray(response.result.structuredContent.extra));
 
     server.send({ jsonrpc: "2.0", id: 51, method: "tools/call",

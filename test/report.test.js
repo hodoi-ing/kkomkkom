@@ -180,21 +180,21 @@ test("an info project check is shown without blocking", () => {
 });
 
 test("an incomplete or empty scope never shows the pass banner", () => {
-  const checks = (states) => ({
-    status: states.includes("checked") ? "incomplete" : "empty",
+  const coverage = (status) => ({
+    status,
     checks: [],
-    counts: { checked: 0, "static-only": 0, ignored: 0, skipped: 0, failed: 0, unsupported: 0 },
+    counts: { checked: 1, "static-only": 0, ignored: 0, skipped: 0, failed: 1, unsupported: 0 },
   });
   const incomplete = renderReport(
     { firstRun: false, routes: [], pages: [] },
-    { lang: "en", color: false, coverage: checks(["checked", "ignored"]) },
+    { lang: "en", color: false, coverage: coverage("incomplete") },
   );
   assert.doesNotMatch(incomplete, /No blocking problems in the checked scope/);
   assert.match(incomplete, /Check scope is incomplete/);
 
   const empty = renderReport(
     { firstRun: false, routes: [], pages: [] },
-    { lang: "ko", color: false, coverage: checks(["ignored"]) },
+    { lang: "ko", color: false, coverage: coverage("empty") },
   );
   assert.doesNotMatch(empty, /검사한 범위에서 차단 문제가 없습니다/);
   assert.match(empty, /유의미한 검사를 하나도 하지 못했습니다/);

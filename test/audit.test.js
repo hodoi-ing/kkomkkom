@@ -145,21 +145,37 @@ test("root config and middleware sources are scanned", async (t) => {
   ]);
 });
 
-for (const [method, source] of [
+const appWriteCases = [
   ["POST", "export async function POST() {}"],
   ["PUT", "export function PUT() {}"],
   ["PATCH", "export const PATCH = () => {}"],
   ["DELETE", "export let DELETE = () => {}"],
   ["POST", "function handler() {}\nexport { handler as POST }"],
-])
-for (const [method, source] of [
+];
+const pagesWriteCases = [
   ["POST", 'export default function handler(req, res) { if (req.method === "POST") {} }'],
   ["PATCH", "export default function handler(req, res) { if (request.method == 'PATCH') {} }"],
   ["DELETE", 'export default function handler(req, res) { switch (req.method) { case "DELETE": break; } }'],
-]) {
-  test(`write API without auth warns: ${source}`, async (t) => {
+];
+
+for (const [method, source] of appWriteCases) {
+  test(`app write API without auth warns: ${source}`, async (t) => {
     const root = await fixture(t);
-    assert.deepEqual(await auditProject(input(root, [route("/api/orders", source, "api", false, "", "pages")])), [{
+    assert.deepEqual(await auditProject(input(root, [
+      route("/api/orders", source, "api", false, "app/api/orders/route.ts", "app"),
+    ])), [{
+      id: `write-no-auth:/api/orders:${method}`, severity: "warning", messageKey: "extraWriteNoAuth",
+      messageVars: { path: "/api/orders", method }, evidence: [{ method, auth: "none" }],
+    }]);
+  });
+}
+
+for (const [method, source] of pagesWriteCases) {
+  test(`pages write API without auth warns: ${source}`, async (t) => {
+    const root = await fixture(t);
+    assert.deepEqual(await auditProject(input(root, [
+      route("/api/orders", source, "api", false, "pages/api/orders.ts", "pages"),
+    ])), [{
       id: `write-no-auth:/api/orders:${method}`, severity: "warning", messageKey: "extraWriteNoAuth",
       messageVars: { path: "/api/orders", method }, evidence: [{ method, auth: "none" }],
     }]);
@@ -196,10 +212,25 @@ test("wrapper, re-export and uncalled nested auth stay unknown instead of confir
     route("/api/ambiguous", 'export default function handler(req, res) { return res.end("ok") }',
       "api", false, "/project/pages/api/ambiguous.ts", "pages"),
   ]))).map((finding) => finding.id), [
-    "write-unknown:/api/ambiguous",
     "write-unknown:/api/nested",
     "write-unknown:/api/reexport",
     "write-unknown:/api/wrapper",
+    "write-unsupported:/api/ambiguous",
+  ]);
+});
+
+test("an uninterpretable pages handler is unsupported coverage, not a hidden or fake method list", async (t) => {
+  const root = await fixture(t);
+  const coverage = [];
+  const findings = await auditProject(input(root, [
+    route("/api/opaque", "export default handler", "api", false, "pages/api/opaque.ts", "pages"),
+  ]), coverage);
+  assert.deepEqual(findings, [{
+    id: "write-unsupported:/api/opaque", severity: "info", messageKey: "extraWriteUnsupported",
+    messageVars: { path: "/api/opaque" },
+  }]);
+  assert.deepEqual(coverage.filter((check) => check.rule === "write-auth"), [
+    { rule: "write-auth", path: "/api/opaque", status: "unsupported", reason: "unsupported-handler" },
   ]);
 });
 
@@ -344,12 +375,12 @@ test("page smoke skips ignored and unsampled routes, fills only supported params
   assert.deepEqual(seen.sort(), ["/orders/42"]);
 });
 
-test("page samples that are exact dot segments or empty never request a fallback path", async (t) => {
+test("page samples with absent, undefined, empty or dot values never request a fallback path", async (t) => {
   const root = await fixture(t);
   const seen = [];
   const base = await serve(t, (req, res) => { seen.push(req.url); res.end("OK"); });
   const routes = [route("/orders/[id]", "", "page", true)];
-  for (const params of [{}, { id: "." }, { id: ".." }]) {
+  for (const params of [{}, { id: undefined }, { id: "" }, { id: "." }, { id: ".." }]) {
     assert.deepEqual(await auditProject(input(root, routes, {
       sampleParams: { "/orders/[id]": params },
     }, base)), []);
@@ -434,10 +465,36 @@ test("coverage records page success, exclusion, missing sample, timeout and writ
   const page = (path) => coverage.find((check) => check.rule === "page-smoke" && check.path === path);
   assert.deepEqual(page("/ok"), { rule: "page-smoke", path: "/ok", status: "checked", reason: "response" });
   assert.deepEqual(page("/ignored"), { rule: "page-smoke", path: "/ignored", status: "ignored", reason: "ignoreRoutes" });
-  assert.deepEqual(page("/missing/[id]"), { rule: "page-smoke", path: "/missing/[id]", status: "skipped", reason: "sample-missing" });
+  assert.deepEqual(page("/missing/[id]"), { rule: "page-smoke", path: "/missing/[id]", status: "failed", reason: "sample-missing" });
   assert.deepEqual(page("/slow"), { rule: "page-smoke", path: "/slow", status: "failed", reason: "timeout" });
   assert.deepEqual(
     coverage.find((check) => check.rule === "write-auth" && check.path === "/api/wrapper"),
-    { rule: "write-auth", path: "/api/wrapper", method: "POST", status: "static-only", reason: "unknown" },
+    { rule: "write-auth", path: "/api/wrapper", method: "POST", status: "unsupported", reason: "unknown" },
   );
+});
+
+test("an explicitly public write is still static-only coverage even when auth is unknown", async (t) => {
+  const root = await fixture(t);
+  const coverage = [];
+  await auditProject(input(root, [
+    route("/api/wrapper", "export const POST = withAuth(handler)"),
+  ], { routePolicies: { "/api/wrapper": { POST: "public" } } }), coverage);
+  assert.deepEqual(coverage.filter((check) => check.rule === "write-auth"), [
+    { rule: "write-auth", path: "/api/wrapper", method: "POST", status: "static-only", reason: "explicit-public" },
+  ]);
+});
+
+test("a page body cut off in transit is failed, not checked", async (t) => {
+  const root = await fixture(t);
+  const base = await serve(t, (_req, res) => {
+    res.writeHead(200, { "content-length": "9999", "content-type": "text/html" });
+    res.write("<html>");
+    setTimeout(() => res.destroy(), 30);
+  });
+  const coverage = [];
+  const findings = await auditProject(input(root, [route("/cut", "", "page")], {}, base), coverage);
+  assert.deepEqual(findings, []);
+  assert.deepEqual(coverage.filter((check) => check.rule === "page-smoke"), [
+    { rule: "page-smoke", path: "/cut", status: "failed", reason: "body-read" },
+  ]);
 });

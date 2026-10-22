@@ -40,17 +40,20 @@ export function summarizeCoverage(checks: CoverageCheck[]): CoverageSummary {
   for (const check of checks) counts[check.status] += 1;
 
   // Secrets and build are not route coverage; route checks decide empty.
+  // Ignored and skipped are deliberate scope choices (ignoreRoutes, --fast,
+  // a statically GET-less route). Missing evidence is failed/unsupported.
   const routeChecks = checks.filter((check) => check.rule !== "secrets" && check.rule !== "build");
   const completed = routeChecks.filter(
     (check) => check.status === "checked" || check.status === "static-only",
   ).length;
-  const attempted = completed + routeChecks.filter(
+  const problems = routeChecks.filter(
     (check) => check.status === "failed" || check.status === "unsupported",
   ).length;
+  const attempted = completed + problems;
 
   const status: CoverageSummary["status"] = attempted === 0
     ? "empty"
-    : counts.ignored + counts.skipped + counts.failed + counts.unsupported > 0
+    : problems > 0
       ? "incomplete"
       : "complete";
   return { status, checks, counts };
