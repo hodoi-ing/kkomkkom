@@ -32,7 +32,11 @@
   - 최종 통합: `npm run verify` exit 0, 197 unit/regression + production/MCP/pack e2e, tarball 52,950B·설치 558ms(로컬 캐시). 로그 `docs/verification-logs/2026-10-22-npm-verify.txt`. `npm test`는 verify에 포함되어 별도 실행하지 않음.
 - [x] #1: 총괄 독립 검수·재작업·GitHub 반영·로컬 동기화 — `eff3a0b` main 통합, CI `39769591137` Node 20/22/24+e2e success, 로컬 HEAD=origin/main 및 clean 확인. 이슈 #1 우선 항목 9개 체크 후 completed로 종료(공개 전환·배포 없음).
 - [ ] #2 단계 0: 설치 크기·시간·메모리·네트워크 실측 기준선 및 계약 정리.
+  - 2026-10-22: 측정·계약 기록을 `770400e`로 커밋. pre/post pack 52,950B/62,545B, `--fast` 2.18s/480,984KB, full build 6.46s/987,676KB, `--artifacts` 0.21s/121,832KB. 총괄 검수 전이므로 `[ ]` 유지. 원본 로그 `docs/measurement-logs/2026-10-22-baseline.txt`.
 - [ ] #2 단계 1: Next production 배포물 점검 설계·구현·검수 (소스맵/배포 파일/클라이언트 비밀정보/지원 범위).
+  - 2026-10-22 재작업: 정규식 import/config 판별을 TypeScript AST로 교체. type-only import/export 제외, 주석·문자열 가짜 신호 무시, 변수 dynamic import·config shorthand/wrapper/spread/conditional/computed는 `unsupported`. canonical root+realpath 경계, fd 기반 1MiB/32MiB/2000개 공유 상한, symlink loop/escape·EACCES 노출, BUILD_ID 관찰(`build-id-present`)과 `diff.firstRun:false`. 소스맵은 유효한 JSON/data URL만 경고하고 `sourcesContent` 여부를 구분하며, 참조 target의 query/hash와 userinfo를 제거. 민감한 파일명/키 이름만으로는 critical을 만들지 않고 고신뢰 패턴만 critical.
+  - 검증: focused `node --test test/artifacts.test.js` 30/30 pass. 실제 fixture `/tmp/kk-measure.8eEpZh/fixture`에서 `--artifacts --json` exit 0/complete(0.52s), `--artifacts --fresh --json` exit 0/complete(1.95s, `build` checked, `fresh-build` checked). 전체 `npm test` 227 pass / 0 fail. 총괄 검수 전이므로 `[ ]` 유지; 원격 push 금지.
+  - 남은 확인: 총괄 독립검수, 실제 production HTTP·custom distDir/export/standalone·모노레포·Windows/macOS는 미검증. `artifactExceptions`는 정확한 rule/file만 억제하며 coverage에 남김.
 - [ ] #2 단계 2: production 산출물·opt-in 로컬 운영 서버·경계 사례·소비자 CLI/MCP 검증과 비용 비교.
 - [ ] #2 단계 3: 제한된 Next 보호 변경의 미리보기·선택 적용·복원·재검증 설계 및 구현/검수.
 - [ ] #2 단계 4: 후속 확장 수요/비용 평가 기록 — 난독화·Electron·모바일 구현은 후속 후보로 유지.

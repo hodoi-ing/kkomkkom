@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { KkomkkomError } from "./errors.js";
-import type { Config, HttpMethod, RoutePolicies } from "./types.js";
+import { ARTIFACT_RULE_IDS } from "./types.js";
+import type { ArtifactException, ArtifactRuleId, Config, HttpMethod, RoutePolicies } from "./types.js";
 
 const METHODS: readonly HttpMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 const METHOD_SET = new Set<string>(METHODS);
@@ -13,6 +14,7 @@ export const DEFAULT_CONFIG: Config = {
   port: 3100,
   thresholds: { jsPercent: 15, jsBytes: 30000 },
   routePolicies: {},
+  artifactExceptions: [],
 };
 
 function defaults(): Config {
@@ -22,6 +24,7 @@ function defaults(): Config {
     port: DEFAULT_CONFIG.port,
     thresholds: { ...DEFAULT_CONFIG.thresholds },
     routePolicies: {},
+    artifactExceptions: [],
   };
 }
 
@@ -99,6 +102,33 @@ function routePolicies(value: unknown): RoutePolicies {
   return out;
 }
 
+const ARTIFACT_RULES = new Set<string>(ARTIFACT_RULE_IDS);
+
+function relativeArtifactPath(value: unknown, field: string): string {
+  if (typeof value !== "string" || value === "") fail(field);
+  const segments = value.split("/");
+  if (value.startsWith("/") || /^[A-Za-z]:/.test(value) || value.includes("\\") ||
+      segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
+    fail(field);
+  }
+  return value;
+}
+
+function artifactExceptions(value: unknown): ArtifactException[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) fail("artifactExceptions");
+  return value.map((entry, index) => {
+    const field = `artifactExceptions[${index}]`;
+    if (!isPlainObject(entry)) fail(field);
+    if (typeof entry.ruleId !== "string" || !ARTIFACT_RULES.has(entry.ruleId)) {
+      fail(`${field}.ruleId`);
+    }
+    const file = relativeArtifactPath(entry.file, `${field}.file`);
+    if (typeof entry.reason !== "string" || entry.reason.trim() === "") fail(`${field}.reason`);
+    return { ruleId: entry.ruleId as ArtifactRuleId, file, reason: entry.reason };
+  });
+}
+
 export async function loadConfig(root: string): Promise<Config> {
   let raw: string;
   try {
@@ -127,5 +157,6 @@ export async function loadConfig(root: string): Promise<Config> {
     port: parsed.port === undefined ? base.port : port(parsed.port),
     thresholds: thresholds(parsed.thresholds),
     routePolicies: routePolicies(parsed.routePolicies),
+    artifactExceptions: artifactExceptions(parsed.artifactExceptions),
   };
 }

@@ -37,6 +37,7 @@ test("missing config returns isolated defaults", async (t) => {
     port: 3100,
     thresholds: { jsPercent: 15, jsBytes: 30000 },
     routePolicies: {},
+    artifactExceptions: [],
   });
   first.ignoreRoutes.push("/api/x");
   first.thresholds.jsBytes = 1;
@@ -65,6 +66,7 @@ test("valid config is merged with defaults", async (t) => {
       "/api/health": { GET: "public" },
       "/api/orders/[id]": { GET: "protected", POST: "protected" },
     },
+    artifactExceptions: [],
   });
 });
 

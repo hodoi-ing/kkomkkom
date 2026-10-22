@@ -151,7 +151,8 @@ export function renderReport(diff: Diff, options: ReportOptions): string {
     for (const extra of extras) {
       const tone = extra.severity === "critical" ? RED : extra.severity === "warning" ? YELLOW : DIM;
       const icon = extra.severity === "critical" ? "🔴" : extra.severity === "warning" ? "🟡" : "⚪";
-      lines.push(paint(`  ${icon} ${t(lang, extra.messageKey, extra.messageVars)}`, tone, color));
+      const rule = extra.rule ? ` [${extra.rule}]` : "";
+      lines.push(paint(`  ${icon} ${t(lang, extra.messageKey, extra.messageVars)}${rule}`, tone, color));
     }
     lines.push("");
   }

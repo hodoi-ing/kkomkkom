@@ -109,6 +109,21 @@ stdio에서 직접 호출하는 예시는 다음과 같습니다. 한 줄에 JSO
 
 `coverage.status`가 `incomplete`이면 일부 검사가 실패(`failed`)했거나 해석할 수 없었습니다(`unsupported`). `empty`는 의미 있는 검사가 하나도 실행되지 않았다는 뜻이며 통과가 아닙니다. 일반 실행은 이런 상태에서도 종료 코드 0일 수 있지만, `--strict`는 종료 코드 1로 처리합니다. 페이지 소스가 발견됐는데 빌드 결과에 그 페이지의 측정값이 없으면 부분 측정으로 보고 `--update`를 거부합니다.
 
+### 배포물 정적 검사 (`--artifacts`)
+
+`--artifacts`는 개발 서버·빌드·AI CLI·의존성 설치 없이 `public/`과 `.next/static/`만 읽는 독립 검사입니다. 기존 `--fast`의 의미는 바뀌지 않습니다. 새 빌드가 필요하면 `--artifacts --fresh`처럼 빌드를 명시해야 하며, 이때만 `next build`가 실행됩니다. MCP에서는 `artifacts: true`, 빌드까지 하려면 `artifacts: true`와 `fresh: true`를 함께 보냅니다.
+
+| rule ID | 확인하는 것 | 한계 |
+|---|---|---|
+| `artifact-source-map` | 제공 경계 안의 유효한 `.map` 파일, 실제 소스맵 주석의 `sourceMappingURL` 참조, 유효한 inline map, `productionBrowserSourceMaps: true` 설정 | 설정만으로 실제 공개를 확정하지 않으며, 설정과 산출물은 별도 근거입니다. `.next/server`의 map은 공개 산출물로 보지 않습니다. 파일명만 있는 `.map`, 잘못된 JSON·data URL, 문자열 속 가짜 신호는 확정하지 않고 `static-only`/`unsupported`로 남깁니다. |
+| `artifact-sensitive-file` | 제공 경계 안의 `.env`, 백업·로그·DB·키·테스트·압축 파일 | 파일명만으로 확정하지 않고, 읽을 수 있으면 비밀값 패턴을 추가 확인합니다. 저장소에만 있는 테스트 파일은 경고하지 않습니다. |
+| `artifact-client-secret` | 클라이언트 제공 파일의 고신뢰 비밀 패턴, `NEXT_PUBLIC_*` 의심 이름 | 실제 값은 출력하지 않습니다. 공개키·예제값은 확정하지 않고 이름 신호는 `confidence: uncertain`입니다. |
+| `artifact-server-boundary` | `use client`에서 출발한 상대 경로 정적 import가 `server-only` 모듈에 닿는 근거 | 상대 경로만 좁게 따라갑니다. 타입 전용 import/export는 런타임 근거에서 제외합니다. 별칭·동적 import·해석 실패·프로젝트 루트 밖 경로는 `unsupported`로 남기고 안전/위험을 추정하지 않습니다. 외부 라이브러리 import는 오류로 만들지 않습니다. |
+
+탐색은 기본 Next 출력인 `public/`과 `.next/static/`으로 제한합니다. `next.config.*`는 실행·import하지 않고 텍스트만 읽습니다. `distDir` 변경, `output: "export"`, `output: "standalone"`, 복수 설정, 정적으로 해석할 수 없는 설정은 지원 성공으로 표시하지 않고 `unsupported` coverage로 남깁니다. `.next` 존재만으로 최신 빌드라고 단정하지 않으며, 빌드하지 않은 검사는 `build-freshness-unknown`을 기록합니다. 파일당 1 MiB, 전체 32 MiB, 2000개 상한을 넘거나 읽기 실패가 있으면 `failed`, symlink 경계 이탈이나 해석 불가는 `unsupported` coverage로 남기고 통과로 숨기지 않습니다.
+
+`artifactExceptions`는 정확히 같은 rule ID와 프로젝트 상대 파일에만 적용됩니다. 사유가 비어 있거나 알 수 없는 rule ID, 절대 경로, `..` 경로는 설정 오류(exit 2)입니다. 예외로 억제된 항목은 `coverage.checks[]`에 `ignored`와 사유로 남습니다. 이 검사는 HTTP로 실제 제공 여부를 확인하지 않으므로, 파일 존재와 외부 노출을 같은 의미로 읽지 마세요. loopback production HTTP 확인은 후속 단계입니다.
+
 ### 결과를 보고 무엇을 하나요?
 
 1. 보고서에 나온 경로·파일과 관찰 내용을 확인합니다.
@@ -138,6 +153,8 @@ kkomkkom --explain          # 설치된 AI CLI로 추가 설명 요청
 | 옵션 | 동작 |
 |---|---|
 | `--fast` | 새 빌드·새 JS 크기 측정을 생략. HTTP·소스 검사는 실행 |
+| `--artifacts` | `public/`·`.next/static/` 정적 배포물만 검사. 서버·빌드·설치 없음 |
+| `--artifacts --fresh` | 먼저 `next build`를 실행한 뒤 새 배포물 검사 |
 | `--json` | `schemaVersion: 2`와 `coverage`, `diff`, `extra`, `exitCode`를 JSON으로 출력 |
 | `--strict` | warning 또는 `coverage` 불완전/빈 범위를 종료 코드 1로 처리 |
 | `--port 3100` | 개발 서버 포트 지정. 기본값은 `kkomkkom.config.json`의 `port` 또는 3100 |
@@ -170,6 +187,9 @@ kkomkkom --explain          # 설치된 AI CLI로 추가 설명 요청
   "ignoreRoutes": ["/api/health", "/api/webhooks/*"],
   "sampleParams": { "/api/orders/[id]": { "id": "1" } },
   "routePolicies": { "/api/webhooks/stripe": { "POST": "public" } },
+  "artifactExceptions": [
+    { "ruleId": "artifact-source-map", "file": "public/demo.js.map", "reason": "공개 데모 파일" }
+  ],
   "port": 3100,
   "thresholds": { "jsPercent": 15, "jsBytes": 30000 }
 }
@@ -182,6 +202,7 @@ kkomkkom --explain          # 설치된 AI CLI로 추가 설명 요청
 | `routePolicies` | 라우트·메서드별 `public`/`protected` 명시. 명시 `protected`인데 로그인 없이 2xx면 `exposed` |
 | `port` | 개발 서버 포트. 기본 3100. `--port`가 우선 |
 | `thresholds` | JS 크기 증가의 경고 기준. 두 조건을 모두 충족해야 경고 |
+| `artifactExceptions` | 정확한 rule ID·프로젝트 상대 파일의 배포물 결과만 억제. 사유 필수, coverage에 `ignored`로 표시 |
 
 기준선은 `.kkomkkom/baseline.json`에 저장됩니다. 예시 구조:
 
@@ -235,10 +256,11 @@ kkomkkom --explain          # 설치된 AI CLI로 추가 설명 요청
 | 실행 방식 | CLI와 로컬 stdio MCP 서버 제공 |
 | 자동 검증 구성 | GitHub Actions에 Node 20·22·24 단위 테스트와 실제 Next fixture e2e 구성. 실행 결과는 상단 Tests 배지에서 확인 |
 | production·pack 검증 | 2026-10-22 Linux/WSL에서 실제 `next build`(비 fast), 매니페스트 측정, MCP `tools/call`, npm pack 소비자 CLI/MCP를 확인. 상세 로그는 [검증 기록](docs/verification-2026-10-22.md) |
+| 배포물 정적 검사 | `--artifacts`/MCP `artifacts` 구현·회귀 검증 완료(2026-10-22). Linux/WSL에서 실제 fixture 정적 검사 확인. production HTTP 제공 여부는 미구현 |
 | 플랫폼 | Linux/WSL에서만 검증. **Windows·macOS는 미검증** |
 | 에이전트별 검증 | **보류**. OpenCode·Codex 등 개별 클라이언트 호환성 완료를 보장하지 않음 |
 | 배포 | npm 미공개. 저장소 접근 권한과 로컬 빌드 필요 |
-| 추가 앱 보호 | 소스맵·불필요한 배포 파일·클라이언트 번들 노출 점검, 선택형 보호 적용은 **로드맵** |
+| 추가 앱 보호 | 배포물 정적 점검은 제공. 선택형 설정 보호 적용(preview/apply/restore)은 **로드맵** |
 
 ### 현재 한계
 
@@ -247,6 +269,7 @@ kkomkkom --explain          # 설치된 AI CLI로 추가 설명 요청
 - 개발 서버 HTTP 결과는 production 배포 검증과 다릅니다. 페이지 타임아웃·검사 생략·지원하지 않는 빌드 형식도 확인해야 합니다.
 - JS 크기는 압축 전 파일 크기 합이라 gzip·네트워크 전송량·TTFB와 다릅니다. 페이지 측정값이 하나라도 빠지면 불완전으로 처리하며 0으로 채우지 않습니다.
 - 실제 production 빌드·pack 소비자·MCP 호출 검증은 Linux/WSL에서 수행했습니다. Windows·macOS의 프로세스 종료, 경로, `npm pack` 설치는 미검증입니다.
+- `--artifacts`는 `public/`과 `.next/static/`의 정적 파일만 봅니다. 실제 HTTP 제공, CDN·프록시 규칙, custom `distDir`, `export`, standalone, 모노레포 출력은 확인하지 않으며, 빌드 신선도는 `unknown`으로 남깁니다. 파일명 신호와 실제 비밀값, 소스맵 설정과 공개 노출을 구분해 읽어야 합니다.
 
 [정확도·오류 처리 개선 #1](https://github.com/hodoi-ing/kkomkkom/issues/1) · [제품 로드맵·검증 재개 체크리스트 #2](https://github.com/hodoi-ing/kkomkkom/issues/2)
 
@@ -271,6 +294,8 @@ npm run verify    # 빌드 + 단위 테스트 + 실제 Next fixture e2e
 The package is not published to npm. Clone an accessible copy of this repository, run `npm ci` and `npm run build`, then run `node /absolute/path/to/kkomkkom/dist/cli.js --fast` from your Next.js app. Replace the absolute path with your local checkout. Remove `--fast` to build and measure JS size. A normal check never writes the baseline; pass `--update` to save a complete result. Incomplete coverage, build failures and missing page measurements are refused, and the existing baseline stays byte-identical.
 
 For MCP, launch `node /absolute/path/to/kkomkkom/dist/mcp.js`. The tool is named `kkomkkom`; pass the app's absolute `projectPath`. A `tools/call` response includes readable text plus `structuredContent` with `schemaVersion: 2`, `coverage`, `diff`, `extra` and `exitCode`. Tool errors set `isError` and keep the stream usable. There is no MCP update argument, so baseline writes stay a CLI operation. `reuse` does not verify that the running server belongs to the project and records `server`/`unsupported` coverage. Individual agent connection tests are deferred, not completed.
+
+`--artifacts` (MCP `artifacts: true`) is a standalone static check of `public/` and `.next/static/`. It does not start a server, build, call an AI CLI or install packages. `--fresh` (MCP `fresh: true`) is the only way to make it build first. The check reports source maps, sensitive files in the served boundary, high-confidence client secrets and limited `use client` to `server-only` import evidence with stable rule IDs (`artifact-source-map`, `artifact-sensitive-file`, `artifact-client-secret`, `artifact-server-boundary`). It does not execute Next config, follow aliases or dynamic imports, or treat `.next/server` maps as public. Unsupported output, missing artifacts, read failures, symlink escapes and budget limits stay visible as `unsupported`/`failed` coverage. `artifactExceptions` must name a known rule, a project-relative file and a nonempty reason; suppressed findings stay visible as `ignored` coverage. Actual HTTP serving is not verified in this mode.
 
 Page weights are not raw network sizes. `manifest-file` is the sum of uncompressed JS chunk files referenced by the build manifests. `next-output` is the `First Load JS` value reported by that older Next version, which is not guaranteed to equal either the raw file sum or the actual HTTP transfer size. Neither method is gzip transfer size or TTFB. Sizes are compared only when both runs recorded the same method; legacy baselines without one are loaded but not compared until a non-fast `--update` replaces their values. Production-build, packed-consumer and local MCP calls were verified on Linux/WSL only; Windows and macOS are untested.
 

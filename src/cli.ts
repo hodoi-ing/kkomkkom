@@ -6,6 +6,7 @@ import { KkomkkomError } from "./errors.js";
 import { buildPrompt, explain } from "./explain.js";
 import { isLang, resolveLang, t, type Lang } from "./i18n.js";
 import { renderReport } from "./report.js";
+import { runArtifactCheck } from "./artifacts.js";
 import { runCheck } from "./run.js";
 import { severityOf } from "./severity.js";
 
@@ -17,6 +18,9 @@ const USAGE = `kkomkkom — pre-commit check for Next.js
 Usage
   kkomkkom                    check auth, secrets, pages + page weight
   kkomkkom --fast             skip the build (page weights are not measured)
+  kkomkkom --artifacts        inspect public/.next/static without a server or build
+  kkomkkom --artifacts --fresh
+                              build first, then inspect the new output
   kkomkkom --json             machine-readable JSON (schemaVersion 2)
   kkomkkom --explain          explain problems with a local AI CLI
   kkomkkom --explain-with claude
@@ -39,6 +43,9 @@ Config
 꼼꼼 — Next.js 커밋 전 점검
   kkomkkom                    API 인증·비밀키·페이지 오류·페이지 무게 검사
   kkomkkom --fast             빌드 생략 (페이지 무게는 측정하지 않음)
+  kkomkkom --artifacts        서버·빌드 없이 public/.next/static 배포물 검사
+  kkomkkom --artifacts --fresh
+                              먼저 빌드한 뒤 새 배포물 검사
   kkomkkom --json             기계가 읽는 JSON 출력 (schemaVersion 2)
   kkomkkom --explain          문제 원인을 로컬 AI CLI로 설명
   kkomkkom --update           완료된 검사 결과를 기준선으로 저장
@@ -58,6 +65,8 @@ async function main(): Promise<number> {
   const { values } = parseArgs({
     options: {
       fast: { type: "boolean", default: false },
+      artifacts: { type: "boolean", default: false },
+      fresh: { type: "boolean", default: false },
       json: { type: "boolean", default: false },
       update: { type: "boolean", default: false },
       strict: { type: "boolean", default: false },
@@ -87,20 +96,42 @@ async function main(): Promise<number> {
   const lang = resolveLang(values.lang);
   activeLang = lang;
 
+  if (values.fresh && !values.artifacts) {
+    throw new KkomkkomError("errModeConflict", { option: "--fresh" });
+  }
+  if (values.artifacts) {
+    for (const [option, present] of [
+      ["--fast", values.fast],
+      ["--update", values.update],
+      ["--reuse", values.reuse],
+      ["--explain", values.explain],
+      ["--explain-with", values["explain-with"] !== undefined],
+      ["--port", values.port !== undefined],
+    ] as const) {
+      if (present) throw new KkomkkomError("errModeConflict", { option });
+    }
+  }
+
   const root = await findProjectRoot(process.cwd());
   const port = values.port ? Number(values.port) : undefined;
   if (values.port && (!Number.isInteger(port) || port! <= 0 || port! > 65535)) {
     throw new KkomkkomError("errPort");
   }
 
-  const result = await runCheck({
-    root,
-    fast: values.fast,
-    update: values.update,
-    port,
-    strict: values.strict,
-    reuse: values.reuse,
-  });
+  const result = values.artifacts
+    ? await runArtifactCheck({
+      root,
+      fresh: values.fresh,
+      strict: values.strict,
+    })
+    : await runCheck({
+      root,
+      fast: values.fast,
+      update: values.update,
+      port,
+      strict: values.strict,
+      reuse: values.reuse,
+    });
 
   const hasIssues =
     result.diff.routes.some(
@@ -138,6 +169,10 @@ async function main(): Promise<number> {
         id: extra.id,
         severity: extra.severity,
         message: t(lang, extra.messageKey, extra.messageVars),
+        ...(extra.rule ? { rule: extra.rule } : {}),
+        ...(extra.file ? { file: extra.file } : {}),
+        ...(extra.evidenceKind ? { evidenceKind: extra.evidenceKind } : {}),
+        ...(extra.confidence ? { confidence: extra.confidence } : {}),
         ...(extra.evidence ? { evidence: extra.evidence } : {}),
       })),
       explanation,
