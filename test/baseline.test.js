@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, readdir, writeFile, chmod, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, utimes, writeFile, chmod, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildBaseline, diffBaseline, loadBaseline, saveBaseline } from "../dist/baseline.js";
@@ -180,6 +180,31 @@ test("saving an invalid baseline changes nothing", async () => {
   );
   assert.equal(await readFile(join(root, ".kkomkkom", "baseline.json"), "utf8"), before);
   await rm(root, { recursive: true, force: true });
+});
+
+test("a live or stale-looking lock is never reclaimed automatically", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "kkomkkom-base-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, ".kkomkkom"), { recursive: true });
+  const lock = join(root, ".kkomkkom", "baseline.json.lock");
+  const old = new Date(Date.now() - 3_600_000);
+
+  for (const owner of [`${process.pid} <test>\n`, "999999 <dead>\n"]) {
+    await writeFile(lock, owner);
+    await utimes(lock, old, old);
+
+    const started = Date.now();
+    await assert.rejects(
+      () => saveBaseline(
+        root,
+        buildBaseline([finding("/api/a", "locked")], {}),
+        { lockTimeoutMs: 120 },
+      ),
+      (error) => error.key === "errBaselineLock",
+    );
+    assert.ok(Date.now() - started < 2000, "lock wait must be bounded");
+    assert.equal(await readFile(lock, "utf8"), owner);
+  }
 });
 
 test("concurrent saves leave valid JSON without lock or temporary files", async () => {

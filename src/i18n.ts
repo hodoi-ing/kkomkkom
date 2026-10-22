@@ -60,7 +60,7 @@ const en = {
   errBaseline: "The baseline file is not valid. It was left unchanged; fix or remove it explicitly.",
   errBaselineRead: "Could not read the baseline file. Check that it is a readable file.",
   errBaselineWrite: "Could not write the baseline file.",
-  errBaselineLock: "Another process is updating the baseline. Try again.",
+  errBaselineLock: "Another process may be updating the baseline. Wait and retry. If none is running, inspect .kkomkkom/baseline.json.lock and remove it manually.",
   errUpdateRefused: "Refused to update the baseline because the check did not complete ({reason}). The existing baseline was not changed.",
   errLang: 'Unknown language "{lang}". Use one of: en, ko, ja, zh, es.',
 } as const;
@@ -126,7 +126,7 @@ const ko: Record<MessageKey, string> = {
   errBaseline: "기준선 파일 형식이 올바르지 않습니다. 원본은 그대로 두었으니 직접 고치거나 지우세요.",
   errBaselineRead: "기준선 파일을 읽지 못했습니다. 읽을 수 있는 파일인지 확인하세요.",
   errBaselineWrite: "기준선 파일을 쓰지 못했습니다.",
-  errBaselineLock: "다른 프로세스가 기준선을 갱신 중입니다. 다시 시도하세요.",
+  errBaselineLock: "다른 프로세스가 기준선을 갱신 중일 수 있습니다. 기다렸다가 다시 시도하세요. 실행 중인 프로세스가 없으면 .kkomkkom/baseline.json.lock을 확인해 직접 지우세요.",
   errUpdateRefused: "검사가 완료되지 않아 기준선 갱신을 거부했습니다 ({reason}). 기존 기준선은 바뀌지 않았습니다.",
   errLang: "알 수 없는 언어입니다: {lang}. en, ko, ja, zh, es 중 하나를 쓰세요.",
 };
@@ -190,7 +190,7 @@ const ja: Record<MessageKey, string> = {
   errBaseline: "基準ファイルの形式が正しくありません。元のファイルは変更していません。手動で修正または削除してください。",
   errBaselineRead: "基準ファイルを読み込めませんでした。読み取り可能なファイルか確認してください。",
   errBaselineWrite: "基準ファイルを書き込めませんでした。",
-  errBaselineLock: "別のプロセスが基準を更新しています。もう一度お試しください。",
+  errBaselineLock: "別のプロセスが基準を更新している可能性があります。待ってから再試行してください。実行中のプロセスがなければ .kkomkkom/baseline.json.lock を確認して手動で削除してください。",
   errUpdateRefused: "検査が完了していないため基準の更新を拒否しました ({reason})。既存の基準は変更されていません。",
   errLang: "不明な言語です: {lang}。en, ko, ja, zh, es のいずれかを使用してください。",
 };
@@ -254,7 +254,7 @@ const zh: Record<MessageKey, string> = {
   errBaseline: "基准文件格式无效。原文件未改动，请手动修复或删除。",
   errBaselineRead: "无法读取基准文件。请确认它是可读文件。",
   errBaselineWrite: "无法写入基准文件。",
-  errBaselineLock: "另一个进程正在更新基准。请重试。",
+  errBaselineLock: "另一个进程可能正在更新基准。请稍后重试。如果没有进程在运行，请检查 .kkomkkom/baseline.json.lock 并手动删除。",
   errUpdateRefused: "检查未完成，已拒绝更新基准 ({reason})。现有基准未改动。",
   errLang: "未知语言：{lang}。请使用 en、ko、ja、zh、es 之一。",
 };
@@ -318,7 +318,7 @@ const es: Record<MessageKey, string> = {
   errBaseline: "El archivo de referencia no es válido. No se modificó; corrígelo o elimínalo explícitamente.",
   errBaselineRead: "No se pudo leer el archivo de referencia. Comprueba que sea un archivo legible.",
   errBaselineWrite: "No se pudo escribir el archivo de referencia.",
-  errBaselineLock: "Otro proceso está actualizando la referencia. Inténtalo de nuevo.",
+  errBaselineLock: "Otro proceso puede estar actualizando la referencia. Espera y reintenta. Si no hay ninguno, revisa .kkomkkom/baseline.json.lock y bórralo manualmente.",
   errUpdateRefused: "Se rechazó la actualización de la referencia porque la revisión no se completó ({reason}). La referencia existente no cambió.",
   errLang: "Idioma desconocido: {lang}. Usa uno de: en, ko, ja, zh, es.",
 };

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { KkomkkomError } from "./errors.js";
@@ -11,7 +11,6 @@ const DIR = ".kkomkkom";
 const FILE = "baseline.json";
 const LOCK = `${FILE}.lock`;
 const LOCK_TIMEOUT_MS = 5000;
-const STALE_LOCK_MS = 30_000;
 
 const VERDICTS = new Set<Verdict>(["locked", "exposed", "check", "public", "unknown", "error"]);
 const METHODS = new Set<MeasurementMethod>(["manifest-file", "next-output"]);
@@ -65,35 +64,50 @@ export async function loadBaseline(root: string): Promise<Baseline | null> {
   return parsed;
 }
 
-async function acquireLock(dir: string): Promise<() => Promise<void>> {
+async function acquireLock(dir: string, timeoutMs: number): Promise<() => Promise<void>> {
   const lock = join(dir, LOCK);
-  const deadline = Date.now() + LOCK_TIMEOUT_MS;
+  // The token proves ownership on release; it also lets a human identify the
+  // owner when inspecting a lock left behind by a killed process.
+  const token = `${process.pid} ${randomUUID()}\n`;
+  const deadline = Date.now() + timeoutMs;
 
   for (;;) {
+    let handle;
     try {
-      const handle = await open(lock, "wx");
-      await handle.writeFile(`${process.pid}\n`);
-      await handle.close();
-      return async () => {
-        await unlink(lock).catch(() => {});
-      };
+      handle = await open(lock, "wx");
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
         throw new KkomkkomError("errBaselineWrite");
       }
-    }
-
-    const info = await stat(lock).catch(() => null);
-    if (info && Date.now() - info.mtimeMs > STALE_LOCK_MS) {
-      await unlink(lock).catch(() => {});
+      // Never delete a lock automatically: mtime cannot prove the owner died.
+      // A stuck lock needs an explicit error and a human check.
+      if (Date.now() >= deadline) throw new KkomkkomError("errBaselineLock");
+      await delay(20);
       continue;
     }
-    if (Date.now() >= deadline) throw new KkomkkomError("errBaselineLock");
-    await delay(20);
+
+    try {
+      await handle.writeFile(token);
+      await handle.close();
+    } catch {
+      await handle.close().catch(() => {});
+      await unlink(lock).catch(() => {});
+      throw new KkomkkomError("errBaselineWrite");
+    }
+
+    return async () => {
+      // Release only the lock this save created, never a successor's lock.
+      const current = await readFile(lock, "utf8").catch(() => null);
+      if (current === token) await unlink(lock).catch(() => {});
+    };
   }
 }
 
-export async function saveBaseline(root: string, baseline: Baseline): Promise<void> {
+export async function saveBaseline(
+  root: string,
+  baseline: Baseline,
+  options: { lockTimeoutMs?: number } = {},
+): Promise<void> {
   if (!isValidBaseline(baseline)) throw new KkomkkomError("errBaseline");
 
   const dir = join(root, DIR);
@@ -103,7 +117,7 @@ export async function saveBaseline(root: string, baseline: Baseline): Promise<vo
     throw new KkomkkomError("errBaselineWrite");
   }
 
-  const release = await acquireLock(dir);
+  const release = await acquireLock(dir, options.lockTimeoutMs ?? LOCK_TIMEOUT_MS);
   const temp = join(dir, `.${FILE}.${process.pid}.${randomUUID()}.tmp`);
   try {
     await writeFile(temp, JSON.stringify(baseline, null, 2) + "\n", { encoding: "utf8", flag: "wx" });
