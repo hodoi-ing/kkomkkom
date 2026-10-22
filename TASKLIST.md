@@ -58,6 +58,7 @@
   - 2026-10-22 총괄 검수 재작업(탭2): 핵심 positive 6건은 총괄 직접 PASS이나, 공통 env 마스킹의 placeholder 제외로 보안 회귀 지적. `searchableEnvValue`는 8자 이상+고정 enum 제외로 복구하고 `envSensitivePairs` 탐지에만 placeholder 제외 적용. test/dummy/your 값의 audit·artifact reason/target·fake build/CLI 오류 비노출 신규 9건 RED(0/9, exit 1) → GREEN(9/9, exit 0), i18n 1건은 첫 연결 실행에서 pass 후 반복 없음, 검사기 build exit 0. 로그 `/tmp/opencode/kk-task21-mask.U5yLvw/{red,build,green,focused}.log`, 최초 target fixture 보완 포함 명령/결과는 `docs/verification-2026-10-22-task21.md`. 완료 positive/골든/전체 tests 미반복, HTTP/protect·push 없음. `[ ]` 유지, 총괄 재검수 대기.
 - [ ] #2 단계 2: production 산출물·opt-in 로컬 운영 서버·경계 사례·소비자 CLI/MCP 검증과 비용 비교.
   - 현재 착수: 계획 Task3. 구체적인 HTTP 안전 계약은 `6b6d6b6`에 별도 커밋. 총괄은 설계/독립검수/원격 통합, 탭2는 구현/로컬 검증만 담당한다.
+  - Task3 엔진 WIP(2026-10-22, 탭2): `artifact-http.ts` loopback origin 정규화/GET·무인증·수동 redirect·raw bytes 비교, 기존 bounded scan의 검증된 served 파일만 후보, 50개/동시5/요청5s/전체60s/본문1MiB/accepted payload 합32MiB 별도예산, 취소·미검증·신원불명 coverage. CLI/MCP 옵션·runtime/schema·5언어 연결. RED13fail→초기13pass, byte-counter RED1fail→최종 Task3 18건+i18n1건 **19/19 pass(exit0)**, 검사기 build exit0. 실제 부분본문 loopback timeout·동시5 byte계수/취소·JS참조와map제공 구분 포함. 로그 `/tmp/opencode/kk-task3-http.uM9AZQ`, 명령/중간 fixture 보완/남은 통합은 `docs/verification-2026-10-22-task3.md`. `[ ]` 유지. 다음: production/pack 통합·동일fixture/cache 비용·문서·최종 verify 1회, Task4는 총괄 PASS 지시 전 금지.
 - [ ] #2 단계 3: 제한된 Next 보호 변경의 미리보기·선택 적용·복원·재검증 설계 및 구현/검수.
 - [ ] #2 단계 4: 후속 확장 수요/비용 평가 기록 — 난독화·Electron·모바일 구현은 후속 후보로 유지.
 - [ ] 최종 검수 결과·이슈별 완료/보류/한계 기록, GitHub main과 로컬 HEAD 일치 확인.

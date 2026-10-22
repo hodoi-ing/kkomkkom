@@ -5,6 +5,7 @@ import {
   envSecretValues, envSensitivePairs, hasHighConfidenceSecret, isEnvEntry, maskSecrets, redactSecrets,
 } from "./audit.js";
 import { runBuild } from "./build.js";
+import { inspectProductionHttp, normalizeProductionUrl } from "./artifact-http.js";
 import { CONFIG_LIMIT, loadConfig } from "./config.js";
 import { KkomkkomError } from "./errors.js";
 import { displayPath, isMissing } from "./fs.js";
@@ -74,6 +75,7 @@ export interface ArtifactRunOptions {
   root: string;
   fresh?: boolean;
   strict?: boolean;
+  productionUrl?: string;
 }
 
 function inside(parent: string, child: string): boolean {
@@ -183,12 +185,12 @@ export function rangeChangeReason(initial: number, read: number, final: number):
   return null;
 }
 
-async function readBounded(
+async function readBoundedBytes(
   real: string,
   display: string,
   state: ScanState,
   coverage: CoverageCheck[],
-): Promise<string | null> {
+): Promise<Buffer | null> {
   if (state.budgetHit || state.countHit) return null;
   let handle;
   try {
@@ -260,15 +262,23 @@ async function readBounded(
       failure(coverage, display, changed);
       return null;
     }
-    const bytes = buffer.subarray(0, offset);
-    if (bytes.includes(0)) return null;
-    return bytes.toString("utf8");
+    return buffer.subarray(0, offset);
   } catch (error) {
     failure(coverage, display, errorReason(error));
     return null;
   } finally {
     await handle.close().catch(() => undefined);
   }
+}
+
+async function readBounded(
+  real: string,
+  display: string,
+  state: ScanState,
+  coverage: CoverageCheck[],
+): Promise<string | null> {
+  const bytes = await readBoundedBytes(real, display, state, coverage);
+  return bytes === null || bytes.includes(0) ? null : bytes.toString("utf8");
 }
 
 async function walk(
@@ -861,6 +871,7 @@ async function scanBoundary(
   coverage: CoverageCheck[],
   envValues: readonly { key: string; value: string }[],
   findings: Map<string, ExtraFinding>,
+  candidates?: Map<string, Buffer>,
 ): Promise<boolean> {
   let boundaryReal: string;
   try {
@@ -879,7 +890,9 @@ async function scanBoundary(
     if (state.budgetHit || state.countHit) break;
     const name = file.display;
     const sensitive = isMapFile(name) ? null : sensitiveKind(name);
-    const text = await readBounded(file.real, name, state, coverage);
+    const bytes = await readBoundedBytes(file.real, name, state, coverage);
+    if (bytes !== null) candidates?.set(name, bytes);
+    const text = bytes === null || bytes.includes(0) ? null : bytes.toString("utf8");
 
     if (text === null) {
       if (sensitive !== null) {
@@ -1297,8 +1310,10 @@ async function inspect(
   config: Config,
   coverage: CoverageCheck[],
   fresh: boolean,
+  productionUrl?: string,
 ): Promise<ExtraFinding[]> {
   const findings = new Map<string, ExtraFinding>();
+  const candidates = productionUrl === undefined ? undefined : new Map<string, Buffer>();
   const state: ScanState = {
     // Conservative reservation for loadConfig's 1 MiB allowance and one file entry.
     files: 1, bytes: CONFIG_LIMIT, countHit: false, budgetHit: false, reserved: new Set(),
@@ -1313,14 +1328,14 @@ async function inspect(
   const publicDir = join(root, "public");
   const publicState = await directoryState(publicDir, displayPath(root, publicDir), coverage);
   if (publicState === "yes") {
-    publicScanned = await scanBoundary(root, publicDir, state, coverage, mask.sensitive, findings);
+    publicScanned = await scanBoundary(root, publicDir, state, coverage, mask.sensitive, findings, candidates);
   }
 
   if (scanStatic) {
     const staticDir = join(root, ".next", "static");
     const staticState = await directoryState(staticDir, displayPath(root, staticDir), coverage);
     if (staticState === "yes") {
-      staticScanned = await scanBoundary(root, staticDir, state, coverage, mask.sensitive, findings);
+      staticScanned = await scanBoundary(root, staticDir, state, coverage, mask.sensitive, findings, candidates);
       if (staticScanned) {
         coverage.push({
           rule: "artifacts",
@@ -1344,6 +1359,10 @@ async function inspect(
     add(findings, finding, finding.id);
   }
 
+  if (productionUrl !== undefined) {
+    for (const finding of await inspectProductionHttp(productionUrl, candidates!, coverage)) add(findings, finding);
+  }
+
   const sorted = [...findings.values()]
     .sort((a, b) => rank(a.severity) - rank(b.severity) ||
       (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
@@ -1359,6 +1378,7 @@ async function inspect(
 }
 
 export async function runArtifactCheck(options: ArtifactRunOptions): Promise<RunResult> {
+  const productionUrl = options.productionUrl === undefined ? undefined : normalizeProductionUrl(options.productionUrl);
   const config = await loadConfig(options.root);
   const coverage: CoverageCheck[] = [];
   let buildFailed = false;
@@ -1386,7 +1406,7 @@ export async function runArtifactCheck(options: ArtifactRunOptions): Promise<Run
     coverage.push({ rule: "artifacts", status: "failed", reason: "build" });
     extras = [];
   } else {
-    extras = await inspect(root, config, coverage, fresh);
+    extras = await inspect(root, config, coverage, fresh, productionUrl);
   }
 
   const summary = summarizeCoverage(coverage);

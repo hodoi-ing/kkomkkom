@@ -20,7 +20,9 @@ Usage
   kkomkkom --fast             skip the build (page weights are not measured)
   kkomkkom --artifacts        inspect public/.next/static without a server or build
   kkomkkom --artifacts --fresh
-                              build first, then inspect the new output
+                               build first, then inspect the new output
+  kkomkkom --artifacts --production-url http://127.0.0.1:3000
+                               opt in to GET-only local serving verification
   kkomkkom --json             machine-readable JSON (schemaVersion 2)
   kkomkkom --explain          explain problems with a local AI CLI
   kkomkkom --explain-with claude
@@ -45,7 +47,9 @@ Config
   kkomkkom --fast             빌드 생략 (페이지 무게는 측정하지 않음)
   kkomkkom --artifacts        서버·빌드 없이 public/.next/static 배포물 검사
   kkomkkom --artifacts --fresh
-                              먼저 빌드한 뒤 새 배포물 검사
+                               먼저 빌드한 뒤 새 배포물 검사
+  kkomkkom --artifacts --production-url http://127.0.0.1:3000
+                               명시한 로컬 서버에 GET으로 실제 제공 여부 확인
   kkomkkom --json             기계가 읽는 JSON 출력 (schemaVersion 2)
   kkomkkom --explain          문제 원인을 로컬 AI CLI로 설명
   kkomkkom --update           완료된 검사 결과를 기준선으로 저장
@@ -67,6 +71,7 @@ async function main(): Promise<number> {
       fast: { type: "boolean", default: false },
       artifacts: { type: "boolean", default: false },
       fresh: { type: "boolean", default: false },
+      "production-url": { type: "string" },
       json: { type: "boolean", default: false },
       update: { type: "boolean", default: false },
       strict: { type: "boolean", default: false },
@@ -99,6 +104,9 @@ async function main(): Promise<number> {
   if (values.fresh && !values.artifacts) {
     throw new KkomkkomError("errModeConflict", { option: "--fresh" });
   }
+  if (values["production-url"] !== undefined && !values.artifacts) {
+    throw new KkomkkomError("errProductionUrl");
+  }
   if (values.artifacts) {
     for (const [option, present] of [
       ["--fast", values.fast],
@@ -123,6 +131,7 @@ async function main(): Promise<number> {
       root,
       fresh: values.fresh,
       strict: values.strict,
+      productionUrl: values["production-url"],
     })
     : await runCheck({
       root,
