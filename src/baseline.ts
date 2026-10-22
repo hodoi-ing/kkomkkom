@@ -158,10 +158,11 @@ export function diffBaseline(
       const from = previousWeight?.firstLoadJs;
       const fromMethod = previousWeight?.method;
       const toMethod = weight.method;
-      // A legacy baseline has no method. Compare it, but never compare two
-      // measurements that were taken by different methods.
+      // Only compare when both runs recorded the same measurement method. A
+      // legacy baseline has no method, so its storage format is unknown: keep
+      // it loadable, but never assume it used the current method.
       const comparable =
-        fromMethod === undefined || toMethod === undefined || fromMethod === toMethod;
+        fromMethod !== undefined && toMethod !== undefined && fromMethod === toMethod;
       const deltaBytes = from === undefined || !comparable ? 0 : weight.firstLoadJs - from;
       const deltaPercent = from && comparable ? (deltaBytes / from) * 100 : 0;
       const heavy =

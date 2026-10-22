@@ -89,6 +89,12 @@ export function renderReport(diff: Diff, options: ReportOptions): string {
     lines.push("");
   }
 
+  const legacyPages = diff.pages.some((page) => page.from !== undefined && page.fromMethod === undefined);
+  if (legacyPages) {
+    lines.push(t(lang, "legacyBaselineNote"));
+    lines.push("");
+  }
+
   if (newExposed.length > 0) {
     lines.push(paint(t(lang, "newExposedTitle", { count: newExposed.length }), RED, color));
     lines.push(...list(newExposed));

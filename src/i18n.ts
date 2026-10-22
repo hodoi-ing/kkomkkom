@@ -4,6 +4,7 @@ export type Lang = (typeof LANGS)[number];
 const en = {
   reportTitle: "kkomkkom — pre-commit check",
   firstRunNote: "First run, so everything is shown. Run --update to save this as your baseline.",
+  legacyBaselineNote: "The baseline was saved without a page measurement method, so page sizes are not compared. Run --update to replace it with measured values.",
   stopBanner: "⛔ Stop the deploy — {count} problem(s) found.",
   warnBanner: "⚠️  Check before deploy — {count} warning(s).",
   okBanner: "✅ No blocking problems in the checked scope.",
@@ -69,6 +70,7 @@ export type MessageKey = keyof typeof en;
 const ko: Record<MessageKey, string> = {
   reportTitle: "꼼꼼 — 커밋 전 점검",
   firstRunNote: "첫 실행이라 전체를 보여줍니다. 기준선으로 저장하려면 --update를 실행하세요.",
+  legacyBaselineNote: "기준선에 페이지 측정 방식이 없어 크기를 비교하지 않습니다. --update로 측정값을 새로 저장하세요.",
   stopBanner: "⛔ 배포를 멈추세요 — 문제 {count}개가 있습니다.",
   warnBanner: "⚠️  배포 전에 확인하세요 — 경고 {count}개.",
   okBanner: "✅ 검사한 범위에서 차단 문제가 없습니다.",
@@ -132,6 +134,7 @@ const ko: Record<MessageKey, string> = {
 const ja: Record<MessageKey, string> = {
   reportTitle: "꼼꼼 — コミット前チェック",
   firstRunNote: "初回実行のため全体を表示します。基準として保存するには --update を実行してください。",
+  legacyBaselineNote: "基準にページ測定方式がないため、サイズは比較しません。--update で測定値を保存し直してください。",
   stopBanner: "⛔ デプロイを止めてください — 問題が{count}件あります。",
   warnBanner: "⚠️  デプロイ前に確認してください — 警告{count}件。",
   okBanner: "✅ 検査範囲にブロックする問題はありません。",
@@ -195,6 +198,7 @@ const ja: Record<MessageKey, string> = {
 const zh: Record<MessageKey, string> = {
   reportTitle: "꼼꼼 — 提交前检查",
   firstRunNote: "首次运行，显示全部结果。要保存为基准，请运行 --update。",
+  legacyBaselineNote: "基准没有页面测量方式，因此不比较大小。请用 --update 重新保存测量值。",
   stopBanner: "⛔ 请停止部署 — 发现 {count} 个问题。",
   warnBanner: "⚠️  部署前请确认 — {count} 个警告。",
   okBanner: "✅ 检查范围内没有阻断问题。",
@@ -258,6 +262,7 @@ const zh: Record<MessageKey, string> = {
 const es: Record<MessageKey, string> = {
   reportTitle: "꼼꼼 — revisión antes del commit",
   firstRunNote: "Primera ejecución: se muestra todo. Ejecuta --update para guardarlo como referencia.",
+  legacyBaselineNote: "La referencia no guarda el método de medición de páginas, así que no se comparan tamaños. Ejecuta --update para guardar valores medidos.",
   stopBanner: "⛔ Detén el despliegue — hay {count} problema(s).",
   warnBanner: "⚠️  Revisa antes de desplegar — {count} advertencia(s).",
   okBanner: "✅ Sin problemas bloqueantes en el alcance revisado.",

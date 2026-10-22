@@ -29,16 +29,26 @@ test("unknown route appears as new", () => {
   assert.equal(diff.routes[0].state, "new");
 });
 
-test("page weight change follows thresholds", () => {
-  const previous = buildBaseline([], { "/checkout": { firstLoadJs: 100_000 } });
-  const diff = diffBaseline(previous, [], { "/checkout": { firstLoadJs: 140_000 } }, thresholds);
+test("page weight change follows thresholds when both methods match", () => {
+  const previous = buildBaseline([], { "/checkout": { firstLoadJs: 100_000, method: "manifest-file" } });
+  const diff = diffBaseline(
+    previous,
+    [],
+    { "/checkout": { firstLoadJs: 140_000, method: "manifest-file" } },
+    thresholds,
+  );
   assert.equal(diff.pages[0].heavy, true);
   assert.equal(diff.pages[0].deltaBytes, 40_000);
 });
 
 test("small page weight change is not heavy", () => {
-  const previous = buildBaseline([], { "/checkout": { firstLoadJs: 100_000 } });
-  const diff = diffBaseline(previous, [], { "/checkout": { firstLoadJs: 120_000 } }, thresholds);
+  const previous = buildBaseline([], { "/checkout": { firstLoadJs: 100_000, method: "manifest-file" } });
+  const diff = diffBaseline(
+    previous,
+    [],
+    { "/checkout": { firstLoadJs: 120_000, method: "manifest-file" } },
+    thresholds,
+  );
   assert.equal(diff.pages[0].heavy, false);
 });
 
@@ -53,7 +63,7 @@ test("save and load round trip", async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-test("a legacy baseline without measurement metadata still loads and compares", async () => {
+test("a legacy baseline without measurement metadata still loads but is never compared", async () => {
   const root = await mkdtemp(join(tmpdir(), "kkomkkom-base-"));
   await mkdir(join(root, ".kkomkkom"), { recursive: true });
   await writeFile(join(root, ".kkomkkom", "baseline.json"), JSON.stringify({
@@ -66,9 +76,19 @@ test("a legacy baseline without measurement metadata still loads and compares", 
   const loaded = await loadBaseline(root);
   assert.equal(loaded.pages["/"].method, undefined);
   const diff = diffBaseline(loaded, [], { "/": { firstLoadJs: 1500, method: "manifest-file" } }, thresholds);
-  assert.equal(diff.pages[0].comparable, true);
-  assert.equal(diff.pages[0].deltaBytes, 500);
+  assert.equal(diff.pages[0].comparable, false);
+  assert.equal(diff.pages[0].deltaBytes, 0);
+  assert.equal(diff.pages[0].heavy, false);
+  assert.equal(diff.pages[0].from, 1000);
   await rm(root, { recursive: true, force: true });
+});
+
+test("two weight measurements without a method are not compared", () => {
+  const previous = buildBaseline([], { "/": { firstLoadJs: 1000 } });
+  const diff = diffBaseline(previous, [], { "/": { firstLoadJs: 2000 } }, thresholds);
+  assert.equal(diff.pages[0].comparable, false);
+  assert.equal(diff.pages[0].deltaBytes, 0);
+  assert.equal(diff.pages[0].heavy, false);
 });
 
 test("measurements from different methods are not compared directly", () => {
