@@ -36,6 +36,26 @@ test("a clean run says it is safe to deploy", () => {
   assert.match(out, /검사한 범위에서 차단 문제가 없습니다/);
 });
 
+test("a legacy baseline says page sizes are not compared until update", () => {
+  const diff = {
+    firstRun: false,
+    routes: [],
+    pages: [{
+      path: "/",
+      from: 1000,
+      to: 1500,
+      deltaBytes: 0,
+      deltaPercent: 0,
+      heavy: false,
+      comparable: false,
+    }],
+  };
+  const out = renderReport(diff, { lang: "ko", color: false });
+  assert.match(out, /페이지 측정 방식이 없어/);
+  assert.match(out, /--update/);
+  assert.match(renderReport(diff, { lang: "en", color: false }), /not compared/);
+});
+
 test("warnings without exposure show the warning banner, not the stop banner", () => {
   const diff = {
     firstRun: false,
