@@ -30,7 +30,7 @@
   - 구현/검증: `scripts/verify.mjs`에 실제 `next build`(비 fast)·매니페스트 실측·`--update` 후 byte-identical 재검사·소스 digest 불변, MCP `tools/call` 정상/입력/비 Next/설정 오류와 스트림 생존, npm pack 소비자(production deps만) CLI/MCP 검증 추가. 실측 `/`·`/checkout` 568,618B `manifest-file`. `--reuse` 신원 미확인을 `coverage server/unsupported`로 기록. CLI help·MCP 스키마 설명·README의 기준선/update/port/schema/coverage/측정/local MCP 예시·Windows/macOS 미검증 문구 정합화. 전체 로그·명령·exit code: `docs/verification-2026-10-22.md`, `docs/verification-logs/`.
   - 총괄 지적 4건 수정(2026-10-22): ① `ENOENT`와 읽기 실패를 구분해 unreadable source file/dir/`.env`를 `secrets failed/read`로 기록(기존 source 계속 검사, 값 비노출, strict 1, update 거부·baseline 보존), ② unreadable 필수 API source/dir는 `errSourceRead` 도구 오류(exit 2)로 처리, ③ 400·408·429 등 미확인 4xx를 `api-auth failed/http-<status>`로 기록해 strict 1·통과 배너 차단(405 GET-less 예외 유지), ④ README의 `manifest-file`(비압축 파일 합)과 `next-output`(해당 Next 버전 보고값, 실제 전송량 보장 없음) 구분. 회귀 6건 red→green, focused 117/117.
   - 최종 통합: `npm run verify` exit 0, 197 unit/regression + production/MCP/pack e2e, tarball 52,950B·설치 558ms(로컬 캐시). 로그 `docs/verification-logs/2026-10-22-npm-verify.txt`. `npm test`는 verify에 포함되어 별도 실행하지 않음.
-- [ ] #1: 총괄 독립 검수·필요한 재작업·GitHub 반영 및 로컬 동기화.
+- [x] #1: 총괄 독립 검수·재작업·GitHub 반영·로컬 동기화 — `eff3a0b` main 통합, CI `39769591137` Node 20/22/24+e2e success, 로컬 HEAD=origin/main 및 clean 확인. 이슈 #1 우선 항목 9개 체크 후 completed로 종료(공개 전환·배포 없음).
 - [ ] #2 단계 0: 설치 크기·시간·메모리·네트워크 실측 기준선 및 계약 정리.
 - [ ] #2 단계 1: Next production 배포물 점검 설계·구현·검수 (소스맵/배포 파일/클라이언트 비밀정보/지원 범위).
 - [ ] #2 단계 2: production 산출물·opt-in 로컬 운영 서버·경계 사례·소비자 CLI/MCP 검증과 비용 비교.
