@@ -68,3 +68,19 @@ Observed commands/results:
 README Korean/English documents origin-only opt-in syntax, runtime restrictions, actual-file versus referenced-map evidence, uncertainty, limits, output metadata masking and unsupported deployment boundaries. Linux/WSL is the tested environment. No external deployment/publish/public conversion, other-project source edits, new runtime dependency/model/agent, or Task4 protection operation occurred.
 
 **Task3 implementation evidence is ready for coordinator final independent review; `[ ]` remains until coordinator PASS.** Earlier pending lists in this document are historical status at the engine milestone, not claims that these integration checks are still unexecuted.
+
+## CI preparation correction (2026-10-23)
+
+Coordinator identified that fresh GitHub e2e runners only installed root dependencies while verification now intentionally refuses to auto-install the fixture. `.github/workflows/test.yml` now explicitly runs `npm ci --prefix fixtures/mini-app --no-audit --no-fund` before verify. It also primes `typescript@<package.json runtime range>` with `npm cache add`, so the packed consumer keeps strict `--offline` behavior. Using the range, rather than only the locked version, prepares both range metadata and whichever satisfying tarball the consumer selects. No product auto-install, hidden `prefer-offline` network fallback or new dependency was added. README Korean/English preparation commands match CI; `verify` already includes unit tests.
+
+Reproduction used a new `/tmp/opencode/kk-task3-ci-cache.Ytzjxk/cache` populated **only** with lockfile-integrity-addressed package content blobs from the existing npm cache, with no registry metadata/index copied. Root and fixture installs were isolated copies; the repository's `node_modules`/fixture were not installed into.
+
+- Root `npm ci --offline --no-audit --no-fund --cache <isolated cache>`: **exit 0**.
+- Fixture `npm ci --offline --no-audit --no-fund --cache <isolated cache>`: **exit 0**.
+- Local `npm pack --ignore-scripts --json --pack-destination <unique pack dir> --cache <isolated cache>`: **exit 0**.
+- Fresh consumer `npm install --offline --ignore-scripts --omit=dev --no-audit --no-fund --cache <isolated cache> <local tarball>`: **exit 1 / ENOTCACHED**, explicitly missing the TypeScript registry response despite successful root/fixture ci (RED).
+- Explicit `npm cache add 'typescript@^5.9.3' --cache <isolated cache>`: **exit 0**. This preparation step was allowed to contact the registry; it is not an offline or zero-download claim.
+- Same offline install in a different new consumer directory: **exit 0**, TypeScript **5.9.3** installed (GREEN).
+- Installed PyYAML parsed the workflow, preparation order was checked and each e2e `run` command passed `bash -n`: **exit 0**. No parser dependency was installed.
+
+Drivers `/tmp/opencode/kk-task3-ci-cache.Ytzjxk/{prepare,prime}.mjs` and per-command stdout/stderr remain for inspection; raw summary/result/error evidence is committed at `verification-logs/2026-10-23-task3-ci-cache.txt`. Neither the approved 18 engine cases nor the metadata regression nor full verify was repeated. Actual Node 20 GitHub runner execution remains for coordinator remote/PR verification. Task3 `[ ]` and Task4 wait remain unchanged.
