@@ -13,6 +13,7 @@ const MCP = join(ROOT, "dist", "mcp.js");
 const FIXTURE = join(ROOT, "fixtures", "mini-app");
 const NPM = process.platform === "win32" ? "npm.cmd" : "npm";
 const ARTIFACTS_ONLY = process.argv.includes("--artifacts-only");
+const PROTECT_ONLY = process.argv.includes("--protect-only");
 
 let failed = 0;
 
@@ -218,11 +219,86 @@ async function verifyArtifactClient(flow, cliPath, mcpPath, label) {
     await sourceSnapshot(flow.work) === flow.sources && await readFile(flow.baseline, "utf8") === flow.baselineRaw);
 }
 
+async function prepareProtectionFlow(work) {
+  const original = Buffer.from("// PRIVATE_PREVIEW_SENTINEL must never be printed\nexport default { productionBrowserSourceMaps: true };\n");
+  await writeFile(join(work, "next.config.mjs"), original);
+  await writeFile(join(work, ".env.protection"), "PRIVATE_TOKEN=private-protection-fixture-value-123456789\n");
+  for (const args of [
+    ["init", "-q"], ["add", "--", "next.config.mjs"],
+    ["-c", "user.name=Protection Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "protection fixture"],
+  ]) {
+    const git = run("git", ["-C", work, ...args]);
+    if (git.status !== 0) throw new Error("temporary protection Git fixture setup failed");
+  }
+  const initial = run(process.execPath, [CLI, "--artifacts", "--fresh", "--json"], { cwd: work });
+  let report;
+  try { report = JSON.parse(initial.stdout); } catch {}
+  check("protection: initial real production output contains browser maps", initial.status === 0 &&
+    report?.extra.some((finding) => finding.rule === "artifact-source-map" && finding.file?.startsWith(".next/static/")));
+  if (initial.status !== 0) throw new Error("temporary protection build failed (output withheld)");
+  const baseline = join(work, ".kkomkkom", "baseline.json");
+  await mkdir(dirname(baseline), { recursive: true });
+  if (!existsSync(baseline)) await writeFile(baseline, '{"version":1,"createdAt":"2026-10-23T00:00:00.000Z","routes":{},"pages":{}}');
+  return { work, original, baseline, baselineRaw: await readFile(baseline), sources: await sourceSnapshot(work),
+    configRaw: await readFile(join(work, "kkomkkom.config.json")) };
+}
+
+async function verifyProtectionClient(flow, cliPath, mcpPath, label) {
+  const preview = run(process.execPath, [cliPath, "--protect-sourcemaps", "--json", "--lang", "en"], { cwd: flow.work });
+  let plan;
+  try { plan = JSON.parse(preview.stdout); } catch {}
+  check(`${label}: preview is token-only and read-only`, preview.status === 0 && plan?.status === "change" &&
+    plan.diff?.before === "true" && plan.diff?.after === "false" && /^[a-f0-9]{64}$/.test(plan.expectedHash) &&
+    !/PRIVATE_PREVIEW_SENTINEL|private-protection-fixture-value/.test(preview.stdout + preview.stderr) &&
+    await sourceSnapshot(flow.work) === flow.sources);
+  if (!plan?.expectedHash) throw new Error("protection preview did not provide an approval token");
+  const rejected = run(process.execPath, [cliPath, "--protect-sourcemaps", "--apply", "--expected-hash", "0".repeat(64)], { cwd: flow.work });
+  check(`${label}: stale approval is refused without changes`, rejected.status === 2 && await sourceSnapshot(flow.work) === flow.sources);
+
+  const applied = run(process.execPath, [cliPath, "--protect-sourcemaps", "--apply", "--expected-hash", plan.expectedHash, "--json", "--lang", "en"], { cwd: flow.work });
+  let result;
+  try { result = JSON.parse(applied.stdout); } catch {}
+  check(`${label}: apply builds and verifies owned production, maps and cleanup`, applied.status === 0 &&
+    result?.status === "applied" && result.rollback === "not-needed" && result.configChanged === true &&
+    ["build", "artifacts", "smoke", "cleanup"].every((key) => result.verification?.[key] === "passed"), applied.stderr || applied.stdout);
+  if (applied.status !== 0 || !result?.transactionId) throw new Error("real protection apply did not pass");
+  const target = join(flow.work, "next.config.mjs");
+  const changed = await readFile(target);
+  check(`${label}: exact token change with durable original backup`, changed.equals(Buffer.from(flow.original.toString().replace(": true", ": false"))) &&
+    (await readFile(join(flow.work, ".kkomkkom", "protection", result.transactionId, "original"))).equals(flow.original));
+  const after = run(process.execPath, [cliPath, "--artifacts", "--json"], { cwd: flow.work });
+  let afterReport;
+  try { afterReport = JSON.parse(after.stdout); } catch {}
+  check(`${label}: emitted browser maps are absent after rebuild`, after.status === 0 && afterReport?.coverage.status === "complete" &&
+    !afterReport.extra.some((finding) => finding.rule === "artifact-source-map"));
+  const tools = mcpSession(mcpPath, [{ jsonrpc: "2.0", id: 1, method: "tools/list" },
+    toolCall(2, { projectPath: flow.work, protectSourcemaps: true }), { jsonrpc: "2.0", id: 3, method: "ping" }]);
+  const listed = tools.responses.get(1)?.result?.tools ?? [];
+  check(`${label}: MCP exposes no protection mutation tool`, tools.status === 0 && listed.length === 1 &&
+    listed[0].name === "kkomkkom" && !/protect|restore|expectedHash/.test(JSON.stringify(listed[0].inputSchema)) &&
+    tools.responses.get(2)?.result?.isError === true && tools.responses.get(3)?.result !== undefined &&
+    (await readFile(target)).equals(changed));
+
+  await writeFile(target, Buffer.concat([changed, Buffer.from("// later user edit\n")]));
+  const refused = run(process.execPath, [cliPath, "--restore", result.transactionId, "--json"], { cwd: flow.work });
+  check(`${label}: restore refuses later user edits`, refused.status === 2 &&
+    (await readFile(target)).equals(Buffer.concat([changed, Buffer.from("// later user edit\n")])));
+  await writeFile(target, changed);
+  const restored = run(process.execPath, [cliPath, "--restore", result.transactionId, "--json"], { cwd: flow.work });
+  let restoreReport;
+  try { restoreReport = JSON.parse(restored.stdout); } catch {}
+  check(`${label}: restore is byte-exact and preserves unrelated source/env/baseline`, restored.status === 0 && restoreReport?.restored === true &&
+    (await readFile(target)).equals(flow.original) && await sourceSnapshot(flow.work) === flow.sources &&
+    (await readFile(flow.baseline)).equals(flow.baselineRaw));
+  check(`${label}: result does not claim generated build output was restored`, result.buildOutput === "may-have-changed" &&
+    /config|設定|설정/.test(result.notes.join(" ")) && !/PRIVATE_PREVIEW_SENTINEL|private-protection-fixture-value/.test(applied.stdout + restored.stdout));
+}
+
 async function main() {
   const build = run(NPM, ["run", "build"], { cwd: ROOT });
   check("build", build.status === 0, build.stderr || build.stdout);
 
-  if (!ARTIFACTS_ONLY) {
+  if (!ARTIFACTS_ONLY && !PROTECT_ONLY) {
   const testDir = join(ROOT, "test");
   const testFiles = (await readdir(testDir))
     .filter((name) => name.endsWith(".test.js"))
@@ -238,6 +314,7 @@ async function main() {
 
   const work = await mkdtemp(join(tmpdir(), "kkomkkom-verify-"));
   let artifactFlow;
+  let protectionFlow;
   try {
     for (const entry of ["app", "lib", "package.json", "tsconfig.json", "next-env.d.ts"]) {
       if (existsSync(join(FIXTURE, entry))) {
@@ -255,7 +332,7 @@ async function main() {
       }),
     );
 
-    if (!ARTIFACTS_ONLY) {
+    if (!ARTIFACTS_ONLY && !PROTECT_ONLY) {
     const ko = await runCli(["--json", "--lang", "ko"], work);
     let report = null;
     try {
@@ -475,8 +552,14 @@ async function main() {
     }
 
     }
-    artifactFlow = await prepareArtifactFlow(work);
-    await verifyArtifactClient(artifactFlow, CLI, MCP, "artifacts repo");
+    if (!ARTIFACTS_ONLY) {
+      protectionFlow = await prepareProtectionFlow(work);
+      await verifyProtectionClient(protectionFlow, CLI, MCP, "protection repo");
+    }
+    if (!PROTECT_ONLY) {
+      artifactFlow = await prepareArtifactFlow(work);
+      await verifyArtifactClient(artifactFlow, CLI, MCP, "artifacts repo");
+    }
 
     // A packed consumer installs with production dependencies only.
     const packDir = await mkdtemp(join(tmpdir(), "kkomkkom-verify-pack-"));
@@ -527,7 +610,7 @@ async function main() {
         const version = run(process.execPath, [consumerCli, "--version"], { cwd: consumer });
         check("pack: consumer CLI runs", version.status === 0 && version.stdout.trim() === "0.1.0", version.stderr);
 
-        if (!ARTIFACTS_ONLY) {
+        if (!ARTIFACTS_ONLY && !PROTECT_ONLY) {
         const consumerRun = run(
           process.execPath,
           [consumerCli, "--fast", "--json", "--lang", "en", "--port", String(await freePort())],
@@ -560,7 +643,20 @@ async function main() {
           consumerSession.stderr || consumerSession.stdout,
         );
         }
-        await verifyArtifactClient(artifactFlow, consumerCli, consumerMcp, "artifacts packed consumer");
+        if (artifactFlow) await verifyArtifactClient(artifactFlow, consumerCli, consumerMcp, "artifacts packed consumer");
+        if (protectionFlow) {
+          if (artifactFlow) {
+            await artifactFlow.stop();
+            artifactFlow = undefined;
+            // Only files created by prepareArtifactFlow in this owned temporary fixture.
+            for (const file of [".env.artifact", "public/provider.js", "public/known.js", "public/reference.js", "public/suppressed.js.map"]) {
+              await rm(join(work, file));
+            }
+            await writeFile(join(work, "next.config.mjs"), protectionFlow.original);
+            await writeFile(join(work, "kkomkkom.config.json"), protectionFlow.configRaw);
+          }
+          await verifyProtectionClient(protectionFlow, consumerCli, consumerMcp, "protection packed consumer");
+        }
 
         const size = (await stat(tarball)).size;
         console.log(`  · packed ${size} bytes; consumer install ${installMs} ms`);

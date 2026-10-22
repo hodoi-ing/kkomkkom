@@ -66,6 +66,7 @@ function invalid(field: string): never {
 function validateArgs(value: unknown): ToolArgs {
   if (value === undefined) return {};
   if (!isPlainObject(value)) invalid("arguments");
+  if (["protectSourcemaps", "protect-sourcemaps", "apply", "expectedHash", "expected-hash", "restore"].some((key) => key in value)) invalid("protection");
 
   const args: ToolArgs = {};
   if ("projectPath" in value) {

@@ -26,13 +26,20 @@ async function fixture(t, behavior) {
     const http = require('node:http');
     const behavior = ${JSON.stringify(behavior)};
     if (process.argv[2] === 'build') {
+      fs.writeFileSync('build-environment', process.env.CI || 'unset');
       if (behavior === 'build-wait') { fs.writeFileSync('interrupt-ready', 'build'); setInterval(() => {}, 1000); return; }
       if (behavior === 'build-user-edit') fs.appendFileSync('next.config.js', '// later user change');
       fs.mkdirSync('.next/static/chunks', { recursive: true });
       fs.writeFileSync('.next/BUILD_ID', 'fixture-production');
       fs.writeFileSync('.next/static/chunks/main.js', 'console.log("fixture")');
       fs.writeFileSync('build-side-effect', 'generated, not rolled back');
+      if (behavior === 'build-corrupt-backup') {
+        const id = fs.readFileSync('.kkomkkom/protection/active', 'utf8').trim().split(' ')[0];
+        fs.writeFileSync('.kkomkkom/protection/' + id + '/original', 'corrupt');
+      }
+      if (behavior === 'build-finalization-fail') fs.chmodSync('.kkomkkom/protection', 0o500);
       if (behavior === 'maps') fs.writeFileSync('.next/static/chunks/main.js.map', JSON.stringify({version:3,sources:['entry.js'],names:[],mappings:''}));
+      if (behavior === 'critical') fs.writeFileSync('.next/static/chunks/leak.js', 'const key = "sk_live_ABCDEFGHIJKLMNOPQRST"');
       process.exit(behavior.startsWith('build-') ? 1 : 0);
     }
     if (process.argv[2] !== 'start' || process.argv[3] !== '--hostname' || process.argv[4] !== '127.0.0.1') process.exit(91);
@@ -43,7 +50,8 @@ async function fixture(t, behavior) {
     http.createServer((req, res) => {
       if (req.url === '/' && behavior === 'smoke-wait' && ++rootRequests > 1) { fs.writeFileSync('interrupt-ready', 'smoke'); return; }
       res.statusCode = behavior === 'smoke-fail' ? 404 : 200;
-      res.end(req.url === '/_next/static/chunks/main.js' ? fs.readFileSync('.next/static/chunks/main.js') : 'production-fixture');
+      res.end(req.url === '/_next/static/chunks/main.js' ? fs.readFileSync('.next/static/chunks/main.js') :
+        req.url === '/_next/static/chunks/leak.js' ? fs.readFileSync('.next/static/chunks/leak.js') : 'production-fixture');
     }).listen(port, '127.0.0.1');
   `);
   execFileSync("git", ["init", "-q", root]);
@@ -66,6 +74,7 @@ test("protection verification uses an owned start server and closes its port on 
   assert.equal(result.verification.smoke, "passed");
   assert.equal(result.verification.artifacts, "passed");
   assert.equal(result.verification.cleanup, "passed");
+  assert.equal(await readFile(join(root, "build-environment"), "utf8"), "1", "Next must refuse automatic missing-TypeScript installation in CI mode");
   assert.match(await readFile(join(root, "next.config.js"), "utf8"), /SourceMaps: false/);
   assert.equal(await isPortOpen(Number(await readFile(join(root, "owned-port"), "utf8"))), false);
   await engine.restoreProtection(root, result.transactionId);
@@ -95,7 +104,7 @@ test("protection interrupt stops owned build/production and hash-safely rolls ba
       assert.ok(Date.now() < deadline, `interrupt readiness timeout: ${stderr}`);
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
-    const active = (await readFile(join(root, ".kkomkkom", "protection", "active"), "utf8")).trim();
+    const active = (await readFile(join(root, ".kkomkkom", "protection", "active"), "utf8")).trim().split(" ")[0];
     await assert.rejects(engine.restoreProtection(root, active), /locked/);
     child.kill(signal);
     const exit = await closed;
@@ -119,6 +128,7 @@ test("protection failed build rolls back config only and separately reports user
     assert.equal(result.verification.build, "failed");
     assert.equal(result.verification.smoke, "not-run");
     assert.equal(result.rollback, behavior === "build-fail" ? "restored" : "refused");
+    if (behavior === "build-user-edit") assert.equal(result.rollbackFailureReason, "config-edited-restore-refused");
     assert.equal(result.configChanged, behavior !== "build-fail");
     assert.equal(await readFile(join(root, "build-side-effect"), "utf8"), "generated, not rolled back");
     const current = await readFile(join(root, "next.config.js"), "utf8");
@@ -126,9 +136,27 @@ test("protection failed build rolls back config only and separately reports user
   }
 });
 
-test("protection map/start/smoke failures roll back and always stop owned production", async (t) => {
+test("protection reports corrupt-backup refusal separately from restored config with storage finalization failure", async (t) => {
+  for (const behavior of ["build-corrupt-backup", "build-finalization-fail"]) {
+    if (behavior === "build-finalization-fail" && process.getuid?.() === 0) continue;
+    const root = await fixture(t, behavior);
+    let result;
+    try { result = await engine.applyAndVerifyProtection(root, expectedHash); }
+    finally {
+      const { chmod } = await import("node:fs/promises");
+      await chmod(join(root, ".kkomkkom", "protection"), 0o700);
+    }
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.rollback, behavior === "build-corrupt-backup" ? "refused" : "restored");
+    assert.equal(result.rollbackFailureReason, behavior === "build-corrupt-backup" ? "corrupt-backup" : "restore-finalization-failed");
+    assert.equal(result.configChanged, behavior === "build-corrupt-backup");
+    assert.equal(await readFile(join(root, "next.config.js"), "utf8"), behavior === "build-corrupt-backup" ? original.replace(": true", ": false") : original);
+  }
+});
+
+test("protection map/critical/start/smoke failures roll back and always stop owned production", async (t) => {
   assert.equal(typeof engine.applyAndVerifyProtection, "function");
-  for (const behavior of ["maps", "start-fail", "smoke-fail"]) {
+  for (const behavior of ["maps", "start-fail", "smoke-fail", "critical"]) {
     const root = await fixture(t, behavior);
     const result = await engine.applyAndVerifyProtection(root, expectedHash);
     assert.equal(result.exitCode, 1, behavior);

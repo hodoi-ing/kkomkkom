@@ -197,9 +197,11 @@ async function locked<T>(directory: string, work: () => Promise<T>): Promise<T> 
 
 async function activeTransaction(directory: string, transactionId: string) {
   const active = await readSafe(join(directory, "active"), 128);
+  const [id, metadataHash] = active.bytes.toString("utf8").trimEnd().split(" ");
   if ((active.stat.mode & 0o077) !== 0 || (process.getuid && active.stat.uid !== process.getuid()) ||
-      active.bytes.toString("utf8") !== `${transactionId}\n`) refuse("transaction-not-active");
-  return active;
+      id !== transactionId || !metadataHash || !HASH.test(metadataHash) ||
+      active.bytes.toString("utf8") !== `${transactionId} ${metadataHash}\n`) refuse("transaction-not-active");
+  return { ...active, metadataHash };
 }
 
 async function releaseActive(directory: string, transactionId: string) {
@@ -216,7 +218,8 @@ async function replace(root: string, file: string, expected: Awaited<ReturnType<
     owned = true;
     if (before) await before();
     const current = await readSafe(join(root, file));
-    if (current.stat.dev !== expected.stat.dev || current.stat.ino !== expected.stat.ino || !current.bytes.equals(expected.bytes)) refuse("config-changed-repreview");
+    if (current.stat.dev !== expected.stat.dev || current.stat.ino !== expected.stat.ino || current.stat.mode !== expected.stat.mode ||
+        current.stat.mtimeMs !== expected.stat.mtimeMs || current.stat.ctimeMs !== expected.stat.ctimeMs || !current.bytes.equals(expected.bytes)) refuse("config-changed-repreview");
     await safePath(root, true);
     await rename(temporary, join(root, file));
     owned = false;
@@ -277,11 +280,13 @@ async function applyLocked(root: string, directory: string, file: string, expect
     file, originalHash: digest(original), appliedHash: digest(applied), mode: current.content.stat.mode & 0o7777 };
   await exclusiveFile(join(transaction, "original"), original);
   if (!(await readSafe(join(transaction, "original"))).bytes.equals(original)) refuse("backup-verification-failed");
-  await exclusiveFile(join(transaction, "metadata.json"), Buffer.from(JSON.stringify(metadata) + "\n"));
+  const metadataBytes = Buffer.from(JSON.stringify(metadata) + "\n");
+  await exclusiveFile(join(transaction, "metadata.json"), metadataBytes);
   await syncDirectory(transaction);
   await syncDirectory(directory);
   await syncDirectory(dirname(directory));
-  await exclusiveFile(join(directory, "active"), Buffer.from(`${transactionId}\n`));
+  await syncDirectory(root);
+  await exclusiveFile(join(directory, "active"), Buffer.from(`${transactionId} ${digest(metadataBytes)}\n`));
   await syncDirectory(directory);
   try { await replace(root, file, current.content, applied, metadata.mode, () => cleanTarget(root, file)); }
   catch (error) {
@@ -303,10 +308,11 @@ export async function restoreProtection(inputRoot: string, transactionId: string
 
 async function restoreLocked(root: string, directory: string, transactionId: string) {
   const rootStat = await safePath(root, true);
-  await activeTransaction(directory, transactionId);
+  const active = await activeTransaction(directory, transactionId);
   const transaction = join(directory, transactionId);
   await privateDirectory(transaction, false);
   const raw = await readSafe(join(transaction, "metadata.json"), 16384);
+  if (digest(raw.bytes) !== active.metadataHash) refuse("invalid-transaction-metadata");
   let metadata: Metadata;
   try { metadata = JSON.parse(raw.bytes.toString("utf8")); }
   catch { return refuse("invalid-transaction-metadata"); }
@@ -322,7 +328,7 @@ async function restoreLocked(root: string, directory: string, transactionId: str
   const preview = locate(metadata.file, backup.bytes);
   if (preview.status !== "change" || digest(changedBytes(backup.bytes, preview)) !== metadata.appliedHash) refuse("invalid-backup-change");
   const current = await readSafe(join(root, metadata.file));
-  if (digest(current.bytes) !== metadata.appliedHash) refuse("config-edited-restore-refused");
+  if (digest(current.bytes) !== metadata.appliedHash || (current.stat.mode & 0o7777) !== metadata.mode) refuse("config-edited-restore-refused");
   try {
     await replace(root, metadata.file, current, backup.bytes, metadata.mode);
     await releaseActive(directory, transactionId);
@@ -377,10 +383,14 @@ async function verifyAppliedProtection(root: string, directory: string, file: st
   catch (error) {
     if (!(error instanceof ProtectionError) || !error.configChanged || !error.transactionId) throw error;
     let rollback: "restored" | "refused" = "refused";
+    let rollbackFailureReason: string | undefined;
     try { await restoreLocked(root, directory, error.transactionId); rollback = "restored"; }
-    catch (restoreError) { if (restoreError instanceof ProtectionError && restoreError.configRestored) rollback = "restored"; }
+    catch (restoreError) {
+      rollbackFailureReason = restoreError instanceof ProtectionError ? restoreError.reason : "restore-error";
+      if (restoreError instanceof ProtectionError && restoreError.configRestored) rollback = "restored";
+    }
     return { status: "apply-failed" as const, exitCode: 1, transactionId: error.transactionId,
-      configChanged: rollback !== "restored", verification, rollback, buildOutput: "may-have-changed" as const };
+      configChanged: rollback !== "restored", verification, rollback, rollbackFailureReason, failureReason: error.reason, buildOutput: "may-have-changed" as const };
   }
   let server: DevServer | undefined;
   let failed = false;
@@ -388,7 +398,7 @@ async function verifyAppliedProtection(root: string, directory: string, file: st
   let artifactCoverage: CoverageSummary | undefined;
   try {
     verification.build = "failed";
-    const build = await runBuild(root, { signal });
+    const build = await runBuild(root, { signal, ci: true });
     // Page-weight measurement is unrelated to the protection verification.
     if (!build.ok && build.failure !== "measure") refuse("production-build-failed");
     verification.build = "passed";
@@ -402,10 +412,10 @@ async function verifyAppliedProtection(root: string, directory: string, file: st
     verification.artifacts = "failed";
     const inspection = await runArtifactCheck({ root, productionUrl: server.url });
     artifactCoverage = inspection.coverage;
-    if (inspection.buildFailed || inspection.coverage.status !== "complete" ||
+    if (inspection.exitCode !== 0 || inspection.buildFailed || inspection.coverage.status !== "complete" ||
         inspection.extras.some((finding) => finding.rule === "artifact-source-map") ||
         inspection.coverage.checks.some((check) => check.status === "ignored" && check.reason?.startsWith("exception:artifact-source-map:"))) {
-      refuse("source-map-verification-failed");
+      refuse("artifact-verification-failed");
     }
     const current = await readSafe(join(root, transaction.file));
     if (signal.aborted) refuse("verification-cancelled");
@@ -420,12 +430,16 @@ async function verifyAppliedProtection(root: string, directory: string, file: st
   }
   if (signal.aborted) { failed = true; failureReason ??= "verification-cancelled"; }
   let rollback: "not-needed" | "restored" | "refused" = "not-needed";
+  let rollbackFailureReason: string | undefined;
   if (failed) {
     rollback = "refused";
     try { await restoreLocked(root, directory, transaction.transactionId); rollback = "restored"; }
-    catch (error) { if (error instanceof ProtectionError && error.configRestored) rollback = "restored"; }
+    catch (error) {
+      rollbackFailureReason = error instanceof ProtectionError ? error.reason : "restore-error";
+      if (error instanceof ProtectionError && error.configRestored) rollback = "restored";
+    }
   }
   return { status: failed ? "verification-failed" as const : "applied" as const, exitCode: failed ? 1 : 0,
     transactionId: transaction.transactionId, file: transaction.file, configChanged: rollback !== "restored",
-    verification, rollback, artifactCoverage, failureReason, buildOutput: "may-have-changed" as const };
+    verification, rollback, rollbackFailureReason, artifactCoverage, failureReason, buildOutput: "may-have-changed" as const };
 }

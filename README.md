@@ -136,6 +136,29 @@ stdio에서 직접 호출하는 예시는 다음과 같습니다. 한 줄에 JSO
 
 HTTP 상한은 URL 50개, 동시 5개, 요청당 본문 완료까지 5초, 전체 60초, 본문당 1 MiB, 합계 32 MiB입니다. 합계는 처리에 수락한 payload 바이트 예산이며 네트워크·OS 버퍼 크기를 보장하는 값은 아닙니다. 초과 chunk는 보관하지 않고 stream을 취소합니다. 이 예산은 로컬 읽기 예산과 별개이며, 제한·오류·남은 미검증 파일은 coverage에 기록됩니다. 본문과 비밀값이 담긴 digest는 출력하지 않습니다.
 
+### 제한된 소스맵 설정 보호 (`--protect-sourcemaps`)
+
+일반 검사와 MCP는 설정을 고치지 않습니다. 보호 명령도 기본은 미리보기입니다. 프로젝트 루트에서 아래 순서로 실행합니다.
+
+```bash
+kkomkkom --protect-sourcemaps --lang ko
+# 표시된 파일·token 위치·영향을 검토한 뒤, 출력된 hash를 그대로 사용합니다.
+kkomkkom --protect-sourcemaps --apply --expected-hash HASH --lang ko
+# 적용 결과에 표시된 transaction ID로 설정만 복원합니다.
+kkomkkom --restore TRANSACTION_ID --lang ko
+```
+
+- 대상은 **하나의** `next.config.js/mjs/cjs/ts`에서 직접 객체로 내보낸 `productionBrowserSourceMaps: true`입니다. AST로 찾은 `true` token만 `false`로 교체합니다. 속성이 없거나 이미 `false`면 미리보기는 no-op입니다. wrapper·변수 간접 export·복수 설정/export·spread·computed/중복 속성·그 밖의 최상위 실행문은 미지원으로 끝납니다. 설정 코드를 실행해 미리보기를 만들지 않습니다.
+- 미리보기에는 상대 파일명, token과 위치, 승인용 원본 SHA-256만 표시합니다. 주변 설정이나 `.env` 내용은 출력하지 않습니다. hash는 명시적 적용 승인용이며 비밀 노출의 증거가 아닙니다.
+- 적용에는 Git에 추적된 **설정 파일의 HEAD/index/worktree가 모두 같은 상태**와 미리보기 hash가 필요합니다. Git 없음·untracked·staged/unstaged 변경·경로 symlink·경쟁 transaction은 거부합니다. 다른 파일의 변경을 커밋하거나 되돌리지 않습니다. `--apply`만 쓰거나 hash만 주면 적용되지 않으며, CI도 대화형 승인을 기다리지 않습니다.
+- 원본 바이트와 mode를 private `.kkomkkom/protection/TRANSACTION_ID/`에 먼저 보존·동기화하고 설정을 원자적으로 교체합니다. 백업에는 설정의 비밀값이 포함될 수 있으므로 공유하거나 Git에 추가하지 마세요. 자동 stale-lock 삭제는 없습니다. 강제 종료 뒤 lock/active가 남으면 실행 중인 작업과 transaction을 먼저 확인해야 합니다.
+- 적용 후 **설치된 로컬 Next**로 production 빌드 → 새로 소유한 `127.0.0.1` 서버 smoke → 배포물·HTTP 검사를 실행하고 서버를 정리합니다. 기존 dev 서버를 재사용하지 않습니다. 빌드 실패, 불완전한 검사, 남은 소스맵/소스맵 예외, critical 배포물 finding은 검증 실패입니다. 의존성을 추가하거나 자동 설치·다운로드하지 않지만, 프로젝트의 빌드 코드는 실행되므로 자체 네트워크·파일 부작용이 있을 수 있습니다.
+- 실패하면 현재 hash와 mode가 적용본과 같을 때만 설정 복원을 시도합니다. `verification`, `rollback`, `rollbackFailureReason`, `configChanged`를 따로 확인하세요. 사용자 후속 수정·손상된 백업·변조된 metadata·이전 transaction은 덮어쓰기로 해결하지 않습니다. SIGINT/SIGTERM도 소유 프로세스 정리와 안전한 복원 시도 후 각각 130/143으로 종료합니다. SIGKILL·전원 차단에서는 정리 완료를 보장할 수 없습니다.
+
+**복원되는 것은 설정뿐입니다.** 생성된 `.next` 등 빌드 산출물은 되돌리지 않습니다. 설정을 복원한 뒤 필요하면 다시 빌드하세요. 브라우저 소스맵을 줄이면 오류 추적 정보도 줄어들 수 있으며, 서버 비밀 보호·역분석 방지·배포 안전 보장은 아닙니다. 민감 파일이나 기존 map을 직접 삭제하지 않습니다.
+
+보호 모드는 `--json`, `--lang`만 함께 쓸 수 있습니다. `--restore`는 preview/apply와 별도 모드이며, 검사·AI 설명·`--update`·`--reuse`·포트 옵션과 조합할 수 없습니다. MCP에는 보호 도구가 없고 보호 인자도 거부합니다. 보호 JSON은 일반 검사 schemaVersion 2 보고서가 아닌 작업 결과입니다. Linux/WSL 임시 Git 프로젝트와 실제 Next/packed CLI에서 검증했으며 Windows/macOS는 미검증입니다. 파일 최종 확인과 rename 사이의 짧은 구간은 같은 권한의 외부 프로세스까지 잠그는 OS transaction이 아닙니다.
+
 ### 결과를 보고 무엇을 하나요?
 
 1. 보고서에 나온 경로·파일과 관찰 내용을 확인합니다.
@@ -168,7 +191,10 @@ kkomkkom --explain          # 설치된 AI CLI로 추가 설명 요청
 | `--artifacts` | `public/`·`.next/static/` 정적 배포물만 검사. 서버·빌드·설치 없음 |
 | `--artifacts --fresh` | 먼저 `next build`를 실행한 뒤 새 배포물 검사 |
 | `--artifacts --production-url URL` | 실행 중인 HTTP loopback 서버에 GET으로 파일 바이트 일치 확인. 자동 서버 시작 없음 |
-| `--json` | `schemaVersion: 2`와 `coverage`, `diff`, `extra`, `exitCode`를 JSON으로 출력 |
+| `--protect-sourcemaps` | 설정 token 변경 미리보기만 실행 |
+| `--protect-sourcemaps --apply --expected-hash HASH` | 명시 적용 후 production 빌드·소유 서버·배포물 검증. 실패 시 안전한 설정 복원 시도 |
+| `--restore TRANSACTION_ID` | 활성 transaction의 적용 hash/mode가 일치할 때만 원본 설정 복원 |
+| `--json` | 일반 검사: `schemaVersion: 2`, `coverage`, `diff`, `extra`, `exitCode`. 보호: status·transaction·검증/복원 작업 결과 |
 | `--strict` | warning 또는 `coverage` 불완전/빈 범위를 종료 코드 1로 처리 |
 | `--port 3100` | 개발 서버 포트 지정. 기본값은 `kkomkkom.config.json`의 `port` 또는 3100 |
 | `--reuse` | 지정 포트에서 실행 중인 Next 서버 재사용. 같은 프로젝트인지 확인하지 않음 |
@@ -273,7 +299,7 @@ kkomkkom --explain          # 설치된 AI CLI로 추가 설명 요청
 | 플랫폼 | Linux/WSL에서만 검증. **Windows·macOS는 미검증** |
 | 에이전트별 검증 | **보류**. OpenCode·Codex 등 개별 클라이언트 호환성 완료를 보장하지 않음 |
 | 배포 | npm 미공개. 저장소 접근 권한과 로컬 빌드 필요 |
-| 추가 앱 보호 | 배포물 정적 점검은 제공. 선택형 설정 보호 적용(preview/apply/restore)은 **로드맵** |
+| 제한된 설정 보호 | 단일 직접 source-map 설정의 preview/명시 apply/hash-safe restore 구현·Linux/WSL 로컬 검증. 독립 검수·최종 원격 통합 대기. 일반 앱 변환·난독화는 미지원 |
 
 ### 현재 한계
 
@@ -299,6 +325,8 @@ npm test          # 단위 테스트만 필요할 때. verify와 중복 실행�
 npm ci --prefix fixtures/mini-app --no-audit --no-fund
 npm cache add "typescript@$(node -p "require('./package.json').dependencies.typescript")"
 npm run verify    # 빌드 + 단위 테스트 + 실제 Next fixture + packed CLI/MCP
+# 개발 중 보호 통합만 확인할 때 (전체 회귀는 최종 verify에 포함)
+node scripts/verify.mjs --protect-only
 ```
 
 root `npm ci`가 lockfile의 tarball을 캐시했더라도, 소비자 설치가 runtime range를 해석할 registry 메타데이터까지 있다고 보장하지 않습니다. `npm cache add`는 현재 runtime 의존성인 TypeScript의 range 메타데이터와 선택된 tarball을 함께 준비합니다. 캐시 부족을 숨기는 `prefer-offline` 네트워크 폴백은 사용하지 않습니다.
@@ -335,8 +363,16 @@ HTTP limits are 50 URLs, five concurrent requests, five seconds through body com
 
 Page weights are not raw network sizes. `manifest-file` is the sum of uncompressed JS chunk files referenced by the build manifests. `next-output` is the `First Load JS` value reported by that older Next version, which is not guaranteed to equal either the raw file sum or the actual HTTP transfer size. Neither method is gzip transfer size or TTFB. Sizes are compared only when both runs recorded the same method; legacy baselines without one are loaded but not compared until a non-fast `--update` replaces their values. Production-build, packed-consumer and local MCP calls were verified on Linux/WSL only; Windows and macOS are untested.
 
-The preview above uses sample data, not a recorded app scan. Findings require review: a 200 response does not by itself prove an auth bypass, and exit code 0 is not a security guarantee. Sources and settings are not automatically fixed; dev/build artifacts and baseline files can change. Redaction has limits. Optional AI explanations may send data to the configured model provider.
+`--protect-sourcemaps` is a separate, preview-only action. It accepts exactly one direct object export in `next.config.js/mjs/cjs/ts` and locates only the literal `productionBrowserSourceMaps: true` token. Absent/false is a preview no-op; wrappers, indirect exports, multiple configs/exports, executable top-level statements, spread/computed/duplicate properties and parser errors are unsupported. Preview never evaluates config and shows only the relative filename, token/location and SHA-256 approval token, not adjacent config/env values.
 
-See [known issues](https://github.com/hodoi-ing/kkomkkom/issues/1) and the [roadmap](https://github.com/hodoi-ing/kkomkkom/issues/2). Additional exposure checks and protection features are planned, not implemented. MIT licensed.
+Apply requires `--protect-sourcemaps --apply --expected-hash HASH` and a tracked target whose HEAD, index and raw worktree match. No interactive CI approval, implicit apply, Git reset or dependency installation. The tool rejects unsafe/symlinked paths and competing transactions, saves a private byte-exact durable backup, preserves mode and atomically replaces only that token. The lock spans build and verification. It then runs the installed Next production build, a newly owned `127.0.0.1` production server, and artifact/HTTP inspection; it never reuses a dev server. Build errors, incomplete coverage, residual/suppressed source maps and critical artifact findings fail verification. Project build code may still perform its own network/file operations.
+
+`--restore TRANSACTION_ID` is a separate mode and only restores the active owned transaction when current content hash and mode still match the applied file. Later edits, corrupt backups and malicious metadata are refused. Verification failures attempt the same config-only rollback; inspect `verification`, `rollback`, `rollbackFailureReason` and `configChanged` separately. SIGINT/SIGTERM wait for owned process cleanup and safe rollback before exit 130/143; SIGKILL/power loss cannot guarantee cleanup. Never delete a stale lock automatically: inspect the owner and transaction first. Backup files may contain private config and must not be committed/shared.
+
+Generated build output is **not restored**: rebuild after restoring config. This setting reduces browser source maps and can reduce error-tracking detail; it does not protect server secrets, prevent reverse engineering or establish deployment security. Only `--json`/`--lang` combine with protection; inspection, explanation, baseline, reuse and port options do not. Protection JSON is an action result, not inspection schemaVersion 2. MCP has no mutation tool and rejects protection arguments. Temporary real Next/packed-consumer flows were verified on Linux/WSL; Windows/macOS and directory-sync behavior there remain untested. The last check and rename are separate syscalls, not an OS transaction against another process with the same filesystem permissions.
+
+The preview above uses sample data, not a recorded app scan. Findings require review: a 200 response does not by itself prove an auth bypass, and exit code 0 is not a security guarantee. Normal inspection never fixes sources/settings; the explicit protection action above is the only limited config edit. Dev/build artifacts and explicit baseline updates can change files. Redaction has limits. Optional AI explanations may send data to the configured model provider.
+
+See [known issues](https://github.com/hodoi-ing/kkomkkom/issues/1) and the [roadmap](https://github.com/hodoi-ing/kkomkkom/issues/2). General app conversion, obfuscation and additional platform protection remain unimplemented. MIT licensed.
 
 </details>

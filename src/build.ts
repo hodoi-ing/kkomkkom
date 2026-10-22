@@ -171,6 +171,8 @@ export interface BuildResult {
 export interface BuildOptions {
   /** An owning workflow handles process signals and waits for cleanup/rollback. */
   signal?: AbortSignal;
+  /** Next refuses its automatic missing-TypeScript install in CI mode. */
+  ci?: boolean;
   timeoutMs?: number;
   stopTimeoutMs?: number;
   /** Test seam; defaults to node:child_process.spawn. */
@@ -196,7 +198,7 @@ export function runBuild(root: string, options: BuildOptions = {}): Promise<Buil
       cwd: root,
       stdio: ["ignore", "pipe", "pipe"],
       detached: process.platform !== "win32",
-      env: nextEnv(),
+      env: options.ci ? { ...nextEnv(), CI: "1" } : nextEnv(),
       windowsHide: true,
     });
   } catch {
