@@ -52,6 +52,8 @@ These regressions were red before the fix (6 focused failures) and green after; 
 
 ## Limitations
 
+Coordinator review: at `46cd52b`, independently ran `npm run verify` (exit 0): 197 unit/regression cases plus every production-build, baseline-preservation, MCP and packed-consumer integration check passed. The independent pack was 52,950 bytes and the warm-cache consumer install took 503 ms. `git diff --check de8a6b1..HEAD` also exited 0. This is not a Windows/macOS or agent-client connection verification.
+
 - Windows and macOS are untested (process termination, paths, `npm pack` install).
 - Consumer install was measured from a warm local npm cache; cold network time was not measured.
 - The production build was Next.js 16.4.2 only. Legacy size-table parsing is unit-tested but was not exercised against a real older Next build.
