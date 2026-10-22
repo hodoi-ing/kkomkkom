@@ -75,6 +75,7 @@
 - [ ] #2 단계 3: 제한된 Next 보호 변경의 미리보기·선택 적용·복원·재검증 설계 및 구현/검수.
   - 현재 착수: 계획 Task4와 구체적 안전 계약(`8d7b1f4`). Task3는 승인했으므로 보호 구현을 시작한다. 테스트는 새 고유 임시 Git fixture만 수정하고, 실제 사용자 프로젝트에는 보호를 적용하지 않는다. 탭2는 39% 컨텍스트에서 새 Sol medium 세션으로 전환해 구현하며 TASKLIST의 검증 완료 기록을 신뢰한다.
   - Task4 안전엔진 체크포인트(2026-10-23, 탭2): 실제 세션 API `openai/gpt-6.1-sol/medium` 확인. AST token-only preview·tracked HEAD/index/worktree clean+hash 승인 apply·private durable transaction+owned lock·backup/metadata/root/hash 검증 restore 추가. 새 임시Git fixture 회귀 **RED6→GREEN6, 방어 보강 최종9/9 exit0**, 검사기 build exit0. `/tmp/opencode/kk-task4-engine-20261023/`, 상세 `docs/verification-2026-10-23-task4.md`. 다음: CLI argv/runtime·실production verification/rollback·packed 연결. 기존 골든/full verify 재실행·실사용자 적용·push 없음. Task4 `[ ]` 유지, 총괄 안전엔진 검토 후에도 연결 구현 계속.
+  - Task4 CLI/검증 연결 체크포인트(2026-10-23): 안전엔진 `0b64dae` 후 preview/apply/hash/restore runtime 상호배타·5언어 안내·owned next start·build/artifact HTTP 검사·SIGINT/SIGTERM cleanup+hash-safe rollback 연결. stale transaction의 동일bytes 새적용 복원 금지, 전체 검증 중 lock 유지, Unix mode/JSON exit 정합 회귀 RED→GREEN. 신규 focused **20/20 pass(exit0)** + build exit0(`cli-final{,-build}.log`), 문서 상세 갱신. 총괄 report는 해당탭 GitHub 권한 대기로 agent_blocked(제출 전 거부), 대신 이 기록 보존·권한프롬프트 미조작. 다음 실Next/packed 통합·README·rollback-finalization 진단·최종verify 1회. 완료골든/full267 반복·사용자앱 적용·push 없음, Task4 `[ ]` 유지.
 - [ ] #2 단계 4: 후속 확장 수요/비용 평가 기록 — 난독화·Electron·모바일 구현은 후속 후보로 유지.
 - [ ] 최종 검수 결과·이슈별 완료/보류/한계 기록, GitHub main과 로컬 HEAD 일치 확인.
 

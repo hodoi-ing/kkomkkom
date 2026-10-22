@@ -9,6 +9,7 @@ import { renderReport } from "./report.js";
 import { runArtifactCheck } from "./artifacts.js";
 import { runCheck } from "./run.js";
 import { severityOf } from "./severity.js";
+import { applyAndVerifyProtection, previewProtection, ProtectionError, restoreProtection } from "./protect.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { version: string };
@@ -22,7 +23,13 @@ Usage
   kkomkkom --artifacts --fresh
                                build first, then inspect the new output
   kkomkkom --artifacts --production-url http://127.0.0.1:3000
-                               opt in to GET-only local serving verification
+                                opt in to GET-only local serving verification
+  kkomkkom --protect-sourcemaps
+                                preview a literal source-map setting change only
+  kkomkkom --protect-sourcemaps --apply --expected-hash HASH
+                                explicitly apply, build and verify owned production
+  kkomkkom --restore TRANSACTION_ID
+                                restore config only if applied bytes still match
   kkomkkom --json             machine-readable JSON (schemaVersion 2)
   kkomkkom --explain          explain problems with a local AI CLI
   kkomkkom --explain-with claude
@@ -72,6 +79,10 @@ async function main(): Promise<number> {
       artifacts: { type: "boolean", default: false },
       fresh: { type: "boolean", default: false },
       "production-url": { type: "string" },
+      "protect-sourcemaps": { type: "boolean", default: false },
+      apply: { type: "boolean", default: false },
+      "expected-hash": { type: "string" },
+      restore: { type: "string" },
       json: { type: "boolean", default: false },
       update: { type: "boolean", default: false },
       strict: { type: "boolean", default: false },
@@ -100,6 +111,49 @@ async function main(): Promise<number> {
   }
   const lang = resolveLang(values.lang);
   activeLang = lang;
+
+  const protecting = values["protect-sourcemaps"] || values.apply || values["expected-hash"] !== undefined || values.restore !== undefined;
+  if (protecting) {
+    const restoring = values.restore !== undefined;
+    if ((restoring && (values["protect-sourcemaps"] || values.apply || values["expected-hash"] !== undefined ||
+        !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(values.restore!))) ||
+        (!restoring && (!values["protect-sourcemaps"] || values.apply !== (values["expected-hash"] !== undefined) ||
+        (values.apply && !/^[a-f0-9]{64}$/.test(values["expected-hash"]!)))) ||
+        values.artifacts || values.fast || values.fresh || values.update || values.strict || values.reuse || values.explain ||
+        values["production-url"] !== undefined || values["explain-with"] !== undefined || values.port !== undefined) {
+      throw new KkomkkomError("errProtectArgs");
+    }
+    const root = await findProjectRoot(process.cwd());
+    try {
+      const result = restoring
+        ? { status: "restored", exitCode: 0, ...await restoreProtection(root, values.restore!) }
+        : values.apply
+          ? await applyAndVerifyProtection(root, values["expected-hash"]!)
+          : await previewProtection(root).then((preview) => ({ ...preview, exitCode: preview.status === "unsupported" ? 2 : 0 }));
+      const transactionId = "transactionId" in result ? result.transactionId : "<TRANSACTION_ID>";
+      const expectedHash = "expectedHash" in result ? result.expectedHash : undefined;
+      const payload = { ...result, lang,
+        ...(expectedHash ? { applyCommand: `kkomkkom --protect-sourcemaps --apply --expected-hash ${expectedHash}` } : {}),
+        restoreCommand: `kkomkkom --restore ${transactionId}`,
+        notes: [t(lang, "protectImpact"), t(lang, "protectSideEffects"), t(lang, "protectRestore")],
+      };
+      if (values.json) console.log(JSON.stringify(payload, null, 2));
+      else {
+        console.log(`protection: ${result.status}`);
+        if ("diff" in result && result.diff) console.log(`${result.file}:${result.diff.line}:${result.diff.column}\n- true\n+ false`);
+        if (expectedHash) console.log(`expected hash: ${expectedHash}\nkkomkkom --protect-sourcemaps --apply --expected-hash ${expectedHash}`);
+        if ("verification" in result) console.log(`verification: ${JSON.stringify(result.verification)}\nrollback: ${result.rollback}`);
+        console.log(payload.notes.join("\n"));
+        console.log(payload.restoreCommand);
+      }
+      return result.exitCode;
+    } catch (error) {
+      throw new KkomkkomError("errProtectRun", {
+        reason: error instanceof ProtectionError ? error.reason : "unsafe-or-unreadable-state",
+        changed: error instanceof ProtectionError && error.configChanged ? "yes" : "no",
+      });
+    }
+  }
 
   if (values.fresh && !values.artifacts) {
     throw new KkomkkomError("errModeConflict", { option: "--fresh" });

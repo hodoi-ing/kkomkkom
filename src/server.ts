@@ -14,6 +14,8 @@ export interface DevServer {
 }
 
 export interface DevServerOptions {
+  /** An owning workflow handles process signals and waits for cleanup/rollback. */
+  signal?: AbortSignal;
   reuse?: boolean;
   /** Bounded readiness wait (default 60s). */
   startupTimeoutMs?: number;
@@ -95,7 +97,28 @@ export async function startDevServer(
   port: number,
   options: DevServerOptions = {},
 ): Promise<DevServer> {
+  return startNextServer(root, port, options, "dev");
+}
+
+/** Production evidence must always come from a newly owned process, never reuse. */
+export async function startProductionServer(
+  root: string,
+  port: number,
+  options: DevServerOptions = {},
+): Promise<DevServer> {
+  if (options.reuse) throw new KkomkkomError("errPortInUse", { port });
+  return startNextServer(root, port, options, "start");
+}
+
+async function startNextServer(
+  root: string,
+  port: number,
+  options: DevServerOptions,
+  mode: "dev" | "start",
+): Promise<DevServer> {
   const url = `http://127.0.0.1:${port}`;
+
+  if (options.signal?.aborted) throw new KkomkkomError("errDevStart", { reason: "cancelled", log: "" });
 
   if (await isPortOpen(port)) {
     if (!options.reuse || !(await looksLikeNext(url))) {
@@ -110,7 +133,7 @@ export async function startDevServer(
   const spawnImpl = options.spawnImpl ?? spawn;
   let child: ChildProcess;
   try {
-    child = spawnImpl(process.execPath, [cli, "dev", "--hostname", "127.0.0.1", "-p", String(port)], {
+    child = spawnImpl(process.execPath, [cli, mode, "--hostname", "127.0.0.1", "-p", String(port)], {
       cwd: root,
       stdio: ["ignore", "pipe", "pipe"],
       detached: process.platform !== "win32",
@@ -158,11 +181,22 @@ export async function startDevServer(
     })();
     return stopPromise;
   };
-  removeInterrupt = installInterrupt(stop, (error) => {
-    if (error instanceof KkomkkomError) {
-      process.stderr.write(`kkomkkom: ${t(resolveLang(), error.key, error.vars)}\n`);
-    }
-  });
+  if (options.signal) {
+    const abort = () => {
+      exitInfo = "cancelled";
+      markExited();
+      void stop().catch(() => {});
+    };
+    options.signal.addEventListener("abort", abort, { once: true });
+    removeInterrupt = () => options.signal!.removeEventListener("abort", abort);
+    if (options.signal.aborted) abort();
+  } else {
+    removeInterrupt = installInterrupt(stop, (error) => {
+      if (error instanceof KkomkkomError) {
+        process.stderr.write(`kkomkkom: ${t(resolveLang(), error.key, error.vars)}\n`);
+      }
+    });
+  }
 
   let failure = await waitForHttp(url, exited, () => exitInfo, options.startupTimeoutMs ?? DEFAULT_STARTUP_MS);
   if (failure === null && exitInfo !== null) failure = { reason: exitInfo };
