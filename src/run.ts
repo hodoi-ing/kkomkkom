@@ -73,6 +73,9 @@ export async function runCheck(options: RunOptions): Promise<RunResult> {
 
   const server = await startDevServer(options.root, port, { reuse: options.reuse });
   const coverage: CoverageCheck[] = [];
+  if (!server.owned) {
+    coverage.push({ rule: "server", status: "unsupported", reason: "reuse-unverified" });
+  }
   let findings: Finding[];
   let extras: ExtraFinding[] = [];
   try {

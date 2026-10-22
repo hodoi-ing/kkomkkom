@@ -22,7 +22,7 @@ const TOOL = {
       projectPath: { type: "string", description: "Next.js project path (default: current folder)" },
       fast: { type: "boolean", description: "Auth check only, skip the build" },
       strict: { type: "boolean", description: "Treat warnings as failures" },
-      reuse: { type: "boolean", description: "Use a Next server already running on the port" },
+      reuse: { type: "boolean", description: "Use a Next server already running on the port (project identity is not verified)" },
       lang: { type: "string", description: "Report language: en, ko, ja, zh, es" },
     },
   },

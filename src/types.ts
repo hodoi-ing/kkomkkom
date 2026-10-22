@@ -96,7 +96,7 @@ export type CoverageState =
   | "failed"
   | "unsupported";
 
-export type CoverageRule = "api-auth" | "page-smoke" | "write-auth" | "secrets" | "build";
+export type CoverageRule = "api-auth" | "page-smoke" | "write-auth" | "secrets" | "build" | "server";
 
 export interface CoverageCheck {
   rule: CoverageRule;

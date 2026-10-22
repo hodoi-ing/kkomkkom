@@ -16,36 +16,40 @@ const USAGE = `kkomkkom — pre-commit check for Next.js
 
 Usage
   kkomkkom                    check auth, secrets, pages + page weight
-  kkomkkom --fast             skip the build (all checks still run)
-  kkomkkom --json             machine-readable JSON
+  kkomkkom --fast             skip the build (page weights are not measured)
+  kkomkkom --json             machine-readable JSON (schemaVersion 2)
   kkomkkom --explain          explain problems with a local AI CLI
   kkomkkom --explain-with claude
-  kkomkkom --update           save this completed result as the baseline
-  kkomkkom --port 3100        dev server port
+  kkomkkom --update           save a complete check as the baseline
+  kkomkkom --port 3100        dev server port (default: config port or 3100)
   kkomkkom --reuse            use a Next server already running on the port
+                              (its project identity is not verified)
   kkomkkom --lang ko          report language: en, ko, ja, zh, es
-  kkomkkom --strict           exit 1 on warnings too
+  kkomkkom --strict           exit 1 on warnings or incomplete coverage
 
 Exit codes
   0  nothing blocking
-  1  deploy-blocking problem (open API, exposed secret, build failure, or any warning with --strict)
-  2  the check could not run (project, port, or config error)
+  1  deploy-blocking problem (open API, exposed secret, build failure, or any warning/incompleteness with --strict)
+  2  the check could not run or the update was refused (project, port, config, baseline)
 
 Config
   kkomkkom.config.json in the project root changes behavior.
+  The baseline is written only by --update, never by a normal check.
 
 꼼꼼 — Next.js 커밋 전 점검
   kkomkkom                    API 인증·비밀키·페이지 오류·페이지 무게 검사
-  kkomkkom --fast             빌드만 생략 (나머지 검사는 모두 실행)
-  kkomkkom --json             기계가 읽는 JSON 출력
+  kkomkkom --fast             빌드 생략 (페이지 무게는 측정하지 않음)
+  kkomkkom --json             기계가 읽는 JSON 출력 (schemaVersion 2)
   kkomkkom --explain          문제 원인을 로컬 AI CLI로 설명
-  kkomkkom --update           완료된 검사 결과를 기준선에 저장
-  kkomkkom --port 3100        개발 서버 포트 지정
-  kkomkkom --reuse            이미 실행 중인 Next 서버 재사용 (프로젝트 확인 안 함)
+  kkomkkom --update           완료된 검사 결과를 기준선으로 저장
+  kkomkkom --port 3100        개발 서버 포트 (기본: 설정값 또는 3100)
+  kkomkkom --reuse            이미 실행 중인 Next 서버 재사용
+                              (해당 프로젝트인지 확인하지 않음)
   kkomkkom --lang ko          보고서 언어: en, ko, ja, zh, es
-  kkomkkom --strict           경고만 있어도 종료 코드 1
+  kkomkkom --strict           경고 또는 불완전한 검사도 종료 코드 1
 
-  종료 코드: 0 문제 없음 / 1 배포를 막는 문제(API 노출·비밀키 노출·빌드 실패·--strict 경고) / 2 검사를 시작·완료하지 못함(프로젝트·포트·설정 오류)
+  종료 코드: 0 문제 없음 / 1 배포를 막는 문제(API 노출·비밀키 노출·빌드 실패·--strict 경고/불완전) / 2 검사를 시작·완료하지 못함(프로젝트·포트·설정·기준선 오류 또는 갱신 거부)
+  기준선은 --update로만 저장합니다. 일반 검사는 기준선을 쓰지 않습니다.
 `;
 
 let activeLang: Lang = resolveLang();
