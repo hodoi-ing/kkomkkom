@@ -83,7 +83,7 @@ async function waitForHttp(
 async function looksLikeNext(url: string): Promise<boolean> {
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(2000), redirect: "manual" });
-    const body = await readBody(res, 20_000).catch(() => "");
+    const body = await readBody(res, 20_000).then((read) => read.text).catch(() => "");
     return /_next\/|__next/.test(body) || res.headers.has("x-nextjs-cache");
   } catch {
     return false;

@@ -21,6 +21,8 @@ export interface MethodAuth {
 export interface RouteAuth {
   router: "app" | "pages";
   methods: Partial<Record<HttpMethod, MethodAuth>>;
+  /** The handler shape or method flow could not be interpreted at all. */
+  unsupported?: true;
 }
 
 function isMethodName(name: string): name is HttpMethod {
@@ -206,7 +208,12 @@ function mergeStates(states: AuthState[]): AuthState {
   return states.includes("signal") ? "signal" : "none";
 }
 
-function pagesMethods(sourceFile: ts.SourceFile): Partial<Record<HttpMethod, MethodAuth>> {
+interface PagesMethods {
+  methods: Partial<Record<HttpMethod, MethodAuth>>;
+  unsupported?: true;
+}
+
+function pagesMethods(sourceFile: ts.SourceFile): PagesMethods {
   const local = localFunctions(sourceFile);
   let handler: ts.Node | null = null;
 
@@ -223,18 +230,16 @@ function pagesMethods(sourceFile: ts.SourceFile): Partial<Record<HttpMethod, Met
   }
 
   if (!handler || !isFunctionNode(handler) || !(handler as ts.FunctionLikeDeclaration).body) {
-    return {};
+    return { methods: {}, unsupported: true };
   }
   const body = (handler as ts.FunctionLikeDeclaration).body;
-  if (!body || !ts.isBlock(body)) return {};
+  if (!body || !ts.isBlock(body)) return { methods: {}, unsupported: true };
 
   const { branches, guarded } = pagesBranches(body);
   if (branches.length === 0) {
-    // A handler with no recognizable method branch can serve every method;
-    // its auth flow is not proven, so report unknown rather than no handler.
-    const methods: Partial<Record<HttpMethod, MethodAuth>> = {};
-    for (const method of METHODS) methods[method] = { method, state: "unknown" };
-    return methods;
+    // A handler with no recognizable method branch may serve every method.
+    // Report an unknown scope instead of inventing per-method handlers.
+    return { methods: {}, unsupported: true };
   }
   const states = new Map<HttpMethod, AuthState[]>();
   for (const branch of branches) {
@@ -247,7 +252,7 @@ function pagesMethods(sourceFile: ts.SourceFile): Partial<Record<HttpMethod, Met
   for (const [method, list] of states) {
     methods[method] = { method, state: mergeStates(list) };
   }
-  return methods;
+  return { methods };
 }
 
 /**
@@ -273,7 +278,7 @@ export function analyzeRoute(route: Pick<RouteInfo, "file" | "source" | "router"
   );
 
   if (pages) {
-    return { router: "pages", methods: pagesMethods(sourceFile) };
+    return { router: "pages", ...pagesMethods(sourceFile) };
   }
 
   const methods: Partial<Record<HttpMethod, MethodAuth>> = {};

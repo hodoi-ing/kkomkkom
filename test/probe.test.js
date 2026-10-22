@@ -72,6 +72,19 @@ async function withServer(run) {
         return res.end();
       case "/api/public-route":
         return json(200, { ok: true });
+      case "/api/truncated":
+        res.writeHead(200, { "content-length": "9999", "content-type": "application/json" });
+        res.write('{"ok":');
+        setTimeout(() => res.destroy(), 30);
+        return undefined;
+      case "/api/truncated-login":
+        res.writeHead(307, { location: "/login-truncated" });
+        return res.end();
+      case "/login-truncated":
+        res.writeHead(200, { "content-length": "9999", "content-type": "text/html" });
+        res.write('<form><input type="password" name="password">');
+        setTimeout(() => res.destroy(), 30);
+        return undefined;
       case "/api/redirect-auth-data":
         res.writeHead(307, { location: "/api/auth/export" });
         return res.end();
@@ -266,18 +279,49 @@ test("probeRoutes respects ignoreRoutes", async () => {
   });
 });
 
-test("an empty sample map or an exact dot segment never requests a fallback path", async () => {
+test("absent, undefined, empty and dot-segment sample values never request a fallback path", async () => {
   await withServer(async (baseUrl, seen) => {
     const route = apiRoute("/api/orders/[id]", "", true);
-    for (const params of [{}, { id: "." }, { id: ".." }]) {
+    const coverage = [];
+    for (const params of [{}, { id: undefined }, { id: "" }, { id: "." }, { id: ".." }]) {
       const findings = await probeRoutes(baseUrl, [route], config({
         routePolicies: { "/api/orders/[id]": { GET: "protected" } },
         sampleParams: { "/api/orders/[id]": params },
-      }));
+      }), coverage);
       assert.equal(findings[0].verdict, "unknown");
       assert.equal(findings[0].detailKey, "detailDynamic");
     }
     assert.equal(seen.length, 0);
+    assert.deepEqual(
+      coverage.map((check) => [check.status, check.reason]),
+      [
+        ["failed", "sample-missing"], ["failed", "sample-missing"], ["failed", "sample-missing"],
+        ["unsupported", "sample-unsupported"], ["unsupported", "sample-unsupported"],
+      ],
+    );
+  });
+});
+
+test("a body cut off in transit is failed, never a public success", async () => {
+  await withServer(async (baseUrl) => {
+    const coverage = [];
+    const findings = await probeRoutes(baseUrl, [apiRoute("/api/truncated")], config({
+      routePolicies: { "/api/truncated": { GET: "public" } },
+    }), coverage);
+    assert.equal(findings[0].status, 200);
+    assert.equal(findings[0].verdict, "unknown");
+    assert.notEqual(findings[0].detailKey, "detailPublic");
+    assert.deepEqual(coverage, [
+      { rule: "api-auth", path: "/api/truncated", method: "GET", status: "failed", reason: "body-read" },
+    ]);
+  });
+});
+
+test("an unreadable login page body cannot confirm a locked verdict", async () => {
+  await withServer(async (baseUrl) => {
+    const findings = await probeRoutes(baseUrl, [apiRoute("/api/truncated-login")], config());
+    assert.equal(findings[0].verdict, "check");
+    assert.equal(findings[0].detailKey, "detailRedirect");
   });
 });
 

@@ -50,6 +50,7 @@ async function followsToLoginPage(
 
     if (res.status >= 300 && res.status < 400) {
       const next = res.headers.get("location");
+      await res.body?.cancel().catch(() => {});
       if (!next) return false;
       let nextUrl: URL;
       try {
@@ -62,13 +63,28 @@ async function followsToLoginPage(
       continue;
     }
 
-    if (res.status === 401 || res.status === 403) return true;
-    if (res.status < 200 || res.status >= 300) return false;
+    if (res.status === 401 || res.status === 403) {
+      await res.body?.cancel().catch(() => {});
+      return true;
+    }
+    if (res.status < 200 || res.status >= 300) {
+      await res.body?.cancel().catch(() => {});
+      return false;
+    }
 
     const type = res.headers.get("content-type") ?? "";
-    if (!type.includes("text/html")) return false;
+    if (!type.includes("text/html")) {
+      await res.body?.cancel().catch(() => {});
+      return false;
+    }
 
-    const body = (await readBody(res, LOGIN_BODY_LIMIT).catch(() => "")).toLowerCase();
+    let body: string;
+    try {
+      body = (await readBody(res, LOGIN_BODY_LIMIT)).text.toLowerCase();
+    } catch {
+      // An incomplete login page cannot prove the redirect lands on a login form.
+      return false;
+    }
     return (
       /<input[^>]+type=["']?password/.test(body) ||
       /<form[^>]+action=["'][^"']*(login|signin|sign-in|auth)/.test(body)
@@ -97,7 +113,7 @@ async function probeOne(
 
   const sample = sampleTarget(baseUrl, route.path, config.sampleParams[route.path]);
   if ("reason" in sample) {
-    check(sample.reason === "missing" ? "skipped" : "unsupported", `sample-${sample.reason}`);
+    check(sample.reason === "missing" ? "failed" : "unsupported", `sample-${sample.reason}`);
     return { path: route.path, verdict: "unknown", detailKey: "detailDynamic", ...evidence };
   }
 
@@ -115,13 +131,48 @@ async function probeOne(
     return { path: route.path, verdict: "unknown", detailKey: "detailTimeout", ...evidence };
   }
 
-  if (res.status === 404) check("failed", "not-found");
-  else if (res.status === 405) check("skipped", "method-not-allowed");
-  else check("checked", "response");
-
   const redirect = res.status >= 300 && res.status < 400;
   const location = redirect ? (res.headers.get("location") ?? "") : "";
+  const success = res.status >= 200 && res.status < 300;
+
+  if (!success) {
+    // Nothing below reads these bodies; release the connection deliberately.
+    if (redirect) await res.body?.cancel().catch(() => {});
+  }
   const loginRedirect = redirect ? await followsToLoginPage(url, baseUrl, location) : false;
+
+  if (res.status === 404) {
+    check("failed", "not-found");
+    await res.body?.cancel().catch(() => {});
+  } else if (res.status === 405) {
+    // A statically GET-less route cannot serve GET: the 405 confirms the
+    // selected scope instead of hiding a required check.
+    const getHandler = analyzeRoute(route).methods.GET !== undefined;
+    check(getHandler ? "failed" : "checked", "method-not-allowed");
+    await res.body?.cancel().catch(() => {});
+  } else if (success) {
+    // Read the body before deciding: a cut-off transfer is not a success.
+    try {
+      const read = await readBody(res, ERROR_BODY_LIMIT);
+      const body = read.text;
+      check("checked", read.truncated ? "response-limited" : "response");
+      if (/__next_error__|Application error|Internal Server Error/i.test(body)) {
+        return {
+          path: route.path, verdict: "error", status: res.status, detailKey: "detailError",
+          detailVars: { status: res.status }, ...evidence,
+        };
+      }
+    } catch {
+      check("failed", "body-read");
+      return {
+        path: route.path, verdict: "unknown", status: res.status, detailKey: "detailBodyFailed",
+        detailVars: { status: res.status }, ...evidence,
+      };
+    }
+  } else {
+    check("checked", "response");
+    await res.body?.cancel().catch(() => {});
+  }
 
   let verdict: Verdict;
   let detailKey: MessageKey;
@@ -137,12 +188,8 @@ async function probeOne(
   } else if (res.status === 404 || res.status === 405) {
     verdict = "unknown";
     detailKey = "detailUnknown";
-  } else if (res.status >= 200 && res.status < 300) {
-    const body = await readBody(res, ERROR_BODY_LIMIT).catch(() => "");
-    if (/__next_error__|Application error|Internal Server Error/i.test(body)) {
-      verdict = "error";
-      detailKey = "detailError";
-    } else if (policy === "protected") {
+  } else if (success) {
+    if (policy === "protected") {
       // An explicit protected policy is checked by the response, even an empty 204.
       verdict = "exposed";
       detailKey = "detailPolicyExposed";

@@ -92,17 +92,65 @@ async function config(root, value) {
   await writeFile(join(root, "kkomkkom.config.json"), JSON.stringify(value));
 }
 
-test("fast scope is incomplete for normal exit but strict fails", async (t) => {
+test("an intentional fast build skip does not block a complete checked scope", async (t) => {
   const root = await project(t, "ok");
   await config(root, { routePolicies: { "/api/health": { GET: "public" } } });
-  const port = await freePort();
-  const ordinary = await runCheck({ root, fast: true, strict: false, port });
-  assert.equal(ordinary.coverage.status, "incomplete");
+  const ordinary = await runCheck({ root, fast: true, strict: false, port: await freePort() });
+  assert.equal(ordinary.coverage.status, "complete");
   assert.equal(ordinary.exitCode, 0);
 
   const strict = await runCheck({ root, fast: true, strict: true, port: await freePort() });
-  assert.equal(strict.coverage.status, "incomplete");
-  assert.equal(strict.exitCode, 1);
+  assert.equal(strict.coverage.status, "complete");
+  assert.equal(strict.exitCode, 0);
+});
+
+test("an ignored route does not make checked routes incomplete", async (t) => {
+  const root = await project(t, "ok");
+  await mkdir(join(root, "app", "api", "legacy"), { recursive: true });
+  await writeFile(join(root, "app", "api", "legacy", "route.ts"), "export function GET() {}");
+  await config(root, {
+    ignoreRoutes: ["/api/legacy"],
+    routePolicies: { "/api/health": { GET: "public" } },
+  });
+  const result = await runCheck({ root, fast: true, strict: true, port: await freePort() });
+  assert.equal(result.coverage.status, "complete");
+  const legacy = result.coverage.checks.filter((check) => check.path === "/api/legacy");
+  assert.ok(legacy.length > 0);
+  assert.ok(legacy.every((check) => check.status === "ignored"));
+  assert.equal(result.exitCode, 0);
+});
+
+test("a required sample omission stays incomplete and strict fails", async (t) => {
+  const root = await project(t, "ok");
+  await mkdir(join(root, "app", "api", "orders", "[id]"), { recursive: true });
+  await writeFile(
+    join(root, "app", "api", "orders", "[id]", "route.ts"),
+    "export function GET() { return Response.json({ id: 1 }); }",
+  );
+  await config(root, { routePolicies: { "/api/health": { GET: "public" } } });
+  const result = await runCheck({ root, fast: true, strict: true, port: await freePort() });
+  assert.equal(result.coverage.status, "incomplete");
+  assert.ok(result.coverage.checks.some(
+    (check) => check.rule === "api-auth" && check.status === "failed" && check.reason === "sample-missing",
+  ));
+  assert.equal(result.exitCode, 1);
+});
+
+test("unknown write analysis is unsupported coverage, not a complete static check", async (t) => {
+  const root = await project(t, "ok");
+  await mkdir(join(root, "app", "api", "wrapped"), { recursive: true });
+  await writeFile(
+    join(root, "app", "api", "wrapped", "route.ts"),
+    "export const POST = withAuth(handler);",
+  );
+  await config(root, { routePolicies: { "/api/health": { GET: "public" } } });
+  const result = await runCheck({ root, fast: true, strict: true, port: await freePort() });
+  assert.equal(result.coverage.status, "incomplete");
+  assert.ok(result.coverage.checks.some(
+    (check) => check.rule === "write-auth" && check.path === "/api/wrapped" &&
+      check.status === "unsupported" && check.reason === "unknown",
+  ));
+  assert.equal(result.exitCode, 1);
 });
 
 test("all routes ignored is empty scope, not a pass", async (t) => {
@@ -114,17 +162,18 @@ test("all routes ignored is empty scope, not a pass", async (t) => {
   assert.equal(result.exitCode, 0);
 });
 
-test("a POST-only route answers 405 on GET and stays visibly skipped", async (t) => {
+test("a statically GET-less POST-only route answering 405 is complete scope", async (t) => {
   const root = await project(t, "ok", 405);
   await writeFile(
     join(root, "app", "api", "health", "route.ts"),
     "export async function POST() { return Response.json({ ok: true }); }",
   );
   await config(root, { routePolicies: { "/api/health": { POST: "public" } } });
-  const result = await runCheck({ root, fast: true, strict: false, port: await freePort() });
-  assert.equal(result.coverage.status, "incomplete");
+  const result = await runCheck({ root, fast: true, strict: true, port: await freePort() });
+  assert.equal(result.coverage.status, "complete");
   assert.ok(result.coverage.checks.some(
-    (check) => check.rule === "api-auth" && check.status === "skipped" && check.reason === "method-not-allowed",
+    (check) => check.rule === "api-auth" && check.status === "checked" &&
+      check.reason === "method-not-allowed",
   ));
   assert.equal(result.exitCode, 0);
 });
@@ -141,6 +190,6 @@ test("CLI JSON exposes schemaVersion 2 and coverage", async (t) => {
   ], { cwd: root });
   const payload = JSON.parse(stdout);
   assert.equal(payload.schemaVersion, 2);
-  assert.equal(payload.coverage.status, "incomplete");
+  assert.equal(payload.coverage.status, "complete");
   assert.equal(payload.exitCode, 0);
 });
