@@ -3,7 +3,10 @@ import type { Dirent } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { extname, join, relative, sep } from "node:path";
 import { analyzeRoute, matchesGlob } from "./classify.js";
-import type { Config, ExtraFinding, HttpMethod, RouteInfo } from "./types.js";
+import { sampleTarget } from "./params.js";
+import type {
+  Config, ExtraFinding, HttpMethod, RouteInfo, WriteEvidence,
+} from "./types.js";
 
 export interface AuditInput {
   root: string;
@@ -132,21 +135,53 @@ async function auditSecrets(root: string): Promise<ExtraFinding[]> {
 }
 
 function auditWrites(routes: RouteInfo[], config: Config): ExtraFinding[] {
-  return routes.filter((route) => {
-    if (route.kind !== "api") return false;
-    if (config.ignoreRoutes.some((pattern) => matchesGlob(route.path, pattern))) return false;
-    const { methods } = analyzeRoute(route);
-    return Object.values(methods).some((method) =>
-      method !== undefined && WRITES.has(method.method) && method.state === "none");
-  }).map((route) => ({ id: `write-no-auth:${route.path}`, severity: "warning",
-    messageKey: "extraWriteNoAuth", messageVars: { path: route.path } }));
+  const findings: ExtraFinding[] = [];
+
+  for (const route of routes) {
+    if (route.kind !== "api") continue;
+    if (config.ignoreRoutes.some((pattern) => matchesGlob(route.path, pattern))) continue;
+
+    const writes = Object.values(analyzeRoute(route).methods).filter(
+      (method) => method !== undefined && WRITES.has(method.method),
+    );
+    if (writes.length === 0) continue;
+
+    const evidence: WriteEvidence[] = writes.map((method) => {
+      const policy = config.routePolicies?.[route.path]?.[method.method];
+      return { method: method.method, auth: method.state, ...(policy ? { policy } : {}) };
+    });
+
+    const noAuth = evidence.filter((item) => item.auth === "none" && item.policy !== "public");
+    for (const item of noAuth) {
+      findings.push({
+        id: `write-no-auth:${route.path}:${item.method}`,
+        severity: "warning",
+        messageKey: "extraWriteNoAuth",
+        messageVars: { path: route.path, method: item.method },
+        evidence: [item],
+      });
+    }
+
+    // A wrapper or re-export is not proof of missing auth, but it must stay visible.
+    const unknown = evidence.filter((item) => item.auth === "unknown");
+    if (unknown.length > 0) {
+      findings.push({
+        id: `write-unknown:${route.path}`,
+        severity: "info",
+        messageKey: "extraWriteUnknown",
+        messageVars: { path: route.path, methods: unknown.map((item) => item.method).join(", ") },
+        evidence: unknown,
+      });
+    }
+  }
+  return findings;
 }
 
 async function smokePage(baseUrl: string, route: RouteInfo, config: Config): Promise<ExtraFinding | null> {
-  const params = config.sampleParams[route.path];
-  const path = route.path.replace(/\[\.{0,3}([^\]]+)\]/g, (match, key: string) => params?.[key] ?? match);
+  const sample = sampleTarget(baseUrl, route.path, config.sampleParams[route.path]);
+  if ("reason" in sample) return null;
   try {
-    const res = await fetch(baseUrl + path, {
+    const res = await fetch(sample.url, {
       method: "GET",
       redirect: "manual",
       signal: AbortSignal.timeout(8000),

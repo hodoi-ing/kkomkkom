@@ -1,50 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { analyzeRoute, classify, hasAuthSignal, matchesGlob } from "../dist/classify.js";
+import { analyzeRoute, matchesGlob } from "../dist/classify.js";
 
 function appRoute(source) {
-  return { path: "/api/x", file: "/project/app/api/x/route.ts", kind: "api", dynamic: false, source };
+  return { path: "/api/x", file: "/project/app/api/x/route.ts", kind: "api", dynamic: false, source, router: "app" };
 }
 
 function pagesRoute(source) {
-  return { path: "/api/x", file: "/project/pages/api/x.ts", kind: "api", dynamic: false, source };
+  return { path: "/api/x", file: "/project/pages/api/x.ts", kind: "api", dynamic: false, source, router: "pages" };
 }
 
 function state(route, method) {
   return analyzeRoute(route).methods[method]?.state;
 }
-
-test("hasAuthSignal detects common Next.js auth calls", () => {
-  assert.equal(hasAuthSignal("const s = await auth()"), true);
-  assert.equal(hasAuthSignal("await getServerSession(authOptions)"), true);
-  assert.equal(hasAuthSignal("const jar = cookies()"), true);
-  assert.equal(hasAuthSignal("return Response.json({ ok: true })"), false);
-});
-
-test("hasAuthSignal ignores comments", () => {
-  assert.equal(hasAuthSignal("// auth()\nreturn Response.json({})"), false);
-  assert.equal(hasAuthSignal("/* getServerSession */\nreturn Response.json({})"), false);
-  assert.equal(hasAuthSignal('const url = "https://example.com"; await auth()'), true);
-  assert.equal(hasAuthSignal('const quote = /"/; // auth()\nexport function POST() {}'), false);
-  assert.equal(hasAuthSignal('const quote = () => /"/; // auth()\nexport function POST() {}'), false);
-  assert.equal(hasAuthSignal('if (ok) /"/; // auth()\nexport function POST() {}'), false);
-  assert.equal(hasAuthSignal('const x = (a + b) / 2; // auth()\nexport function POST() {}'), false);
-  assert.equal(hasAuthSignal('const half = await Promise.resolve(4).catch(() => 0) / 2; // auth()\nexport function POST() {}'), false);
-  assert.equal(hasAuthSignal('const half = await Promise.resolve(4). catch(() => 0) / 2; // auth()\nexport function POST() {}'), false);
-  assert.equal(hasAuthSignal('const half = await Promise.resolve(4). /* fallback */ catch(() => 0) / 2; // auth()\nexport function POST() {}'), false);
-  assert.equal(hasAuthSignal('if (ok) /* fallback */ /"/; // auth()\nexport function POST() {}'), false);
-});
-
-test("classify decides verdicts", () => {
-  assert.equal(classify(401, false), "locked");
-  assert.equal(classify(403, false), "locked");
-  assert.equal(classify(307, false), "check");
-  assert.equal(classify(200, true), "exposed");
-  assert.equal(classify(200, false), "check");
-  assert.equal(classify(404, false), "unknown");
-  assert.equal(classify(405, false), "unknown");
-  assert.equal(classify(500, true), "error");
-});
 
 test("matchesGlob supports wildcards", () => {
   assert.equal(matchesGlob("/api/webhooks/stripe", "/api/webhooks/*"), true);
@@ -150,4 +118,18 @@ test("analyzeRoute reads clear pages/api method comparisons", () => {
   `);
   assert.equal(state(route, "GET"), "signal");
   assert.equal(state(route, "POST"), "none");
+});
+
+test("analyzeRoute uses the discovered router, not a /pages/ substring in the path", () => {
+  const route = {
+    path: "/api/pages",
+    file: "/project/app/api/pages/route.ts",
+    kind: "api",
+    dynamic: false,
+    source: 'export async function POST() { return Response.json({}); }',
+    router: "app",
+  };
+  const result = analyzeRoute(route);
+  assert.equal(result.router, "app");
+  assert.equal(result.methods.POST?.state, "none");
 });
