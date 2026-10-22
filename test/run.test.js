@@ -353,6 +353,81 @@ test("an update with a failed measurement is refused and preserves the original"
   assert.equal(await readFile(baselineFile(root), "utf8"), original);
 });
 
+test("a page with no measurement result fails coverage, strict, and update", async (t) => {
+  const root = await project(t, "ok");
+  await config(root, { routePolicies: { "/api/health": { GET: "public" } } });
+  await writeFile(join(root, "app", "page.tsx"), "export default function Page() { return null; }\n");
+  const original = JSON.stringify({
+    version: 1,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    routes: {},
+    pages: { "/": { firstLoadJs: 1000, method: "manifest-file" } },
+  });
+  await writeBaselineRaw(root, original);
+
+  const port = await freePort();
+  const result = await runCheck({ root, fast: false, strict: true, port });
+  assert.equal(result.coverage.status, "incomplete");
+  assert.ok(result.coverage.checks.some(
+    (check) => check.rule === "build" && check.path === "/" &&
+      check.status === "failed" && check.reason === "measure",
+  ));
+  assert.equal(result.exitCode, 1);
+  assert.equal(await readFile(baselineFile(root), "utf8"), original);
+
+  const updatePort = await freePort();
+  await assert.rejects(
+    () => runCheck({ root, fast: false, update: true, strict: false, port: updatePort }),
+    (error) => error.key === "errUpdateRefused" && error.vars.reason === "measurement",
+  );
+  assert.equal(await readFile(baselineFile(root), "utf8"), original);
+});
+
+test("a partially measured page set is incomplete and cannot be saved", async (t) => {
+  const root = await project(t, "ok");
+  await config(root, { routePolicies: { "/api/health": { GET: "public" } } });
+  for (const name of ["measured", "missing"]) {
+    await mkdir(join(root, "app", name), { recursive: true });
+    await writeFile(join(root, "app", name, "page.tsx"), "export default function Page() { return null; }\n");
+  }
+  await mkdir(join(root, ".next"), { recursive: true });
+  await writeFile(
+    join(root, ".next", "build-manifest.json"),
+    JSON.stringify({ rootMainFiles: [], polyfillFiles: [], pages: { "/measured": [] } }),
+  );
+  const original = JSON.stringify({
+    version: 1,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    routes: {},
+    pages: { "/missing": { firstLoadJs: 1000, method: "manifest-file" } },
+  });
+  await writeBaselineRaw(root, original);
+
+  const result = await runCheck({ root, fast: false, strict: false, port: await freePort() });
+  assert.equal(result.coverage.status, "incomplete");
+  const failed = result.coverage.checks.filter(
+    (check) => check.rule === "build" && check.status === "failed",
+  );
+  assert.deepEqual(failed.map((check) => check.path), ["/missing"]);
+  assert.equal(result.diff.pages.some((page) => page.path === "/measured"), true);
+
+  const updatePort = await freePort();
+  await assert.rejects(
+    () => runCheck({ root, fast: false, update: true, strict: false, port: updatePort }),
+    (error) => error.key === "errUpdateRefused",
+  );
+  assert.equal(await readFile(baselineFile(root), "utf8"), original);
+});
+
+test("an API-only project does not invent page measurements", async (t) => {
+  const root = await project(t, "ok");
+  await config(root, { routePolicies: { "/api/health": { GET: "public" } } });
+  const result = await runCheck({ root, fast: false, strict: true, port: await freePort() });
+  assert.equal(result.coverage.status, "complete");
+  assert.deepEqual(result.diff.pages, []);
+  assert.equal(result.exitCode, 0);
+});
+
 test("a corrupt baseline is a tool error and stays untouched", async (t) => {
   const root = await project(t, "ok");
   await config(root, { routePolicies: { "/api/health": { GET: "public" } } });

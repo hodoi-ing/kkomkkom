@@ -69,6 +69,7 @@ export async function runCheck(options: RunOptions): Promise<RunResult> {
   if (routes.length === 0) {
     throw new KkomkkomError("errNoRoutes");
   }
+  const expectedPages = routes.filter((route) => route.kind === "page");
 
   const server = await startDevServer(options.root, port, { reuse: options.reuse });
   const coverage: CoverageCheck[] = [];
@@ -109,6 +110,15 @@ export async function runCheck(options: RunOptions): Promise<RunResult> {
       }
     } else {
       coverage.push({ rule: "build", status: "checked", reason: "build" });
+      // An empty build result is not evidence for pages that were discovered
+      // in source. Missing per-page measurements stay explicit failures.
+      const missing = expectedPages.filter((route) => pages[route.path] === undefined);
+      if (missing.length > 0) {
+        measurementFailed = true;
+        for (const route of missing) {
+          coverage.push({ rule: "build", path: route.path, status: "failed", reason: "measure" });
+        }
+      }
     }
   }
 
