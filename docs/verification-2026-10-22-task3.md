@@ -37,3 +37,16 @@ Coverage includes canonical URL/runtime malicious arguments; real numeric-loopba
 - Same fixture/cache package size, install cost, static/HTTP/fresh time and max RSS, raw logs and measurement limitations.
 - README/support/measurement documentation and one final `npm run verify` (includes full tests; no separate duplicate full `npm test`).
 - Coordinator independent milestone review and final Task3 PASS. Existing completed Task2/2.1 tests were not separately rerun during this milestone; final integrated verification is still pending.
+
+## Coordinator regression — secret-bearing HTTP path metadata
+
+Coordinator independently passed the 18 engine cases, then reproduced a known env value leaking through a served filename into HTTP id/file/messageVars/coverage metadata. The minimal shared output projection now runs **after raw exception matching and candidate/URL use**. It reuses `maskFreeText` for id, file, string messageVars, coverage path and reason. Provider patterns in filenames are masked without needing an env assignment. Enum/rule/message keys remain unchanged. Redacted occurrence IDs use non-secret ordinals (no hashes) so different raw paths that redact to one visible path remain separate observations with distinct IDs.
+
+New regression `production HTTP redaction protects every output metadata field without collapsing observations or raw exceptions` uses two distinct known-value filenames and a provider-pattern filename that all redact to the same `.bin` path, plus an exactly excepted raw source-map filename. It asserts four distinct matched observations, raw candidate routing/exception application, engine/CLI text+JSON/MCP structuredContent/report/explanation-input non-disclosure, and no AI invocation.
+
+Unique logs: `/tmp/opencode/kk-task3-redaction.YFKaYJ`.
+
+- `TMPDIR=<above> node --test --test-reporter=tap --test-name-pattern='^production HTTP redaction' test/artifact-http.test.js` before fix: **exit 1, 0 pass / 1 fail**, `red.log`, expected `!output.includes(value)` failure.
+- `npm run build`: first **exit 2** (`build.log`) because coverage reason is optional; added the undefined guard. Repeated build **exit 0**, `build2.log`.
+- Same single new regression after fix: **exit 0, 1 pass / 0 fail**, `green.log`. The approved 18 engine cases were not repeated; integration/final verify will include this connection.
+- Integration edits to `scripts/verify.mjs` are still WIP and excluded from this security-fix commit.
