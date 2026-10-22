@@ -30,8 +30,8 @@ function input(root, routes = [], config = {}, baseUrl = "http://127.0.0.1:1") {
   };
 }
 
-function route(path, source = "", kind = "api", dynamic = false) {
-  return { path, source, kind, dynamic, file: "" };
+function route(path, source = "", kind = "api", dynamic = false, file = "") {
+  return { path, source, kind, dynamic, file };
 }
 
 async function serve(t, handler) {
@@ -147,9 +147,10 @@ test("root config and middleware sources are scanned", async (t) => {
 
 for (const source of [
   "export async function POST() {}", "export function PUT() {}", "export const PATCH = () => {}",
-  "export let DELETE = () => {}", "export { POST }", "export { POST as handler }",
-  'if (req.method === "POST") {}', "if (request.method == 'PATCH') {}",
-  'switch (req.method) { case "DELETE": break; }',
+  "export let DELETE = () => {}", "function handler() {}\nexport { handler as POST }",
+  'export default function handler(req, res) { if (req.method === "POST") {} }',
+  "export default function handler(req, res) { if (request.method == 'PATCH') {} }",
+  'export default function handler(req, res) { switch (req.method) { case "DELETE": break; } }',
 ]) {
   test(`write API without auth warns: ${source}`, async (t) => {
     const root = await fixture(t);
@@ -167,6 +168,28 @@ test("write API with auth(), GET-only and ignored writes do not warn", async (t)
     route("/api/read", "export function GET() {}"),
     route("/api/webhooks/event", "export const POST = handler"),
   ], { ignoreRoutes: ["/api/webhooks/*"] })), []);
+});
+
+test("write auth is not shared between methods", async (t) => {
+  const root = await fixture(t);
+  assert.deepEqual(await auditProject(input(root, [
+    route("/api/get-auth", "export function GET(){ auth() }\nexport function POST() {}"),
+    route("/api/post-auth", "export function GET() {}\nexport function POST(){ auth() }"),
+  ])), [{
+    id: "write-no-auth:/api/get-auth", severity: "warning", messageKey: "extraWriteNoAuth",
+    messageVars: { path: "/api/get-auth" },
+  }]);
+});
+
+test("wrapper, re-export and uncalled nested auth stay unknown instead of confirmed no-auth", async (t) => {
+  const root = await fixture(t);
+  assert.deepEqual(await auditProject(input(root, [
+    route("/api/wrapper", "export const POST = withAuth(handler)"),
+    route("/api/reexport", 'export { POST } from "./other"'),
+    route("/api/nested", "export function POST(){ function inner(){ auth() } }"),
+    route("/api/ambiguous", 'export default function handler(req, res) { return res.end("ok") }',
+      "api", false, "/project/pages/api/ambiguous.ts"),
+  ])), []);
 });
 
 test("comments do not create or hide write APIs", async (t) => {

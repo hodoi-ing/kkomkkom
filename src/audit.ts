@@ -2,8 +2,8 @@ import { execFile } from "node:child_process";
 import type { Dirent } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { extname, join, relative, sep } from "node:path";
-import { hasAuthSignal, matchesGlob, stripComments } from "./classify.js";
-import type { Config, ExtraFinding, RouteInfo } from "./types.js";
+import { analyzeRoute, matchesGlob } from "./classify.js";
+import type { Config, ExtraFinding, HttpMethod, RouteInfo } from "./types.js";
 
 export interface AuditInput {
   root: string;
@@ -24,10 +24,7 @@ const PUBLIC_SECRET = /(?:^|_)(?:SECRET|TOKEN|PASSWORD|PASS|PRIVATE|CREDENTIAL|A
 const SECRET = /sk_live_[A-Za-z0-9]{16,}|sk-proj-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|xox[baprs]-[A-Za-z0-9-]{10,}|-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/g;
 const PEM_BLOCK = /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----/g;
 const PEM_UNCLOSED = /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----[\s\S]*/g;
-const WRITE_EXPORT = /\bexport\s+(?:(?:async\s+)?function\s+|(?:const|let|var)\s+)(?:POST|PUT|PATCH|DELETE)\b/;
-const WRITE_REEXPORT = /\bexport\s*\{[^}]*\b(?:POST|PUT|PATCH|DELETE)\b[^}]*\}/;
-const WRITE_METHOD = /\b(?:req|request)\.method\s*={2,3}\s*["'](?:POST|PUT|PATCH|DELETE)["']/;
-const WRITE_CASE = /\bcase\s*["'](?:POST|PUT|PATCH|DELETE)["']\s*:/;
+const WRITES = new Set<HttpMethod>(["POST", "PUT", "PATCH", "DELETE"]);
 
 function isEnvEntry(entry: Dirent): boolean {
   return (
@@ -138,9 +135,9 @@ function auditWrites(routes: RouteInfo[], config: Config): ExtraFinding[] {
   return routes.filter((route) => {
     if (route.kind !== "api") return false;
     if (config.ignoreRoutes.some((pattern) => matchesGlob(route.path, pattern))) return false;
-    const source = stripComments(route.source);
-    return !hasAuthSignal(source) &&
-      [WRITE_EXPORT, WRITE_REEXPORT, WRITE_METHOD, WRITE_CASE].some((pattern) => pattern.test(source));
+    const { methods } = analyzeRoute(route);
+    return Object.values(methods).some((method) =>
+      method !== undefined && WRITES.has(method.method) && method.state === "none");
   }).map((route) => ({ id: `write-no-auth:${route.path}`, severity: "warning",
     messageKey: "extraWriteNoAuth", messageVars: { path: route.path } }));
 }
