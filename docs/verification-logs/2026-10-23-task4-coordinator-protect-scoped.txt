@@ -1,0 +1,28 @@
+✔ build
+✔ protection: initial real production output contains browser maps
+✔ protection repo: preview is token-only and read-only
+✔ protection repo: stale approval is refused without changes
+✔ protection repo: apply builds and verifies owned production, maps and cleanup
+✔ protection repo: exact token change with durable original backup
+✔ protection repo: emitted browser maps are absent after rebuild
+✔ protection repo: MCP exposes no protection mutation tool
+✔ protection repo: restore refuses later user edits
+✔ protection repo: restore is byte-exact and preserves unrelated source/env/baseline
+✔ protection repo: result does not claim generated build output was restored
+✔ pack: npm pack succeeds
+✔ pack: tarball carries dist, not src or tests
+✔ pack: production-only consumer install succeeds
+✔ pack: production install has typescript but no dev-only types
+✔ pack: consumer CLI runs
+✔ protection packed consumer: preview is token-only and read-only
+✔ protection packed consumer: stale approval is refused without changes
+✔ protection packed consumer: apply builds and verifies owned production, maps and cleanup
+✔ protection packed consumer: exact token change with durable original backup
+✔ protection packed consumer: emitted browser maps are absent after rebuild
+✔ protection packed consumer: MCP exposes no protection mutation tool
+✔ protection packed consumer: restore refuses later user edits
+✔ protection packed consumer: restore is byte-exact and preserves unrelated source/env/baseline
+✔ protection packed consumer: result does not claim generated build output was restored
+  · packed 92800 bytes; consumer install 707 ms
+
+all checks passed

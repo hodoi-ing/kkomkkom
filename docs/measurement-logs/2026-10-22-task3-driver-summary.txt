@@ -1,0 +1,1 @@
+{"package":{"size":76663,"unpackedSize":267164,"entries":51,"filename":"kkomkkom-0.1.0.tgz"},"installedBytes":23893353,"typescriptBytes":23625066,"baselinePreserved":true,"logs":"/tmp/opencode/kk-task3-measure.YNCOXW"}

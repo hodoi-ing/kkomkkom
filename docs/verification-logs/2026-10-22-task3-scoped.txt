@@ -1,0 +1,26 @@
+✔ build
+✔ artifacts: real production build produces browser maps
+✔ artifacts repo: static and explicit production HTTP share masked findings
+✔ artifacts repo: stdout/stderr JSON and translated report contain no credential values
+✔ artifacts repo: CLI rejects unsafe origin without echo
+✔ artifacts repo: reviewed fake-provider exception permits a normal CLI result
+✔ artifacts repo: MCP normal/input/config-error tools/call and stream survival
+✔ artifacts repo: errors and MCP output contain no credential values
+✔ artifacts repo: explanation input contains no credential values (no AI invoked)
+✔ artifacts repo: source/config/env/public and baseline bytes remain unchanged
+✔ pack: npm pack succeeds
+✔ pack: tarball carries dist, not src or tests
+✔ pack: production-only consumer install succeeds
+✔ pack: production install has typescript but no dev-only types
+✔ pack: consumer CLI runs
+✔ artifacts packed consumer: static and explicit production HTTP share masked findings
+✔ artifacts packed consumer: stdout/stderr JSON and translated report contain no credential values
+✔ artifacts packed consumer: CLI rejects unsafe origin without echo
+✔ artifacts packed consumer: reviewed fake-provider exception permits a normal CLI result
+✔ artifacts packed consumer: MCP normal/input/config-error tools/call and stream survival
+✔ artifacts packed consumer: errors and MCP output contain no credential values
+✔ artifacts packed consumer: explanation input contains no credential values (no AI invoked)
+✔ artifacts packed consumer: source/config/env/public and baseline bytes remain unchanged
+  · packed 76663 bytes; consumer install 580 ms
+
+all checks passed

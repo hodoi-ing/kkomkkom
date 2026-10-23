@@ -43,12 +43,29 @@ export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export type RoutePolicy = "public" | "protected";
 export type RoutePolicies = Record<string, Partial<Record<HttpMethod, RoutePolicy>>>;
 
+export const ARTIFACT_RULE_IDS = [
+  "artifact-source-map",
+  "artifact-sensitive-file",
+  "artifact-client-secret",
+  "artifact-server-boundary",
+] as const;
+export type ArtifactRuleId = (typeof ARTIFACT_RULE_IDS)[number];
+export type ArtifactEvidenceKind = "configuration" | "artifact" | "source-import" | "local-production-http";
+export type ArtifactConfidence = "confirmed" | "uncertain";
+
+export interface ArtifactException {
+  ruleId: ArtifactRuleId;
+  file: string;
+  reason: string;
+}
+
 export interface Config {
   ignoreRoutes: string[];
   sampleParams: Record<string, Record<string, string>>;
   port: number;
   thresholds: { jsPercent: number; jsBytes: number };
   routePolicies: RoutePolicies;
+  artifactExceptions: ArtifactException[];
 }
 
 export type RouteState = "new" | "fixed" | "same" | "changed";
@@ -96,7 +113,8 @@ export type CoverageState =
   | "failed"
   | "unsupported";
 
-export type CoverageRule = "api-auth" | "page-smoke" | "write-auth" | "secrets" | "build" | "server";
+export type CoverageRule =
+  | "api-auth" | "page-smoke" | "write-auth" | "secrets" | "build" | "server" | "artifacts";
 
 export interface CoverageCheck {
   rule: CoverageRule;
@@ -124,4 +142,9 @@ export interface ExtraFinding {
   messageKey: MessageKey;
   messageVars?: Record<string, string | number>;
   evidence?: WriteEvidence[];
+  /** Artifact findings carry a stable rule id and project-relative location. */
+  rule?: ArtifactRuleId;
+  file?: string;
+  evidenceKind?: ArtifactEvidenceKind;
+  confidence?: ArtifactConfidence;
 }

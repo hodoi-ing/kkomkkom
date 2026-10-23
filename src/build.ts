@@ -169,6 +169,10 @@ export interface BuildResult {
 }
 
 export interface BuildOptions {
+  /** An owning workflow handles process signals and waits for cleanup/rollback. */
+  signal?: AbortSignal;
+  /** Next refuses its automatic missing-TypeScript install in CI mode. */
+  ci?: boolean;
   timeoutMs?: number;
   stopTimeoutMs?: number;
   /** Test seam; defaults to node:child_process.spawn. */
@@ -176,6 +180,7 @@ export interface BuildOptions {
 }
 
 export function runBuild(root: string, options: BuildOptions = {}): Promise<BuildResult> {
+  if (options.signal?.aborted) return Promise.resolve({ ok: false, failure: "signal", output: "Build cancelled.", pages: {} });
   const cli = resolveNextCli(root);
   if (!cli) {
     return Promise.resolve({
@@ -193,7 +198,7 @@ export function runBuild(root: string, options: BuildOptions = {}): Promise<Buil
       cwd: root,
       stdio: ["ignore", "pipe", "pipe"],
       detached: process.platform !== "win32",
-      env: nextEnv(),
+      env: options.ci ? { ...nextEnv(), CI: "1" } : nextEnv(),
       windowsHide: true,
     });
   } catch {
@@ -209,6 +214,7 @@ export function runBuild(root: string, options: BuildOptions = {}): Promise<Buil
     let output = "";
     let settled = false;
     let timedOut = false;
+    let aborted = false;
     let handlingExit = false;
     let closed = false;
     let timer: NodeJS.Timeout | undefined;
@@ -233,7 +239,7 @@ export function runBuild(root: string, options: BuildOptions = {}): Promise<Buil
     };
 
     const handleExit = async (code: number | null, signal: NodeJS.Signals | null) => {
-      if (settled || timedOut || handlingExit) return;
+      if (settled || timedOut || aborted || handlingExit) return;
       handlingExit = true;
       try {
         const cleaned = await cleanup();
@@ -314,6 +320,15 @@ export function runBuild(root: string, options: BuildOptions = {}): Promise<Buil
       finish({ ok: false, failure: "spawn", output: output + String(error), pages: {} });
     });
 
-    removeInterrupt = installInterrupt(cleanup);
+    if (options.signal) {
+      const abort = () => {
+        aborted = true;
+        void cleanup().then((cleaned) => finish({ ok: false, failure: cleaned ? "signal" : "internal", output, pages: {} }),
+          () => finish({ ok: false, failure: "internal", output, pages: {} }));
+      };
+      options.signal.addEventListener("abort", abort, { once: true });
+      removeInterrupt = () => options.signal!.removeEventListener("abort", abort);
+      if (options.signal.aborted) abort();
+    } else removeInterrupt = installInterrupt(cleanup);
   });
 }
