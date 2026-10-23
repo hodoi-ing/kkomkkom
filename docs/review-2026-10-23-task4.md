@@ -23,10 +23,12 @@
 
 | 명령 | 실제 결과 | 보존 로그 |
 |---|---|---|
-| `node --test test/protect.test.js test/protect-cli.test.js test/protect-verification.test.js` | exit 0, **32 pass / 0 fail** | [focused](verification-logs/2026-10-23-task4-coordinator-focused.txt) |
-| `NEXT_TELEMETRY_DISABLED=1 node scripts/verify.mjs --protect-only` | exit 0, 실제 Next browser maps → repo/packed CLI 적용·owned production·맵 제거 확인·후속 편집 거부·byte-exact 복원·MCP 쓰기 거부 | [실통합](verification-logs/2026-10-23-task4-coordinator-protect-scoped.txt) |
+| `node --test test/protect.test.js test/protect-cli.test.js test/protect-verification.test.js` | exit 0, **32 pass / 0 fail** | [focused](verification-logs/2026-10-23-task4-coordinator-session-focused.txt) |
+| `NEXT_TELEMETRY_DISABLED=1 node scripts/verify.mjs --protect-only` | exit 0, 실제 Next browser maps → repo/packed CLI 적용·owned production·맵 제거 확인·후속 편집 거부·byte-exact 복원·MCP 쓰기 거부 | [실통합](verification-logs/2026-10-23-task4-coordinator-session-protect-scoped.txt) |
 
 두 명령 모두 `TMPDIR`에 위 고유 경로를 사용했다. 보존 로그는 원본과 byte-identical 비교를 통과했다. scoped 실행의 pack 92,800 B·offline 소비자 설치 538 ms는 해당 실행 관측이며 새 통제 비용 benchmark가 아니다. full suite와 Task3 골든은 별도 반복하지 않았다.
+
+이 세션의 32건/538ms 실행은 `61ba315`에 이미 기록된 다른 36건(i18n 포함)/707ms 실행과 구분한다. 원래 `coordinator-focused.txt`와 `coordinator-protect-scoped.txt`는 그 커밋의 기록을 보존하고, 이 세션 로그는 `coordinator-session-*` 이름으로 저장한다. 기록 정리를 위해 검사를 다시 실행하지 않았다.
 
 ## 검증 경계
 
