@@ -14,7 +14,15 @@
 
 </div>
 
-<!-- DEMO_VIDEO: 실제 영상이 확보되면 아래 결과 이미지 앞에 GitHub 첨부 영상 URL을 삽입합니다. 편집 기준: docs/demo.md -->
+<!-- DEMO_VIDEO: 60초 소개 영상 — GitHub는 저장소 내 MP4를 README에서 인라인 재생하지 않으므로 포스터 이미지 + MP4 링크로 제공합니다. 편집 기준: docs/demo.md -->
+
+<p align="center">
+  <a href="docs/assets/kkomkkom-intro-v2.mp4" title="60초 소개 영상 보기">
+    <img src="docs/assets/kkomkkom-intro-v2-poster.png" alt="꼼꼼 60초 소개 영상 — AI가 만든 코드를 실제로 확인하는 CLI·MCP" width="960">
+  </a>
+  <br>
+  <sub><a href="docs/assets/kkomkkom-intro-v2.mp4">60초 소개 영상 보기</a> (MP4 · 2.7MB · 소리 없음) · 화면은 예시 데이터입니다.</sub>
+</p>
 
 ![꼼꼼 보고서 예시: git에 추적된 .env와 인증 확인이 필요한 쓰기 API를 표시합니다.](docs/assets/report-preview.svg)
 
@@ -300,7 +308,7 @@ kkomkkom --explain          # 설치된 AI CLI로 추가 설명 요청
 | 플랫폼 | Linux/WSL에서만 검증. **Windows·macOS는 미검증** |
 | 에이전트별 검증 | **보류**. OpenCode·Codex 등 개별 클라이언트 호환성 완료를 보장하지 않음 |
 | 배포 | npm 미공개. 저장소 접근 권한과 로컬 빌드 필요 |
-| 제한된 설정 보호 | 단일 직접 source-map 설정의 preview/명시 apply/hash-safe restore 구현·Linux/WSL 로컬 검증. 독립 검수·최종 원격 통합 대기. 일반 앱 변환·난독화는 미지원 |
+| 제한된 설정 보호 | 단일 직접 source-map 설정의 preview/명시 apply/hash-safe restore 구현·Linux/WSL 로컬 검증·총괄 독립검수·PR #3/main CI 완료(2026-10-23). Windows/macOS는 미검증. 일반 앱 변환·난독화는 미지원 |
 
 ### 현재 한계
 
