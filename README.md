@@ -4,11 +4,7 @@
   <img src="docs/assets/kkomkkom-logo.jpg" alt="꼼꼼(kkomkkom) 공식 마크 — 윙크하는 주황색 로봇" width="180" height="180">
 </p>
 
-<p>
-  <img src="docs/assets/kkomkkom-hero.png" alt="꼼꼼 — 추측 말고, 근거. Next.js 배포 전 점검 CLI·MCP. 리포트 그래픽은 예시입니다." width="1200">
-</p>
-
-# 🐯 꼼꼼 <sub>kkomkkom</sub>
+# 꼼꼼 <sub>kkomkkom</sub>
 
 **Next.js 앱의 인증·비밀정보·페이지 오류·JS 크기를 배포 전에 점검하는 CLI · MCP 도구.**
 
@@ -19,6 +15,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-2f6f4f.svg)](LICENSE)
 
 [빠른 시작](#빠른-시작) · [에이전트 연결](#에이전트-연결-mcp) · [검사 항목](#무엇을-검사하나요) · [지원·검증 상태](#지원검증-상태) · [English](#english)
+
+<p>
+  <img src="docs/assets/kkomkkom-hero.png" alt="꼼꼼 — 추측 말고, 근거. Next.js 배포 전 점검 CLI·MCP. 리포트 그래픽은 예시입니다." width="1200">
+</p>
 
 </div>
 
