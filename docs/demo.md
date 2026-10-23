@@ -70,6 +70,7 @@
 - [x] 85초·1920×1080·30fps·무음 유지, 기존 렌더 보존
 - [x] `npm run check` 0 error, 대표 프레임 가독성 확인
 - [x] 새 MP4·포스터를 별도 이름(v3)으로 렌더
-- [ ] README `DEMO_VIDEO`를 v3로 갱신하고 PR/CI/main 반영
-- [ ] GitHub 렌더 HTML에서 v3 이미지·링크 확인
-- [ ] 인라인 재생 — GitHub 저장소 MP4는 지원되지 않아 링크 방식 유지 (재생 보장으로 주장하지 않음)
+- [x] README `DEMO_VIDEO`를 v3로 갱신하고 PR/CI/main 반영 — PR #5 merge `2238f6c`, CI `39889925302` success, main=local.
+- [x] GitHub 렌더 HTML에서 v3 이미지·링크 확인 — `src="docs/assets/kkomkkom-intro-v3-poster.png"`, MP4 링크 보존. raw 자산 인증 200(MP4 4,112,428B, PNG 159,023B).
+- [x] 대체 링크 방식 적용 — GitHub 저장소 MP4 인라인 재생은 지원되지 않아 포스터+링크 유지. 브라우저 인라인 재생은 주장하지 않음.
+- [x] README 상단 hero 이미지는 w1:pA 소유 — 이 작업에서 생성·수정·경로 예약하지 않음.
