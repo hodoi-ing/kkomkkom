@@ -1,0 +1,80 @@
+import { spawn, spawnSync } from "node:child_process";
+import { constants } from "node:fs";
+import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import os from "node:os";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const root = process.cwd();
+const fixture = join(here, "fixture");
+const consumer = join(here, "consumer");
+const pack = join(here, "pack");
+const cli = join(root, "dist/cli.js");
+const env = { ...process.env, NEXT_TELEMETRY_DISABLED: "1", TMPDIR: here };
+const observations = { date: new Date().toISOString(), node: process.version, os: os.release(), arch: os.arch(), load: os.loadavg(), memory: os.totalmem(), rootCommit: spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(), modes: {} };
+
+function timed(name, command, args, cwd) {
+  const result = spawnSync("/usr/bin/time", ["-v", "-o", join(here, `${name}.time`), command, ...args], {
+    cwd, env, encoding: "utf8", timeout: 240000,
+  });
+  observations.modes[name] = { command: [command, ...args], cwd, exit: result.status };
+  return Promise.all([
+    writeFile(join(here, `${name}.stdout`), result.stdout ?? ""),
+    writeFile(join(here, `${name}.stderr`), result.stderr ?? ""),
+  ]).then(() => {
+    if (result.status !== 0) throw new Error(`${name} failed with exit ${result.status}; inspect retained log`);
+    return result;
+  });
+}
+
+await cp(join(root, "fixtures/mini-app"), fixture, { recursive: true, mode: constants.COPYFILE_FICLONE });
+await mkdir(consumer);
+await mkdir(pack);
+await writeFile(join(consumer, "package.json"), '{"name":"artifact-cost-consumer","version":"1.0.0","private":true}');
+const baseline = await readFile(join(fixture, ".kkomkkom/baseline.json"));
+const packed = await timed("pack", "npm", ["pack", "--ignore-scripts", "--json", "--pack-destination", pack], root);
+const parsed = JSON.parse(packed.stdout);
+const item = Array.isArray(parsed) ? parsed[0] : Object.values(parsed)[0];
+observations.package = { size: item.size, unpackedSize: item.unpackedSize, entries: item.entryCount, filename: item.filename };
+await timed("install", "npm", ["install", "--offline", "--ignore-scripts", "--omit=dev", "--no-audit", "--no-fund", join(pack, item.filename)], consumer);
+observations.installedBytes = Number(spawnSync("du", ["-sb", join(consumer, "node_modules")], { encoding: "utf8" }).stdout.split(/\s/)[0]);
+observations.typescriptBytes = Number(spawnSync("du", ["-sb", join(consumer, "node_modules/typescript")], { encoding: "utf8" }).stdout.split(/\s/)[0]);
+await timed("static", process.execPath, [cli, "--artifacts", "--json"], fixture);
+
+const portServer = await import("node:net").then(({ createServer }) => createServer());
+await new Promise((resolve) => portServer.listen(0, "127.0.0.1", resolve));
+const port = portServer.address().port;
+await new Promise((resolve) => portServer.close(resolve));
+const server = spawn(process.execPath, [join(fixture, "node_modules/next/dist/bin/next"), "start", "--hostname", "127.0.0.1", "--port", String(port)], {
+  cwd: fixture, env, detached: true, stdio: "ignore",
+});
+try {
+  let ready = false;
+  for (let i = 0; i < 100; i++) {
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}`, { signal: AbortSignal.timeout(500) });
+      await response.body?.cancel();
+      if (response.ok) { ready = true; break; }
+    } catch {}
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  if (!ready) throw new Error("measurement production server did not become ready");
+  await timed("http", process.execPath, [cli, "--artifacts", "--production-url", `http://127.0.0.1:${port}`, "--json"], fixture);
+} finally {
+  if (server.exitCode === null && server.signalCode === null) {
+    const stopped = new Promise((resolve) => server.once("close", resolve));
+    process.kill(-server.pid, "SIGTERM");
+    await stopped;
+  }
+}
+await timed("fresh", process.execPath, [cli, "--artifacts", "--fresh", "--json"], fixture);
+observations.baselinePreserved = baseline.equals(await readFile(join(fixture, ".kkomkkom/baseline.json")));
+for (const name of ["static", "http", "fresh"]) {
+  const result = JSON.parse(await readFile(join(here, `${name}.stdout`), "utf8"));
+  observations.modes[name].coverage = result.coverage.status;
+  observations.modes[name].findings = result.extra.length;
+  observations.modes[name].httpMatches = result.extra.filter((finding) => finding.evidenceKind === "local-production-http").length;
+}
+await writeFile(join(here, "observations.json"), JSON.stringify(observations, null, 2));
+console.log(JSON.stringify({ package: observations.package, installedBytes: observations.installedBytes, typescriptBytes: observations.typescriptBytes, baselinePreserved: observations.baselinePreserved, logs: here }));

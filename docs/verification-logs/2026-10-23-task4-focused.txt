@@ -1,0 +1,32 @@
+✔ MCP rejects protection arguments before inspection and keeps its stream alive (278.291723ms)
+✔ protection CLI unsupported preview agrees with its JSON exit code; false is a no-op (575.617822ms)
+✔ protection CLI defaults to safe preview with explicit token approval and localized impact notes (1576.246168ms)
+✔ protection CLI rejects conflicting and incomplete runtime modes before any mutation (4523.832223ms)
+✔ protection CLI build failure reports rollback separately and restores original bytes (306.555526ms)
+✔ protection verification uses an owned start server and closes its port on success (536.09241ms)
+✔ protection interrupt stops owned build/production and hash-safely rolls back before exiting (1274.547296ms)
+✔ protection failed build rolls back config only and separately reports user-edit refusal (250.226698ms)
+✔ protection reports corrupt-backup refusal separately from restored config with storage finalization failure (241.565348ms)
+✔ protection map/critical/start/smoke failures roll back and always stop owned production (1686.635808ms)
+✔ owned production startup rejects an existing listener rather than reusing dev evidence (25.319252ms)
+✔ protection preview replaces only the true token in direct exports, without config disclosure (128.395763ms)
+✔ protection rejects ambiguous configs without executing them; absent and false are no-op (357.355328ms)
+✔ protection apply has durable private exact backup, preserves mode, and hash-safe restore (108.726603ms)
+✔ protection preserves all original Unix permission bits across apply and restore (104.997234ms)
+✔ protection final recheck refuses a concurrent chmod after the durable backup (86.369931ms)
+✔ protection restore refuses later user permission changes even when content hash matches (101.543856ms)
+✔ protection refuses dirty/index/untracked targets, missing Git, and preview races (168.843891ms)
+✔ protection rejects symlinked target/storage/ancestors and stale locks without deleting them (140.40469ms)
+✔ protection prevents concurrent transactions and refuses hidden Git edits (178.995584ms)
+✔ protection refuses forged applied hashes that would overwrite user changes (99.304394ms)
+✔ protection refuses stale restore transactions after a later apply with identical bytes (155.722188ms)
+✔ protection refuses non-private transaction metadata without changing config (88.034002ms)
+✔ protection restore refuses user edits, corrupt backup, malicious metadata and transaction IDs (709.252408ms)
+ℹ tests 24
+ℹ suites 0
+ℹ pass 24
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7321.577293

@@ -26,12 +26,18 @@ const SKIP_DIRS = new Set([
 ]);
 const PLACEHOLDER = /example|placeholder|your|xxx|dummy|changeme|test/i;
 const PUBLIC_SECRET = /(?:^|_)(?:SECRET|TOKEN|PASSWORD|PASS|PRIVATE|CREDENTIAL|API_KEY|ACCESS_KEY)(?:_|$)/i;
+const SEARCHABLE_ENV_SKIP = /^(?:true|false|null|undefined|localhost|development|production|test)$/i;
 const SECRET = /sk_live_[A-Za-z0-9]{16,}|sk-proj-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|xox[baprs]-[A-Za-z0-9-]{10,}|-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/g;
 const PEM_BLOCK = /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----/g;
 const PEM_UNCLOSED = /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----[\s\S]*/g;
 const WRITES = new Set<HttpMethod>(["POST", "PUT", "PATCH", "DELETE"]);
 
-function isEnvEntry(entry: Dirent): boolean {
+/** Confirmed secret patterns only; placeholders and examples never count. */
+export function hasHighConfidenceSecret(text: string): boolean {
+  return [...text.matchAll(SECRET)].some((match) => !PLACEHOLDER.test(match[0]));
+}
+
+export function isEnvEntry(entry: Dirent): boolean {
   return (
     (entry.isFile() || entry.isSymbolicLink()) &&
     entry.name.startsWith(".env") &&
@@ -79,6 +85,25 @@ function envPairs(content: string): Array<{ key: string; value: string }> {
     pairs.push({ key, value });
   }
   return pairs;
+}
+
+function searchableEnvValue(value: string): boolean {
+  return value.length >= 8 && !SEARCHABLE_ENV_SKIP.test(value);
+}
+
+/** Values from bounded env-file text that are safe to search for in free text. */
+export function envSecretValues(content: string): string[] {
+  return envPairs(content)
+    .filter(({ value }) => searchableEnvValue(value))
+    .map(({ value }) => value)
+    .filter((value, index, all) => all.indexOf(value) === index);
+}
+
+/** Non-public server env assignments whose literal values are worth matching in artifacts. */
+export function envSensitivePairs(content: string): Array<{ key: string; value: string }> {
+  return envPairs(content).filter(({ key, value }) =>
+    !key.startsWith("NEXT_PUBLIC_") && PUBLIC_SECRET.test(key)
+    && searchableEnvValue(value) && !PLACEHOLDER.test(value));
 }
 
 function git(root: string, args: string[]): Promise<{ code: number | null; stdout: string }> {
@@ -341,26 +366,26 @@ export async function auditProject(
     .sort((a, b) => rank[a.severity] - rank[b.severity] || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
-export async function redactSecrets(root: string, text: string): Promise<string> {
-  if (!text) return text;
-
+export function maskSecrets(text: string, values: Iterable<string> = []): string {
   let out = text.replace(PEM_BLOCK, "[redacted]");
   out = out.replace(PEM_UNCLOSED, "[redacted]");
   out = out.replace(SECRET, "[redacted]");
-  const values = new Set<string>();
-
-  for (const entry of await envEntries(root)) {
-    const content = await readFile(join(root, entry.name), "utf8").catch(() => "");
-    for (const { value } of envPairs(content)) {
-      if (value.length < 8) continue;
-      if (/^(?:true|false|null|undefined|localhost|development|production|test)$/i.test(value)) continue;
-      values.add(value);
-    }
-  }
 
   // Longer values first so a short value cannot split a longer secret.
   for (const value of [...values].sort((a, b) => b.length - a.length)) {
     out = out.split(value).join("[redacted]");
   }
   return out;
+}
+
+export async function redactSecrets(root: string, text: string): Promise<string> {
+  if (!text) return text;
+
+  const values = new Set<string>();
+
+  for (const entry of await envEntries(root)) {
+    const content = await readFile(join(root, entry.name), "utf8").catch(() => "");
+    for (const value of envSecretValues(content)) values.add(value);
+  }
+  return maskSecrets(text, values);
 }

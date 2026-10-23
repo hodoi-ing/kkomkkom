@@ -32,4 +32,8 @@ jobs:
             package-lock.json
             fixtures/mini-app/package-lock.json
       - run: npm ci
+      - name: Install the e2e fixture explicitly
+        run: npm ci --prefix fixtures/mini-app --no-audit --no-fund
+      - name: Prime metadata and tarball for the offline packed consumer
+        run: npm cache add "typescript@$(node -p "require('./package.json').dependencies.typescript")"
       - run: npm run verify

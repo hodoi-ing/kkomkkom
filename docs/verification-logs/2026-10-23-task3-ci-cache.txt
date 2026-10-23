@@ -1,0 +1,48 @@
+[prepare.log]
+root-ci-tarballs-only exit 0
+fixture-ci-tarballs-only exit 0
+pack exit 0
+consumer-before-prime exit 1
+RED confirmed: explicit root and fixture ci can pass while offline consumer still lacks range metadata
+
+
+[root-ci-tarballs-only.stdout]
+
+added 3 packages in 494ms
+
+
+[fixture-ci-tarballs-only.stdout]
+
+added 28 packages in 6s
+
+
+[consumer-before-prime.stderr]
+npm error code ENOTCACHED
+npm error request to https://registry.npmjs.org/typescript failed: cache mode is 'only-if-cached' but no cached response is available.
+npm error A complete log of this run can be found in: /tmp/opencode/kk-task3-ci-cache.Ytzjxk/cache/_logs/2026-10-22T15_02_24_461Z-debug-0.log
+
+
+[prime.log]
+explicit registry/cache prime typescript@^5.9.3 exit 0
+offline packed consumer after explicit priming exit 0
+GREEN confirmed; installed TypeScript 5.9.3
+
+
+[consumer-after-prime.stdout]
+
+added 2 packages in 552ms
+
+
+[result.json]
+{
+  "seededTarballs": 31,
+  "rootCiExit": 0,
+  "fixtureCiExit": 0,
+  "beforePrimeExit": 1,
+  "primeSpec": "typescript@^5.9.3",
+  "primeExit": 0,
+  "afterPrimeExit": 0,
+  "installedTypescript": "5.9.3",
+  "preparationMayUseRegistry": true,
+  "consumerOffline": true
+}
