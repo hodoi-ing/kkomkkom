@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, writeFile, readFile, rm, chmod, stat, mkdir, symlink, readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { watch, chmodSync } from "node:fs";
@@ -11,7 +12,7 @@ const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const original = Buffer.from("// private sentinel MUST_NOT_PRINT\r\nmodule.exports = { productionBrowserSourceMaps: true, env: { PRIVATE: 'DO_NOT_PRINT' } };\r\n");
 const git = (root, ...args) => execFileSync("git", ["-C", root, ...args], { stdio: "pipe" });
 async function fixture(t, text = original, name = "next.config.js") {
-  const root = await mkdtemp("/tmp/opencode/kk-protect-test-");
+  const root = await mkdtemp(join(tmpdir(), "kk-protect-test-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   git(root, "init", "-q");
   git(root, "config", "user.email", "fixture@example.invalid");
@@ -234,7 +235,7 @@ test("protection rejects symlinked target/storage/ancestors and stale locks with
   assert.equal(typeof engine.applyProtection, "function");
   for (const kind of ["target", "storage", "ancestor", "lock"]) {
     const root = await fixture(t);
-    const outside = await mkdtemp("/tmp/opencode/kk-protect-outside-");
+    const outside = await mkdtemp(join(tmpdir(), "kk-protect-outside-"));
     t.after(() => rm(outside, { recursive: true, force: true }));
     if (kind === "target") {
       await writeFile(join(outside, "config"), original);
@@ -328,7 +329,7 @@ test("protection restore refuses user edits, corrupt backup, malicious metadata 
       const path = join(dir, "metadata.json");
       const metadata = JSON.parse(await readFile(path, "utf8"));
       if (kind === "metadata-path") metadata.file = "../next.config.js";
-      if (kind === "metadata-root") metadata.root = "/tmp/opencode/another-root";
+      if (kind === "metadata-root") metadata.root = join(tmpdir(), "another-root");
       if (kind === "metadata-other-config") {
         await writeFile(join(root, "next.config.cjs"), await readFile(target));
         metadata.file = "next.config.cjs";

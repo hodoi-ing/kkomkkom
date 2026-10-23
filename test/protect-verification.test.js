@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile, readFile, rm, chmod } from "node:fs/promises";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createServer } from "node:net";
@@ -13,7 +14,7 @@ const serverModule = await import("../dist/server.js");
 const original = "module.exports = { productionBrowserSourceMaps: true };\n";
 const expectedHash = createHash("sha256").update(original).digest("hex");
 async function fixture(t, behavior) {
-  const root = await mkdtemp("/tmp/opencode/kk-protect-verification-");
+  const root = await mkdtemp(join(tmpdir(), "kk-protect-verification-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   await mkdir(join(root, "node_modules", "next", "dist", "bin"), { recursive: true });
   await writeFile(join(root, "node_modules", "next", "package.json"), JSON.stringify({ name: "next", version: "0.0.0-fixture" }));

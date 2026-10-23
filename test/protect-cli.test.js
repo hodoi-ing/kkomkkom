@@ -4,13 +4,14 @@ import { mkdtemp, writeFile, readFile, readdir, rm, cp, symlink } from "node:fs/
 import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 
 const cli = fileURLToPath(new URL("../dist/cli.js", import.meta.url));
 const mcp = fileURLToPath(new URL("../dist/mcp.js", import.meta.url));
 const original = "module.exports = { productionBrowserSourceMaps: true, env: { PASSWORD: 'PRIVATE_SENTINEL' } };\n";
 async function fixture(t) {
-  const root = await mkdtemp("/tmp/opencode/kk-protect-cli-");
+  const root = await mkdtemp(join(tmpdir(), "kk-protect-cli-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   await writeFile(join(root, "package.json"), JSON.stringify({ dependencies: { next: "16.0.0" } }));
   await writeFile(join(root, "next.config.js"), original);
