@@ -132,7 +132,7 @@ async function main(): Promise<number> {
     const root = await findProjectRoot(process.cwd());
     try {
       const result = restoring
-        ? { status: "restored", exitCode: 0, ...await restoreProtection(root, values.restore!) }
+        ? await restoreProtection(root, values.restore!)
         : values.apply
           ? await applyAndVerifyProtection(root, values["expected-hash"]!)
           : await previewProtection(root).then((preview) => ({ ...preview, exitCode: preview.status === "unsupported" ? 2 : 0 }));
@@ -150,13 +150,14 @@ async function main(): Promise<number> {
         if (expectedHash) console.log(`expected hash: ${expectedHash}\nkkomkkom --protect-sourcemaps --apply --expected-hash ${expectedHash}`);
         if ("verification" in result) console.log(`verification: ${JSON.stringify(result.verification)}\nrollback: ${result.rollback}`);
         if ("rollbackFailureReason" in result && result.rollbackFailureReason) console.log(`rollback detail: ${result.rollbackFailureReason}`);
+        if ("lockCleanup" in result) console.log(`lock cleanup: ${result.lockCleanup}${result.lockCleanupFailureReason ? ` (${result.lockCleanupFailureReason})` : ""}`);
         console.log(payload.notes.join("\n"));
         console.log(payload.restoreCommand);
       }
       return result.exitCode;
     } catch (error) {
       throw new KkomkkomError("errProtectRun", {
-        reason: error instanceof ProtectionError ? `${error.configRestored ? "config-restored/" : ""}${error.reason}${error.transactionId ? `; kkomkkom --restore ${error.transactionId}` : ""}` : "unsafe-or-unreadable-state",
+        reason: error instanceof ProtectionError ? `${error.configRestored ? "config-restored/" : ""}${error.reason}${error.lockCleanup ? `; lock cleanup: ${error.lockCleanup}${error.lockCleanupFailureReason ? ` (${error.lockCleanupFailureReason})` : ""}` : ""}${error.transactionId ? `; kkomkkom --restore ${error.transactionId}` : ""}` : "unsafe-or-unreadable-state",
         changed: error instanceof ProtectionError && error.configChanged ? "yes" : "no",
       });
     }

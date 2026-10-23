@@ -1,5 +1,34 @@
 # Task4 protection — implementation ledger
 
+## Independent review fixes: owned-lock cleanup and hidden executable mode
+
+The coordinator confirmed both findings against the real implementation/callers and supplied `/tmp/opencode/task4-review.ajolrYh6/repro.cjs` for read-only reference. That script was read, not executed or modified (it writes fixed reviewer-owned fixture locations). This worker reproduced both issues in newly unique temporary Git fixtures instead. Backup exclusion commit `d0002f7` remains separate and unchanged.
+
+- Root cause: shared `locked()` swallowed both failed unlink and unverified ownership in its `finally`, leaving a successful operation unchanged. It now independently reports `lockCleanup: passed | failed | unconfirmed` and `lockCleanupFailureReason`. Only a matching inode/device/uid/token lock is removed. No force removal, stale deletion or automatic chmod. `passed` means unlink completed, not merely that cleanup was attempted.
+- Returned partial results keep transaction ID, configChanged, verification (including server cleanup), artifact coverage and rollback details. Unresolved lock cleanup exits 1; otherwise-successful operations use `status: lock-cleanup-failed` plus original `operationStatus`, while an already failed operation retains its failure status/reason. Existing thrown errors are rethrown with cleanup fields, not replaced with a generic cleanup exception. Restore finalization errors retain configRestored and now also the transaction ID. CLI JSON preserves the result; text/error output exposes the separate cleanup diagnosis, and restore no longer hardcodes success over its engine result.
+- Root cause: `cleanTarget()` cross-checked only blob identity, so Git assume-unchanged/skip-worktree could hide executable-mode changes. When Git's effective `core.filemode` is true (default if unset), HEAD/index/worktree executable mode must also agree. The false setting is respected; other rw/special permissions remain preserved rather than normalized. Existing permission-preservation and restore-after-chmod refusal regressions were not weakened or rewritten.
+
+New regression cases:
+
+1. Fake build chmods storage to 0500 yet build/owned smoke/artifact checks all pass: overall exit 1, applied config and transaction retained, all verification stages/server cleanup still accurately passed, lock remains, later restore refuses even after the test explicitly restores directory permissions.
+2. Failed build with actual successful config restoration but failed active-record cleanup: original build failure and rollback-finalization detail remain alongside failed lock removal.
+3. Replaced lock and unreadable lock: ownership unconfirmed, no deletion, non-success, original applied outcome retained.
+4. CLI JSON on lock removal failure: actual process exit 1 with transaction/restore command/configChanged/verification retained, not a generic error.
+5. Direct restore with a filesystem-watch-induced storage permission failure: original bytes restored, original restore-finalization error/configRestored retained, transaction ID retained and separate failed lock cleanup.
+6. Hidden chmod under both assume-unchanged and skip-worktree: reject under core.filemode=true without mutation; allow under false with 0755 preserved across apply/restore. Successful normal lock removals report passed.
+
+Commands/output (`/tmp/opencode/kk-task4-review-fix.W560H8/`):
+
+- `node --test --test-name-pattern='^review lock |^review Git ' test/protect.test.js test/protect-verification.test.js` → **RED exit 1, 0/5 pass**, `red.log`: successful cleanup-failed cases returned exit 0, existing failure had no cleanup result, hidden chmod was accepted.
+- First `npm run build` → exit 2 (`build-lock.log`): the transaction variable still used the public locked return type after cleanup fields were added. Changed that internal variable's type to the actual `applyLocked` return type; build then exit 0 (`build-lock2.log`). No speculative runtime patch.
+- New lock cases only → **4/4 pass exit 0**, `green-lock.log`; mode build and new Git case → **1/1 pass exit 0**, `build-mode.log`, `green-mode.log`.
+- Added the direct thrown-restore identity regression before adding identity retention: `node --test --test-name-pattern='^review lock cleanup keeps thrown' test/protect.test.js` → **RED exit 1, 0/1 pass**, `red-restore-identity.log` (missing transaction ID).
+- Final `npm run build` → **exit 0**, `build-final.log`.
+- Final original new-test command above → **6/6 pass, 0 skipped, exit 0**, `green-final.log` (includes the new direct restore case). Permission-sensitive cases require non-root; this run executed them, not skipped them.
+- `git diff --check` → **exit 0**.
+
+No completed Task3/full291/previous24 regression rerun, no real production/packed rerun, no new reviewer/model, no push/main/publish/deployment. All chmods and mutations were confined to uniquely owned test fixtures; only tests restore their own fixture permissions for cleanup. Coordinator owns the next full protection-focused independent run, protect-only real production/pack run and final remote CI. Task4 remains unchecked pending that PASS.
+
 ## Additional security condition: exclude private backups from ordinary Git staging
 
 User-required hardening after implementation handoff; this does not reopen approved Task3 or claim a new whole-suite PASS.
