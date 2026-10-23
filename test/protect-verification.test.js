@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, rm, chmod } from "node:fs/promises";
 import { join } from "node:path";
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -38,6 +38,12 @@ async function fixture(t, behavior) {
         fs.writeFileSync('.kkomkkom/protection/' + id + '/original', 'corrupt');
       }
       if (behavior === 'build-finalization-fail') fs.chmodSync('.kkomkkom/protection', 0o500);
+      if (behavior === 'lock-remove-fail') fs.chmodSync('.kkomkkom/protection', 0o500);
+      if (behavior === 'lock-unreadable') fs.chmodSync('.kkomkkom/protection/lock', 0o000);
+      if (behavior === 'lock-replaced') {
+        fs.renameSync('.kkomkkom/protection/lock', '.kkomkkom/protection/retired-lock');
+        fs.writeFileSync('.kkomkkom/protection/lock', 'another-owner');
+      }
       if (behavior === 'maps') fs.writeFileSync('.next/static/chunks/main.js.map', JSON.stringify({version:3,sources:['entry.js'],names:[],mappings:''}));
       if (behavior === 'critical') fs.writeFileSync('.next/static/chunks/leak.js', 'const key = "sk_live_ABCDEFGHIJKLMNOPQRST"');
       process.exit(behavior.startsWith('build-') ? 1 : 0);
@@ -79,6 +85,84 @@ test("protection verification uses an owned start server and closes its port on 
   assert.equal(await isPortOpen(Number(await readFile(join(root, "owned-port"), "utf8"))), false);
   await engine.restoreProtection(root, result.transactionId);
   assert.equal(await readFile(join(root, "next.config.js"), "utf8"), original);
+});
+
+test("review lock cleanup failure makes successful verification non-success without losing applied details", async (t) => {
+  if (process.getuid?.() === 0) return t.skip("requires non-root directory permissions");
+  const root = await fixture(t, "lock-remove-fail");
+  const directory = join(root, ".kkomkkom", "protection");
+  let result;
+  try { result = await engine.applyAndVerifyProtection(root, expectedHash); }
+  finally { await chmod(directory, 0o700); }
+  assert.equal(result.exitCode, 1);
+  assert.equal(result.status, "lock-cleanup-failed");
+  assert.equal(result.operationStatus, "applied");
+  assert.equal(result.lockCleanup, "failed");
+  assert.equal(result.lockCleanupFailureReason, "lock-remove-failed");
+  assert.deepEqual(result.verification, { build: "passed", smoke: "passed", artifacts: "passed", cleanup: "passed" });
+  assert.equal(result.rollback, "not-needed");
+  assert.equal(result.configChanged, true);
+  assert.equal(typeof result.transactionId, "string");
+  assert.equal(await isPortOpen(Number(await readFile(join(root, "owned-port"), "utf8"))), false);
+  assert.match(await readFile(join(root, "next.config.js"), "utf8"), /SourceMaps: false/);
+  assert.ok((await readFile(join(directory, "lock"))).length > 0);
+  await assert.rejects(engine.restoreProtection(root, result.transactionId), /transaction-locked-or-unsafe/);
+});
+
+test("review lock cleanup failure preserves verification failure and config-restored finalization details", async (t) => {
+  if (process.getuid?.() === 0) return t.skip("requires non-root directory permissions");
+  const root = await fixture(t, "build-finalization-fail");
+  let result;
+  try { result = await engine.applyAndVerifyProtection(root, expectedHash); }
+  finally { await chmod(join(root, ".kkomkkom", "protection"), 0o700); }
+  assert.equal(result.exitCode, 1);
+  assert.equal(result.status, "verification-failed");
+  assert.equal(result.failureReason, "production-build-failed");
+  assert.equal(result.verification.build, "failed");
+  assert.equal(result.rollback, "restored");
+  assert.equal(result.rollbackFailureReason, "restore-finalization-failed");
+  assert.equal(result.configChanged, false);
+  assert.equal(result.lockCleanup, "failed");
+  assert.equal(result.lockCleanupFailureReason, "lock-remove-failed");
+  assert.equal(typeof result.transactionId, "string");
+  assert.equal(await readFile(join(root, "next.config.js"), "utf8"), original);
+});
+
+test("review lock ownership uncertainty is non-success and never deletes replaced or unreadable locks", async (t) => {
+  for (const behavior of ["lock-replaced", "lock-unreadable"]) {
+    if (behavior === "lock-unreadable" && process.getuid?.() === 0) continue;
+    const root = await fixture(t, behavior);
+    const lock = join(root, ".kkomkkom", "protection", "lock");
+    let result;
+    try { result = await engine.applyAndVerifyProtection(root, expectedHash); }
+    finally { await chmod(lock, 0o600); }
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.lockCleanup, "unconfirmed");
+    assert.equal(result.lockCleanupFailureReason, "lock-ownership-unconfirmed");
+    assert.equal(result.operationStatus, "applied");
+    assert.equal(result.verification.cleanup, "passed");
+    const bytes = await readFile(lock, "utf8");
+    if (behavior === "lock-replaced") assert.equal(bytes, "another-owner");
+    else assert.ok(bytes.length > 0);
+  }
+});
+
+test("review lock cleanup CLI returns partial JSON and nonzero exit instead of success", async (t) => {
+  if (process.getuid?.() === 0) return t.skip("requires non-root directory permissions");
+  const root = await fixture(t, "lock-remove-fail");
+  const cli = fileURLToPath(new URL("../dist/cli.js", import.meta.url));
+  let output, code = 0;
+  try { output = execFileSync(process.execPath, [cli, "--protect-sourcemaps", "--apply", "--expected-hash", expectedHash, "--json", "--lang", "en"], { cwd: root, encoding: "utf8", stdio: "pipe" }); }
+  catch (error) { output = error.stdout; code = error.status; }
+  finally { await chmod(join(root, ".kkomkkom", "protection"), 0o700); }
+  assert.equal(code, 1);
+  const result = JSON.parse(output);
+  assert.equal(result.status, "lock-cleanup-failed");
+  assert.equal(result.lockCleanup, "failed");
+  assert.equal(result.operationStatus, "applied");
+  assert.equal(result.configChanged, true);
+  assert.equal(result.verification.cleanup, "passed");
+  assert.equal(result.restoreCommand, `kkomkkom --restore ${result.transactionId}`);
 });
 
 test("protection interrupt stops owned build/production and hash-safely rolls back before exiting", async (t) => {

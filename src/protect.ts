@@ -22,6 +22,8 @@ const digest = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex
 export class ProtectionError extends Error {
   transactionId?: string;
   configRestored = false;
+  lockCleanup?: "passed" | "failed" | "unconfirmed";
+  lockCleanupFailureReason?: string;
   constructor(public readonly reason: string, public readonly configChanged = false) {
     super(`Protection refused: ${reason}.`);
   }
@@ -147,6 +149,13 @@ async function cleanTarget(root: string, file: string) {
     const index = tracked.stdout.split(" ")[1];
     const actual = await exec("git", ["hash-object", "--no-filters", "--", file], options);
     if (head.stdout.trim() !== index || actual.stdout.trim() !== index) refuse("git-dirty");
+    const filemode = await exec("git", ["config", "--type=bool", "--default=true", "--get", "core.filemode"], options);
+    if (filemode.stdout.trim() === "true") {
+      const tree = await exec("git", ["ls-tree", "-z", "HEAD", "--", file], options);
+      const indexMode = tracked.stdout.split(" ")[0];
+      const actualMode = (await safePath(join(root, file))).mode & 0o100 ? "100755" : "100644";
+      if (tree.stdout.split(" ")[0] !== indexMode || actualMode !== indexMode) refuse("git-dirty-mode");
+    }
   } catch { throw new ProtectionError("git-target-not-tracked-clean"); }
 }
 
@@ -180,19 +189,40 @@ async function exclusiveFile(path: string, bytes: Buffer, mode = 0o600) {
   finally { await handle.close(); }
 }
 
-async function locked<T>(directory: string, work: () => Promise<T>): Promise<T> {
+async function locked<T extends { status: string; exitCode: number }>(directory: string, work: () => Promise<T>) {
   const path = join(directory, "lock");
   const token = Buffer.from(`${process.pid} ${randomUUID()}\n`);
   try { await exclusiveFile(path, token); }
   catch { throw new ProtectionError("transaction-locked-or-unsafe"); }
-  const owner = await readSafe(path, 256);
-  try { return await work(); }
-  finally {
-    try {
-      const current = await readSafe(path, 256);
-      if (current.stat.ino === owner.stat.ino && current.stat.dev === owner.stat.dev && current.bytes.equals(token)) await unlink(path);
-    } catch { /* Never remove a replaced or unreadable lock. */ }
+  let owner: Awaited<ReturnType<typeof readSafe>> | undefined;
+  let outcome: { result: T } | { error: unknown };
+  try {
+    owner = await readSafe(path, 256);
+    if (!owner.bytes.equals(token) || (process.getuid && owner.stat.uid !== process.getuid())) refuse("lock-ownership-unconfirmed");
+    outcome = { result: await work() };
+  } catch (error) { outcome = { error }; }
+  let lockCleanup: "passed" | "failed" | "unconfirmed" = "unconfirmed";
+  let lockCleanupFailureReason: string | undefined = "lock-ownership-unconfirmed";
+  try {
+    const current = await readSafe(path, 256);
+    if (owner && current.stat.ino === owner.stat.ino && current.stat.dev === owner.stat.dev && current.stat.uid === owner.stat.uid &&
+        (!process.getuid || current.stat.uid === process.getuid()) && current.bytes.equals(token)) {
+      lockCleanup = "failed";
+      lockCleanupFailureReason = "lock-remove-failed";
+      await unlink(path);
+      lockCleanup = "passed";
+      lockCleanupFailureReason = undefined;
+    }
+  } catch { /* Leave replaced/unreadable locks and failed removals untouched. */ }
+  const cleanup = { lockCleanup, lockCleanupFailureReason };
+  if ("error" in outcome) {
+    if (outcome.error instanceof Error) Object.assign(outcome.error, cleanup);
+    throw outcome.error;
   }
+  const { result } = outcome;
+  return lockCleanup === "passed" ? { ...result, ...cleanup }
+    : { ...result, ...cleanup, operationStatus: result.status,
+      status: result.exitCode === 0 ? "lock-cleanup-failed" : result.status, exitCode: 1 };
 }
 
 async function activeTransaction(directory: string, transactionId: string) {
@@ -297,7 +327,7 @@ async function applyLocked(root: string, directory: string, file: string, expect
     if (!failure.configChanged) await releaseActive(directory, transactionId);
     throw failure;
   }
-  return { transactionId, file, originalHash: metadata.originalHash, appliedHash: metadata.appliedHash, configChanged: true };
+  return { status: "applied" as const, exitCode: 0, transactionId, file, originalHash: metadata.originalHash, appliedHash: metadata.appliedHash, configChanged: true };
 }
 
 export async function restoreProtection(inputRoot: string, transactionId: string) {
@@ -336,10 +366,11 @@ async function restoreLocked(root: string, directory: string, transactionId: str
     await releaseActive(directory, transactionId);
   } catch (error) {
     const failure = error instanceof ProtectionError ? error : new ProtectionError("restore-finalization-failed");
+    failure.transactionId = transactionId;
     failure.configRestored = (await readSafe(join(root, metadata.file)).catch(() => null))?.bytes.equals(backup.bytes) ?? false;
     throw failure;
   }
-  return { transactionId, file: metadata.file, restored: true };
+  return { status: "restored" as const, exitCode: 0, transactionId, file: metadata.file, restored: true };
 }
 
 interface ProtectionVerification {
@@ -380,7 +411,7 @@ export async function applyAndVerifyProtection(inputRoot: string, expectedHash: 
 
 async function verifyAppliedProtection(root: string, directory: string, file: string, expectedHash: string, signal: AbortSignal) {
   const verification: ProtectionVerification = { build: "not-run", artifacts: "not-run", smoke: "not-run", cleanup: "not-run" };
-  let transaction: Awaited<ReturnType<typeof applyProtection>>;
+  let transaction: Awaited<ReturnType<typeof applyLocked>>;
   try { transaction = await applyLocked(root, directory, file, expectedHash); }
   catch (error) {
     if (!(error instanceof ProtectionError) || !error.configChanged || !error.transactionId) throw error;

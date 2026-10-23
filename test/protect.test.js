@@ -181,6 +181,55 @@ test("protection refuses dirty/index/untracked targets, missing Git, and preview
   }
 });
 
+test("review lock cleanup keeps thrown restore details and transaction identity after actual config restoration", async (t) => {
+  if (process.getuid?.() === 0) return t.skip("requires non-root directory permissions");
+  const root = await fixture(t);
+  const applied = await engine.applyProtection(root, hash(original));
+  assert.equal(applied.lockCleanup, "passed");
+  const directory = join(root, ".kkomkkom", "protection");
+  let changed = false;
+  const watcher = watch(root, (_event, name) => {
+    if (!changed && name?.startsWith(".kkomkkom-protect-")) { chmodSync(directory, 0o500); changed = true; }
+  });
+  try {
+    await assert.rejects(engine.restoreProtection(root, applied.transactionId), (error) => {
+      assert.equal(error.reason, "restore-finalization-failed");
+      assert.equal(error.configRestored, true);
+      assert.equal(error.lockCleanup, "failed");
+      assert.equal(error.lockCleanupFailureReason, "lock-remove-failed");
+      assert.equal(error.transactionId, applied.transactionId);
+      return true;
+    });
+  } finally { watcher.close(); await chmod(directory, 0o700); }
+  assert.equal(changed, true, "permission change must happen before restore finalization");
+  assert.deepEqual(await readFile(join(root, "next.config.js")), original);
+  assert.ok((await readFile(join(directory, "lock"))).length > 0);
+});
+
+test("review Git executable mode rejects hidden permission changes but respects core.filemode false", async (t) => {
+  for (const flag of ["--assume-unchanged", "--skip-worktree"]) {
+    for (const filemode of ["true", "false"]) {
+      const root = await fixture(t);
+      git(root, "config", "core.filemode", filemode);
+      git(root, "update-index", flag, "next.config.js");
+      await chmod(join(root, "next.config.js"), 0o755);
+      assert.equal(git(root, "status", "--porcelain", "--", "next.config.js").length, 0);
+      if (filemode === "true") {
+        await assert.rejects(engine.applyProtection(root, hash(original)), /git-target-not-tracked-clean/);
+        assert.deepEqual(await readFile(join(root, "next.config.js")), original);
+        assert.equal((await stat(join(root, "next.config.js"))).mode & 0o777, 0o755);
+      } else {
+        const applied = await engine.applyProtection(root, hash(original));
+        assert.equal(applied.lockCleanup, "passed");
+        assert.equal((await stat(join(root, "next.config.js"))).mode & 0o777, 0o755);
+        assert.equal((await engine.restoreProtection(root, applied.transactionId)).lockCleanup, "passed");
+        assert.deepEqual(await readFile(join(root, "next.config.js")), original);
+        assert.equal((await stat(join(root, "next.config.js"))).mode & 0o777, 0o755);
+      }
+    }
+  }
+});
+
 test("protection rejects symlinked target/storage/ancestors and stale locks without deleting them", async (t) => {
   assert.equal(typeof engine.applyProtection, "function");
   for (const kind of ["target", "storage", "ancestor", "lock"]) {
