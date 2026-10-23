@@ -287,7 +287,7 @@ disk:
 23797200	/tmp/kk-measure.8eEpZh/consumer/node_modules
 
 ## fast
-	Command being timed: "node /home/dev/workspace/next-preflight/dist/cli.js --fast --port 3410 --json"
+	Command being timed: "node <repo>/dist/cli.js --fast --port 3410 --json"
 	User time (seconds): 5.41
 	System time (seconds): 0.81
 	Percent of CPU this job got: 285%
@@ -314,7 +314,7 @@ exit=0
 {"exitCode":0,"coverage":"incomplete","counts":{"checked":6,"static-only":0,"ignored":0,"skipped":1,"failed":1,"unsupported":0}}
 
 ## non-fast
-	Command being timed: "node /home/dev/workspace/next-preflight/dist/cli.js --port 3411 --json"
+	Command being timed: "node <repo>/dist/cli.js --port 3411 --json"
 	User time (seconds): 25.46
 	System time (seconds): 5.59
 	Percent of CPU this job got: 480%
@@ -341,7 +341,7 @@ exit=0
 {"exitCode":0,"coverage":"incomplete","counts":{"checked":7,"static-only":0,"ignored":0,"skipped":0,"failed":1,"unsupported":0}}
 
 ## artifacts static (post-feature)
-	Command being timed: "node /home/dev/workspace/next-preflight/dist/cli.js --artifacts --json"
+	Command being timed: "node <repo>/dist/cli.js --artifacts --json"
 	User time (seconds): 0.20
 	System time (seconds): 0.04
 	Percent of CPU this job got: 112%
@@ -368,7 +368,7 @@ exit=0
 {"exitCode":0,"coverage":"complete","counts":{"checked":2,"static-only":1,"ignored":0,"skipped":0,"failed":0,"unsupported":0}}
 
 ## artifacts fresh (post-feature)
-	Command being timed: "node /home/dev/workspace/next-preflight/dist/cli.js --artifacts --fresh --json"
+	Command being timed: "node <repo>/dist/cli.js --artifacts --fresh --json"
 	User time (seconds): 3.93
 	System time (seconds): 1.44
 	Percent of CPU this job got: 307%

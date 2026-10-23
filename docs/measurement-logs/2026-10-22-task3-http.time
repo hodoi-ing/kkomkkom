@@ -1,4 +1,4 @@
-	Command being timed: "/home/dev/.nvm/versions/node/v26.10.0/bin/node /home/dev/workspace/next-preflight/dist/cli.js --artifacts --production-url http://127.0.0.1:37845 --json"
+	Command being timed: "node <repo>/dist/cli.js --artifacts --production-url http://127.0.0.1:37845 --json"
 	User time (seconds): 0.77
 	System time (seconds): 0.12
 	Percent of CPU this job got: 164%

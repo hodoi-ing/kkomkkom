@@ -43,7 +43,7 @@ Prototype install:    0.61 s, 207312 KB RSS, 23837307 B node_modules (not curren
 
   cp -a fixtures/mini-app /tmp/kk-rw.5kylgk/fixture
   cd /tmp/kk-rw.5kylgk/fixture
-  /usr/bin/time -v node /home/dev/workspace/next-preflight/dist/cli.js --artifacts --json
+  /usr/bin/time -v node <repo>/dist/cli.js --artifacts --json
 
 Observed:
   exit 0
@@ -58,7 +58,7 @@ Prototype static: 0.21 s, 121832 KB RSS (not current).
 ## Fixed fixture — explicit fresh build
 
   cd /tmp/kk-rw.5kylgk/fixture
-  /usr/bin/time -v node /home/dev/workspace/next-preflight/dist/cli.js --artifacts --fresh --json
+  /usr/bin/time -v node <repo>/dist/cli.js --artifacts --fresh --json
 
 Observed:
   exit 0

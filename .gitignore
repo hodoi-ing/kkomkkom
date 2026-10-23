@@ -1,5 +1,10 @@
 node_modules/
 dist/
+.env
+.env.*
+!.env.example
+.npmrc
+.netrc
 .next/
 .kkomkkom/
 .verify-*/

@@ -3,7 +3,7 @@ npm notice run node scripts/verify.mjs
 ✔ build
 ✘ unit tests (290)
       AssertionError [ERR_ASSERTION]: en/errProtectRun left a placeholder: Protection refused (exit 1); config changed by this operation: {changed}. Re-preview or inspect the saved transaction before retrying.
-          at TestContext.<anonymous> (file:///home/dev/workspace/next-preflight/test/i18n.test.js:51:14)
+          at TestContext.<anonymous> (file://<repo>/test/i18n.test.js:51:14)
           at Test.runInAsyncScope (node:async_hooks:226:14)
           at Test.run (node:internal/test_runner/test:1402:25)
           at Test.processPendingSubtests (node:internal/test_runner/test:974:18)

@@ -1,9 +1,16 @@
 # TASKLIST — kkomkkom
 
+## 현재 작업 — 공개 전 민감정보 점검 (2026-10-23)
+
+사용자 지시: 영상 제작·검수 완료 뒤 API 키·개인정보·내부 설정 포함 여부를 점검한다. 공개 전환은 사용자가 이후 결정하며 자동 실행하지 않는다. 비밀 원문 출력·외부 업로드·실제 키 유효성 요청·자동 키 교체·Git 이력 재작성은 하지 않는다.
+
+- [x] 현행 추적 파일·설정·문서·로그·첨부 자산과 Git 이력/refs 점검. 원격 main `56bc7f8` 기준 추적 117개·blob 493개(17.8MB)·커밋 89개·원격 ref 25개, 이슈/PR 본문·댓글 10건과 이미지·영상 메타데이터 포함. 실제 API 키·유효 개인키·자격증명 URL 0건. 키 패턴 44건은 `FAKE` 테스트 값, PEM 11개는 파싱 불가 fixture, `artifactClientSecret`/`detailKey`는 오탐. `.env`·`.npmrc`·키 파일은 현재·과거 이력 모두 없음.
+- [x] 개인정보성 항목 기록: 로컬 경로 `/home/dev/...` 9개 파일·이슈 댓글 2건, 작성자 Gmail 1종은 GitHub 공개 프로필과 동일. 상세 보고서 `/tmp/opencode/kkomkkom-public-audit.VrqlFa/REPORT.md`. **정리(2026-10-23, w1:pA): `.gitignore`에 `.env*`/`.npmrc`/`.netrc` 추가, 추적 문서 9개 경로 `<repo>`·`<video-project>` 마스킹, 이슈 댓글 2건 수정. Gmail 이력 재작성·저장소 공개 전환은 하지 않음. 변경은 로컬 커밋 대기.**
+
 ## 현재 작업 — README 대표 이미지·영상 검수 (2026-10-23)
 
 - [x] 대표 이미지 직접 제작·README 연결·검수 — w1:pA 담당. 크림색 에디토리얼/딥그린 검사 리포트, PNG 3200×1680·폰트 경로화 SVG. 기존 영상과 로그는 보존하며 대표 이미지 경로만 새로 추가한다. 결과 기록: `docs/readme-hero-2026-10-23.md`. **GitHub 통합(2026-10-23): PR #6 merge `254c6ea`, CI `39891611024` success. 렌더 HTML hero src 1회(제목 앞), raw PNG/SVG 인증 200(517,915B/419,148B), DEMO_VIDEO v3 유지.**
-- [ ] 영상 v3 독립 검수 — 9씬 실제 프레임·기능 매핑/예시/한계 문구 확인. S8 apply 화면의 필수 `--protect-sourcemaps` 누락 및 production build 자동검증 맥락을 w1:p4에 수정 요청. 새 프레임/결과 수신 후 재작업 구간만 확인한다. **S8 수정 `479c95f` 반영(전체 옵션·AUTO), 69s 프레임 `/tmp/opencode/kk-video-frames/v3/f-69-fixed.png`; w1:pA 재검토 대기.**
+- [x] 영상 v3 독립 검수 — 9씬 실제 프레임·기능 매핑/예시/한계 문구 확인. S8 apply 필수옵션·자동검증 맥락 수정 뒤 w1:pA가 저장소 MP4의 69s 프레임을 직접 재확인: 전체 `--protect-sourcemaps --apply --expected-hash HASH`·AUTO 표기, 겹침/잘림 없음. 새 검수 프레임 `/tmp/opencode/kkomkkom-hero.B3sikX/video-protection-fixed-review.png`. 마지막 CI `39892087282` completed/success 직접 확인. 기존 제품 회귀·전체 렌더 재실행 없음.
 
 ## 현재 작업 — 이슈 #1·#2 (2026-10-22)
 

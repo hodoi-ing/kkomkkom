@@ -2,7 +2,7 @@
 
 ## 현재 상태 (2026-10-23, v3 — 전체 기능)
 
-- **영상:** `/home/dev/workspace/videos/kkomkkom-video/renders/kkomkkom-intro-v3.mp4` — **85.0초**, 1920×1080, 30fps, H.264, **소리 없음(의도적)**, 3.9MB.
+- **영상:** `<video-project>/renders/kkomkkom-intro-v3.mp4` — **85.0초**, 1920×1080, 30fps, H.264, **소리 없음(의도적)**, 3.9MB.
 - **포스터:** 같은 폴더의 `kkomkkom-intro-v3-poster.png` — 영상 4초 프레임, 1280×720, 159KB.
 - **README 사본:** `docs/assets/kkomkkom-intro-v3.mp4`, `docs/assets/kkomkkom-intro-v3-poster.png`.
 - **README 연결:** `DEMO_VIDEO` 블록만 갱신. GitHub는 저장소 안 MP4를 README에서 인라인 재생하지 않으므로 포스터 + MP4 상대 링크로 제공하며, 인라인 재생을 보장하지 않습니다.
