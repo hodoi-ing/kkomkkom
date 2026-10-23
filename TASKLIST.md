@@ -6,6 +6,8 @@
 
 최신 지시: **“더 구체적으로 배포할 수 있을 정도로 만들어. 그전까지 나를 부르지마.”** 승인된 #2 계획을 끝까지 자율 실행한다. 완료 기준은 production HTTP·실제 Next/packed CLI·MCP 검증, 보호 preview/apply/restore 및 실패 롤백 검증, 비용·지원 한계·실행/복원 안내, 총괄 독립 검수와 CI 성공, 원격 main/로컬 일치다. 중간 진행/승인 요청으로 멈추지 않는다. 실제 배포·npm 공개·저장소 공개 전환과 보류 플랫폼 구현은 여전히 범위 밖이다.
 
+- **2026-10-23 최종:** #2 구현·총괄 독립검수·원격 CI·main 통합 완료. PR #3 merge `54d27af`, main CI `39881120567` Node20/22/24+e2e success, local `main`=`origin/main`, worktree clean. 공개 전환·npm 공개·실배포와 보류 플랫폼 구현은 범위 밖으로 유지하며, 후속 후보 추적을 위해 #2 이슈는 열어 둔다.
+
 ### 오늘의 시간·모델 제한 및 내일 재개
 
 - **2026-10-23 09:23 KST 서버 재시작 후 재개:** 사용자 지시대로 완료된 검사/측정을 반복하지 않고 Task4부터 이어간다. git 작업 트리는 clean, Task3 승인 커밋은 보존됐다. 탭2는 복원된 셸에서 `issue2-worker`로 다시 시작하고, API 호출 전에 실제 UI를 `GPT-6.1 Sol OpenAI / medium`으로 맞췄다. 탭3은 건드리지 않았다.
@@ -87,7 +89,8 @@
   - 작업 안전 메모: 세션 초반 넓은 환경 조회가 인증 변수 값을 로컬 tool 출력에 포함했다. 값은 소스·검증 로그·커밋에 복사하지 않았고 이후 조회는 정확한 비민감 필드로 제한했다. 인증값을 다시 출력하지 말 것; 노출된 키의 교체를 권장한다. 이 작업에서 자격증명을 임의 변경하지 않았다.
   - **총괄 독립 검수 PASS(2026-10-23)**: baseline `5bd79b8` clean. Task4 전체 commit(`0b64dae` 엔진, `3894c73` CLI/검증, `fc97342` 실Next/packed, `8c5cb90`, `d0002f7` 백업 Git 제외, `5bd79b8` lock정리/executable mode)과 호출부·테스트·README/help·i18n 검토. 총괄 직접 `npm run build` exit0, protect/verification/CLI/i18n **36/36 pass·0 fail·0 skipped exit0**, `TMPDIR=/tmp/opencode/kk-task4-coordinator/verify-final node scripts/verify.mjs --protect-only` **exit0**(실제 Next browser-map build, repo·offline production-only packed consumer preview/apply/owned production smoke/restore 거부·정확 복원, 재빌드 후 map 없음, MCP 보호인자 거부·스트림 생존, pack/consumer 설치). 추가 독립 probe **9/9**(중첩 동명 key 미변경, 적용본 재적용 무변경 거부, restore rename 후 active 잔존 crash 창, 기존 0755 `.kkomkkom`, 0700/0600 mode, transaction 비스테이징). 비차단 findings: `.kkomkkom/protection/active`(비밀 없음)는 여전히 `git add -A` 후보 → 상위 `.gitignore` 권장; restore-rename/active-release crash 창 수동 복구 절차 문서화; 검증 종료 시 hash만 재확인(mode 변경은 후속 restore가 거부). Windows/macOS·전원차단·동일권한 경쟁은 기존 한계 유지. fc97342 이후 delta가 protect/i18n/docs에 한정되어 전체291/full verify는 재실행하지 않음. 원본 로그 `docs/verification-logs/2026-10-23-task4-coordinator-{build,focused,probe,protect-scoped}.txt`, 상세 `docs/verification-2026-10-23-task4.md` 상단. Task4 `[x]`; 다음은 Task5 평가·원격 Node20/22/24 CI·main/로컬 동기화.
 - [x] #2 단계 4: 후속 확장 수요/비용 평가 기록 — `docs/extension-assessment-2026-10-23.md`에 난독화·Electron·모바일·서버 분리 후보의 지정되지 않은 조건, 비용 검증 항목과 재개 기준을 기록했다. 구현·SDK/엔진 설치·지원 완료는 아니며 에이전트별 MCP 실연결 보류도 유지한다.
-- [ ] 최종 검수 결과·이슈별 완료/보류/한계 기록, GitHub main과 로컬 HEAD 일치 확인.
+- [x] 최종 검수 결과·이슈별 완료/보류/한계 기록, GitHub main과 로컬 HEAD 일치 확인.
+  - 2026-10-23: `docs/release-readiness-2026-10-23.md`가 요구사항 A–D·선택 보호·비용·CLI/CI/MCP·후속 확장을 근거에 매핑하고, 공개/배포 미수행과 Windows/macOS·전원차단·동일권한 경쟁 한계를 기록했다. PR #3(merge `54d27af`) main CI `39881120567` **success**(Node20/22/24+e2e), `git rev-parse HEAD origin/main` 동일·worktree clean, 원격 `issue2/artifacts`도 동일 tip. Task4 `[x]`·원격 CI 게이트 완료. #2 이슈는 공개/배포·보류 플랫폼 후속을 위해 open 유지.
 
 에이전트별 실제 연결 검증은 #2의 보류 결정을 유지한다. MCP 자체 tools/call 자동 검증은 수행한다. 구현자는 검수 전 원격 push/main 반영하지 않는다.
 
