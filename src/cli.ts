@@ -9,7 +9,6 @@ import { renderReport } from "./report.js";
 import { runArtifactCheck } from "./artifacts.js";
 import { runCheck } from "./run.js";
 import { severityOf } from "./severity.js";
-import { applyAndVerifyProtection, previewProtection, ProtectionError, restoreProtection } from "./protect.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { version: string };
@@ -129,6 +128,7 @@ async function main(): Promise<number> {
         values["production-url"] !== undefined || values["explain-with"] !== undefined || values.port !== undefined) {
       throw new KkomkkomError("errProtectArgs");
     }
+    const { applyAndVerifyProtection, previewProtection, ProtectionError, restoreProtection } = await import("./protect.js");
     const root = await findProjectRoot(process.cwd());
     try {
       const result = restoring

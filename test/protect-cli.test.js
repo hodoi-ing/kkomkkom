@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, readFile, readdir, rm, cp, symlink } from "node:fs/promises";
 import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
@@ -23,6 +23,47 @@ async function fixture(t) {
   return root;
 }
 const invoke = (cwd, ...args) => spawnSync(process.execPath, [cli, ...args], { cwd, encoding: "utf8", timeout: 20000, env: { ...process.env, CI: "1", NO_COLOR: "1" } });
+
+test("protection module loads only after valid explicit CLI selection, never for inspection or MCP", async (t) => {
+  const root = await fixture(t);
+  const copy = join(root, "tool");
+  await cp(new URL("../dist/", import.meta.url), join(copy, "dist"), { recursive: true });
+  await writeFile(join(copy, "package.json"), JSON.stringify({ type: "module", version: "0.1.0" }));
+  await symlink(fileURLToPath(new URL("../node_modules/", import.meta.url)), join(copy, "node_modules"));
+  await writeFile(join(copy, "dist", "protect.js"), 'export const applyAndVerifyProtection = null, previewProtection = null, restoreProtection = null;\nexport class ProtectionError extends Error {}\nthrow new Error("PROTECTION_MODULE_INITIALIZED");\n');
+  await writeFile(join(root, "next.config.js"), "module.exports = { productionBrowserSourceMaps: false };\n");
+  const invokeCopy = (...args) => spawnSync(process.execPath, [join(copy, "dist", "cli.js"), ...args], {
+    cwd: root, encoding: "utf8", timeout: 20000, env: { ...process.env, NO_COLOR: "1" },
+  });
+  const help = invokeCopy("--help");
+  assert.equal(help.status, 0, help.stderr);
+  assert.match(help.stdout, /Usage/);
+  const standard = invokeCopy("--lang", "en");
+  assert.equal(standard.status, 2);
+  assert.match(standard.stderr, /no.*routes/i);
+  const artifacts = invokeCopy("--artifacts", "--json", "--lang", "en");
+  assert.equal(artifacts.status, 0, artifacts.stderr);
+  assert.equal(JSON.parse(artifacts.stdout).schemaVersion, 2);
+  for (const args of [["--apply"], ["--protect-sourcemaps", "--artifacts"]]) {
+    const invalid = invokeCopy(...args, "--lang", "en");
+    assert.equal(invalid.status, 2);
+    assert.match(invalid.stderr, /Invalid protection mode/);
+    assert.doesNotMatch(invalid.stderr, /PROTECTION_MODULE_INITIALIZED/);
+  }
+  const input = [
+    { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "kkomkkom", arguments: { projectPath: root, artifacts: true, lang: "en" } } },
+    { jsonrpc: "2.0", id: 2, method: "ping" },
+  ].map((call) => JSON.stringify(call)).join("\n") + "\n";
+  const inspection = spawnSync(process.execPath, [join(copy, "dist", "mcp.js")], { cwd: root, encoding: "utf8", input, timeout: 20000 });
+  assert.equal(inspection.status, 0, inspection.stderr);
+  const replies = inspection.stdout.trim().split("\n").map((line) => JSON.parse(line));
+  assert.equal(replies.find((reply) => reply.id === 1).result.structuredContent.schemaVersion, 2);
+  assert.ok(replies.find((reply) => reply.id === 2).result);
+  assert.doesNotMatch([help.stderr, standard.stderr, artifacts.stderr, inspection.stderr].join("\n"), /PROTECTION_MODULE_INITIALIZED/);
+  const selected = invokeCopy("--protect-sourcemaps", "--json", "--lang", "en");
+  assert.equal(selected.status, 2);
+  assert.match(selected.stderr, /PROTECTION_MODULE_INITIALIZED/);
+});
 
 test("MCP rejects protection arguments before inspection and keeps its stream alive", async (t) => {
   const root = await fixture(t);
