@@ -1,5 +1,26 @@
 # Task4 protection — implementation ledger
 
+## Coordinator independent PASS (2026-10-23)
+
+Baseline `5bd79b8`, branch `issue2/artifacts`, clean worktree. Reviewed every Task4 commit (`0b64dae` engine, `3894c73` CLI/verification, `fc97342` real Next/packed integration, `8c5cb90` resume record, `d0002f7` backup Git exclusion, `5bd79b8` lock cleanup/executable mode) plus callers, tests, README/help and i18n.
+
+Independent commands (coordinator-owned):
+
+1. `npm run build` → exit 0.
+2. `node --test test/protect.test.js test/protect-verification.test.js test/protect-cli.test.js test/i18n.test.js` → **36 pass / 0 fail / 0 skipped, exit 0**.
+3. `TMPDIR=/tmp/opencode/kk-task4-coordinator/verify-final NEXT_TELEMETRY_DISABLED=1 node scripts/verify.mjs --protect-only` → **exit 0**: real Next browser-map build; repo and offline production-only packed consumer preview/apply/owned production smoke/restore-after-edit refusal/byte-exact restore; no maps after rebuild; MCP protection-argument rejection and stream survival; pack and consumer install.
+4. Coordinator probes outside the repo suite (9/9): a same-named nested key is not targeted and stays byte-identical; only the direct token changes; re-apply after applied state is refused without mutation; simulated SIGKILL between restore rename and active release; apply works with a pre-existing 0755 `.kkomkkom`; directory/backup/internal-ignore modes 0700/0600/0600; transaction is not a staging candidate.
+
+Findings: none block this PASS. No path was found that overwrites later user edits or prints config bytes, and lock-cleanup failures now surface as non-success with the original operation details.
+
+1. `.kkomkkom/protection/active` (transaction id + metadata hash, no credentials) is still listed by `git add --dry-run -A` in a project without a root `.kkomkkom/` ignore; backup and metadata are excluded. A single `.gitignore` at `.kkomkkom/protection/` (`*`) would also cover `active` and a lock left by failed cleanup. State hygiene only.
+2. After a SIGKILL between the restore rename and active-pointer removal, `--restore` refuses (`config-edited-restore-refused`) and `--apply` refuses (`active-transaction-conflict`); recovery requires manually removing `.kkomkkom/protection/active` after confirming no owner process. Fail-closed, no overwrite; README says to inspect but gives no exact step.
+3. Verification success rechecks content hash, not mode. A chmod during the build is not a verification failure; the later `--restore` refuses and never overwrites. Optional end-of-verification mode check.
+
+Limits unchanged: Windows/macOS, power-loss/directory durability and same-permission hostile processes. The full 291-test gate was not re-run: the delta after `fc97342` is limited to protection storage, lock/mode diagnostics, messages/tests and docs; focused 36 + scoped real/packed cover it. Remote Node 20/22/24 CI, push/main synchronization and Task5 closure are the next gate.
+
+Verdict: **Task4 independently PASSED** on `5bd79b8`. Logs: `docs/verification-logs/2026-10-23-task4-coordinator-{build,focused,probe,protect-scoped}.txt`.
+
 ## Independent review fixes: owned-lock cleanup and hidden executable mode
 
 The coordinator confirmed both findings against the real implementation/callers and supplied `/tmp/opencode/task4-review.ajolrYh6/repro.cjs` for read-only reference. That script was read, not executed or modified (it writes fixed reviewer-owned fixture locations). This worker reproduced both issues in newly unique temporary Git fixtures instead. Backup exclusion commit `d0002f7` remains separate and unchanged.

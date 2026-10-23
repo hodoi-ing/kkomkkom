@@ -1,0 +1,2 @@
+npm notice run kkomkkom@0.1.0 build
+npm notice run tsc -p tsconfig.json

@@ -1,0 +1,11 @@
+PASS P1 preview targets top-level token only :: start=92 expected=92
+PASS P1 only top-level token changes :: module.exports = { env: { productionBrowserSourceMaps: true }, productionBrowserSourceMaps: false };
+PASS P2 second apply refused without mutation :: no-supported-change
+PASS P2 apply after restore works
+PASS P3 crash window: restore refuses (already restored) :: config-edited-restore-refused
+PASS P3 crash window: further apply blocked until manual active cleanup :: active-transaction-conflict
+PASS P4 apply works with existing 0755 .kkomkkom
+PASS P4 private modes preserved :: dir=700 backup=600 ignore=600
+PASS P4 transaction is not a staging candidate :: add 'next.config.js'
+add '.kkomkkom/protection/active'
+PROBE RESULT: PASS
