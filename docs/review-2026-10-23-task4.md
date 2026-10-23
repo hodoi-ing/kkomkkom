@@ -5,7 +5,7 @@
 | 읽기 전용 독립 리뷰 | GPT-6.1 Sol medium, `5666c4d..fc97342`. 기존 #1·Task2/Task3 완료 검사는 재실행하지 않음 |
 | 범위 | AST preview, tracked Git/hash 승인, private backup/metadata/active ownership, 경계·동시성, rollback/finalization, owned production 종료, CLI/MCP 계약 |
 | 사용자 프로젝트 변경 | 없음. 적용·복원은 새 임시 Git fixture에만 수행 |
-| 현재 게이트 | 아래 수정의 독립 focused/실통합 통과. 선택 시에만 보호 모듈을 로드하는 마지막 연결 회귀와 최종 원격 CI는 별도 확인 |
+| 현재 게이트 | 아래 수정의 독립 focused/실통합 및 `c6f9009` 선택 로드 신규 1건 통과. Task4 코드 승인, 최종 HEAD 원격 CI·통합은 별도 게이트 |
 
 ## 재현된 지적과 처리
 
@@ -29,6 +29,8 @@
 두 명령 모두 `TMPDIR`에 위 고유 경로를 사용했다. 보존 로그는 원본과 byte-identical 비교를 통과했다. scoped 실행의 pack 92,800 B·offline 소비자 설치 538 ms는 해당 실행 관측이며 새 통제 비용 benchmark가 아니다. full suite와 Task3 골든은 별도 반복하지 않았다.
 
 이 세션의 32건/538ms 실행은 `61ba315`에 이미 기록된 다른 36건(i18n 포함)/707ms 실행과 구분한다. 원래 `coordinator-focused.txt`와 `coordinator-protect-scoped.txt`는 그 커밋의 기록을 보존하고, 이 세션 로그는 `coordinator-session-*` 이름으로 저장한다. 기록 정리를 위해 검사를 다시 실행하지 않았다.
+
+마지막 연결 수정 `c6f9009`는 검증된 보호 분기 안에서만 `protect.js`를 동적으로 읽는다. 총괄이 `node --test --test-name-pattern='^protection module loads only' test/protect-cli.test.js`를 직접 실행해 **1 pass / 0 fail, exit 0**을 확인했다. 복제한 모듈의 throw sentinel로 help/일반 CLI/artifacts/MCP/잘못된 보호 인자는 모듈을 초기화하지 않고, 유효한 보호 선택에서만 읽는 동작을 검증했다. 기존 32건·실통합을 반복하지 않았고, 최종 revision의 전체 CI는 통합 단계에서 확인한다.
 
 ## 검증 경계
 

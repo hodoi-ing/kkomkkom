@@ -36,9 +36,9 @@
 
 **Interfaces:** record package compressed/unpacked bytes, production dependency disk/download observation, separate static/HTTP/full-build wall time and max RSS with Node/OS/fixture/cache/commands. Missing measurements stay explicitly unmeasured.
 
-- [ ] Preserve pre-parser pack observation: commit f9a21ff, current generated dist; `npm pack --dry-run --ignore-scripts --json` produced compressed 38691 B, unpacked 120918 B, 41 entries, zero declared runtime dependencies. This is a dry-run package-size observation, not install/download/RSS measurement or original release baseline. npm output here is keyed object, not always array; scripts must handle both shapes.
-- [ ] Measure reviewed issue #1 package/production dependency install and fixed fixture costs, with commands/results saved. No hidden network downloads in checks; record npm installation network separately.
-- [ ] Record supported/unsupported output and tested OS boundaries. Coordinator reviews actual observations, not estimated KB→MB conversions; commit.
+- [x] Preserve pre-parser pack observation: commit f9a21ff, current generated dist; `npm pack --dry-run --ignore-scripts --json` produced compressed 38691 B, unpacked 120918 B, 41 entries, zero declared runtime dependencies. This is a dry-run package-size observation, not install/download/RSS measurement or original release baseline. npm output here is keyed object, not always array; scripts must handle both shapes.
+- [x] Measure reviewed issue #1 package/production dependency install and fixed fixture costs, with commands/results saved. No hidden network downloads in checks; record npm installation network separately.
+- [x] Record supported/unsupported output and tested OS boundaries. Coordinator reviews actual observations, not estimated KB→MB conversions; commit. These marks reconcile the already-approved TASKLIST stage0; measurements were not rerun.
 
 ### Task 2: Shared artifact rules with standalone static CLI/MCP mode
 
@@ -97,16 +97,16 @@ Coordinator reproduction on `e5e6aa3`: a plain `PRIVATE_TOKEN` value from root `
 - Backup is byte-exact and durable before config replacement. A failed apply reports whether the config changed. Restore validates root/target ownership and original/applied hashes, and refuses to overwrite post-apply user edits, corrupt backups or conflicting transactions.
 - Verification may build and start only its own loopback production smoke process; clean it up on every exit. Never use a dev server as production evidence or stop/reconfigure a server the tool did not create. Failed verification attempts only hash-safe config rollback; report generated build output as a side effect, not as restored source/artifacts.
 
-- [ ] Write failing tests for literal true→false in supported next.config.js/mjs/cjs/ts object exports, no-op false/absent, wrappers/multiple/ambiguous exports/computed settings unsupported, dirty Git file, preview/apply race, symlink escape, restore-after-user-edit refusal, failed build/verification with successful/failed rollback.
-- [ ] Implement AST-located token replacement only for the single supported literal property. Preview shows diff, source hash, diagnostic impact, unchanged dependencies/network policy, generated build side effects and restore command. Never delete maps/sensitive files automatically.
-- [ ] On explicit apply validate expected hash and clean Git target, create private original backup/transaction metadata, atomically replace the file; prevent concurrent transaction conflicts and path traversal. Failures report partial changes and rollback state.
-- [ ] Build production locally, re-inspect maps and run loopback production smoke. Verification failure attempts only hash-safe restore and reports any restore failure. Assert all mutations remain inside temporary fixtures in tests.
-- [ ] Run focused protection tests and package CLI/inspection regression. Coordinator checks safety/rollback and runtime side effects before integration. Commit with docs, never apply protection to the user's other projects.
+- [x] Write failing tests for literal true→false in supported next.config.js/mjs/cjs/ts object exports, no-op false/absent, wrappers/multiple/ambiguous exports/computed settings unsupported, dirty Git file, preview/apply race, symlink escape, restore-after-user-edit refusal, failed build/verification with successful/failed rollback.
+- [x] Implement AST-located token replacement only for the single supported literal property. Preview shows diff, source hash, diagnostic impact, unchanged dependencies/network policy, generated build side effects and restore command. Never delete maps/sensitive files automatically.
+- [x] On explicit apply validate expected hash and clean Git target, create private original backup/transaction metadata, atomically replace the file; prevent concurrent transaction conflicts and path traversal. Failures report partial changes and rollback state.
+- [x] Build production locally, re-inspect maps and run loopback production smoke. Verification failure attempts only hash-safe restore and reports any restore failure. Assert all mutations remain inside temporary fixtures in tests.
+- [x] Run focused protection tests and package CLI/inspection regression. Coordinator checks safety/rollback and runtime side effects before integration. Commit with docs, never apply protection to the user's other projects. Independent review and 32 cases, actual production/packed flow, plus final opt-in-loading regression passed; see Task4 review report.
 
 ### Task 5: Honest closure and synchronization
 
 **Files:** TASKLIST, measurement/verification/support docs and GitHub issue checklists/comments.
 
-- [ ] Map each implemented #2 requirement to a test/observation and identify remaining limits. Mark candidate evaluation separately from platform implementation. Record conditions to revisit deferred client tests and expansion candidates.
-- [ ] Coordinator independently checks changed flow/unsafe inputs, fresh verification results and pack-consumer behavior; fix findings before integrating.
+- [x] Map each implemented #2 requirement to a test/observation and identify remaining limits. Mark candidate evaluation separately from platform implementation. Record conditions to revisit deferred client tests and expansion candidates. See release-readiness and extension-assessment documents.
+- [x] Coordinator independently checks changed flow/unsafe inputs, fresh verification results and pack-consumer behavior; fix findings before integrating. Review fixes and direct evidence are in the Task4 review report; final remote CI remains below.
 - [ ] Push reviewed commits, check CI and compare remote main/local main HEAD and clean worktree. Do not mark #1/#2 wholly done while mandatory requirements remain unverified or unimplemented.
