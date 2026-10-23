@@ -1,0 +1,44 @@
+✔ resolveLang prefers the flag over the environment (2.238244ms)
+✔ resolveLang falls back to KKOMKKOM_LANG, then en (0.294245ms)
+✔ t fills placeholders (0.308234ms)
+✔ every language has every message with no unfilled placeholders (2.054056ms)
+✔ MCP rejects protection arguments before inspection and keeps its stream alive (265.380998ms)
+✔ protection CLI unsupported preview agrees with its JSON exit code; false is a no-op (499.832944ms)
+✔ protection CLI defaults to safe preview with explicit token approval and localized impact notes (1426.564586ms)
+✔ protection CLI rejects conflicting and incomplete runtime modes before any mutation (4580.184012ms)
+✔ protection CLI build failure reports rollback separately and restores original bytes (316.704831ms)
+✔ protection verification uses an owned start server and closes its port on success (518.208019ms)
+✔ review lock cleanup failure makes successful verification non-success without losing applied details (445.678863ms)
+✔ review lock cleanup failure preserves verification failure and config-restored finalization details (122.432124ms)
+✔ review lock ownership uncertainty is non-success and never deletes replaced or unreadable locks (871.743718ms)
+✔ review lock cleanup CLI returns partial JSON and nonzero exit instead of success (748.296512ms)
+✔ protection interrupt stops owned build/production and hash-safely rolls back before exiting (1217.923197ms)
+✔ protection failed build rolls back config only and separately reports user-edit refusal (249.895934ms)
+✔ protection reports corrupt-backup refusal separately from restored config with storage finalization failure (235.280914ms)
+✔ protection map/critical/start/smoke failures roll back and always stop owned production (1684.202105ms)
+✔ owned production startup rejects an existing listener rather than reusing dev evidence (25.670346ms)
+✔ protection preview replaces only the true token in direct exports, without config disclosure (103.833819ms)
+✔ protection rejects ambiguous configs without executing them; absent and false are no-op (268.396641ms)
+✔ protection apply has durable private exact backup, preserves mode, and hash-safe restore (102.968114ms)
+✔ protection backup Git exclusion prevents ordinary staging without changing user ignore files (224.492532ms)
+✔ protection backup preview warns about sensitive private transaction storage without disclosure (1220.101282ms)
+✔ protection preserves all original Unix permission bits across apply and restore (94.488482ms)
+✔ protection final recheck refuses a concurrent chmod after the durable backup (83.980281ms)
+✔ protection restore refuses later user permission changes even when content hash matches (96.299468ms)
+✔ protection refuses dirty/index/untracked targets, missing Git, and preview races (133.592582ms)
+✔ review lock cleanup keeps thrown restore details and transaction identity after actual config restoration (95.189699ms)
+✔ review Git executable mode rejects hidden permission changes but respects core.filemode false (279.812146ms)
+✔ protection rejects symlinked target/storage/ancestors and stale locks without deleting them (112.698786ms)
+✔ protection prevents concurrent transactions and refuses hidden Git edits (170.576717ms)
+✔ protection refuses forged applied hashes that would overwrite user changes (83.77517ms)
+✔ protection refuses stale restore transactions after a later apply with identical bytes (185.285812ms)
+✔ protection refuses non-private transaction metadata without changing config (94.810887ms)
+✔ protection restore refuses user edits, corrupt backup, malicious metadata and transaction IDs (723.762307ms)
+ℹ tests 36
+ℹ suites 0
+ℹ pass 36
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7149.151897
