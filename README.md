@@ -1,6 +1,10 @@
 <div align="center">
 
 <p>
+  <img src="docs/assets/kkomkkom-logo.jpg" alt="꼼꼼(kkomkkom) 공식 마크 — 윙크하는 주황색 로봇" width="180" height="180">
+</p>
+
+<p>
   <img src="docs/assets/kkomkkom-hero.png" alt="꼼꼼 — 추측 말고, 근거. Next.js 배포 전 점검 CLI·MCP. 리포트 그래픽은 예시입니다." width="1200">
 </p>
 
