@@ -26,3 +26,10 @@ README 최상단 중앙 정렬 영역에서 PNG를 사용한다. 이미지에 �
 - 기존 영상 v3의 실제 프레임 9장과 보호 화면 69초를 독립 확인했고, apply 명령에서 필수 보호 옵션이 생략되어 보이는 부분을 영상 담당자에게 수정 요청했다. 이는 영상 검수 지적이며 제품 코드 변경 요청이 아니다.
 
 GitHub 통합·렌더된 README 확인은 결과 수신 후 기록한다. 제품 배포·npm 공개·저장소 공개 전환은 이 작업 범위 밖이다.
+
+## GitHub 통합 결과 (2026-10-23)
+
+- PR #6 merge `254c6ea`, CI `39891611024` **success**(Node 20/22/24 + e2e).
+- 렌더된 README HTML에서 hero `src="docs/assets/kkomkkom-hero.png"`가 **1회**, 제목(h1) 앞에 유지됨. alt 텍스트 유지. DEMO_VIDEO v3 포스터/MP4 링크도 그대로 유지됨.
+- 인증된 raw 자산 HTTP 200: `kkomkkom-hero.png` 517,915B, `kkomkkom-hero.svg` 419,148B, `kkomkkom-intro-v3.mp4` 4,116,074B, `kkomkkom-intro-v3-poster.png` 159,023B.
+- 통합 후 로컬 `main`은 `origin/main`과 동일하며 worktree clean. 공개 전환·npm 공개·제품 배포는 하지 않았다.

@@ -54,7 +54,7 @@
 - 렌더: `renders/kkomkkom-intro-v3.mp4`, 3.9MB, 1m 47s 소요, screenshot capture(software gpu).
 - `ffprobe`: 1920×1080, 30/1 fps, 2550 frames, **85.000000s**, 비디오 스트림만(오디오 없음).
 - 대표 프레임: 4s(훅), 10s(소개), 18s(라우트), 27s(비밀정보), 36s(빌드), 47s(배포물), 57s(HTTP), 69s(보호), 80s(언어·시작)을 추출해 텍스트 겹침·잘림·가독성을 확인했습니다.
-- S8 명령 조합 수정(검수 지적): row02에 필수 `--protect-sourcemaps`를 포함한 `--protect-sourcemaps --apply --expected-hash HASH` 전체를 표시하고, row03은 실행 명령이 아니라 apply 후 자동 검증(AUTO)임을 명시했습니다. 수정 후 재렌더 4,116,074B, 69s 프레임 (`/tmp/opencode/kk-video-frames/v3/f-69-fixed.png`) 직접 확인.
+- S8 명령 조합 수정(검수 지적): row02에 필수 `--protect-sourcemaps`를 포함한 `--protect-sourcemaps --apply --expected-hash HASH` 전체를 표시하고, row03은 실행 명령이 아니라 apply 후 자동 검증(AUTO)임을 명시했습니다. 수정 후 재렌더 4,116,074B, 69s 프레임 (`/tmp/opencode/kk-video-frames/v3/f-69-fixed.png`) 직접 확인. PR #6 merge `254c6ea`, CI `39891611024` success.
 - 프레임 0은 배경만 보이는 진입 구간이며, README 포스터는 4초 프레임을 사용합니다. (검사 경고로 기록)
 - 기존 `renders/kkomkkom-intro.mp4`(v1), `kkomkkom-intro-v2.mp4`는 덮어쓰지 않았습니다.
 

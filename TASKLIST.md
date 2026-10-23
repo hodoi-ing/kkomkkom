@@ -2,8 +2,8 @@
 
 ## 현재 작업 — README 대표 이미지·영상 검수 (2026-10-23)
 
-- [ ] 대표 이미지 직접 제작·README 연결·검수 — w1:pA 담당. 크림색 에디토리얼/딥그린 검사 리포트, PNG 3200×1680·폰트 경로화 SVG. 기존 영상과 로그는 보존하며 대표 이미지 경로만 새로 추가한다. 결과 기록: `docs/readme-hero-2026-10-23.md`.
-- [ ] 영상 v3 독립 검수 — 9씬 실제 프레임·기능 매핑/예시/한계 문구 확인. S8 apply 화면의 필수 `--protect-sourcemaps` 누락 및 production build 자동검증 맥락을 w1:p4에 수정 요청. 새 프레임/결과 수신 후 재작업 구간만 확인한다.
+- [x] 대표 이미지 직접 제작·README 연결·검수 — w1:pA 담당. 크림색 에디토리얼/딥그린 검사 리포트, PNG 3200×1680·폰트 경로화 SVG. 기존 영상과 로그는 보존하며 대표 이미지 경로만 새로 추가한다. 결과 기록: `docs/readme-hero-2026-10-23.md`. **GitHub 통합(2026-10-23): PR #6 merge `254c6ea`, CI `39891611024` success. 렌더 HTML hero src 1회(제목 앞), raw PNG/SVG 인증 200(517,915B/419,148B), DEMO_VIDEO v3 유지.**
+- [ ] 영상 v3 독립 검수 — 9씬 실제 프레임·기능 매핑/예시/한계 문구 확인. S8 apply 화면의 필수 `--protect-sourcemaps` 누락 및 production build 자동검증 맥락을 w1:p4에 수정 요청. 새 프레임/결과 수신 후 재작업 구간만 확인한다. **S8 수정 `479c95f` 반영(전체 옵션·AUTO), 69s 프레임 `/tmp/opencode/kk-video-frames/v3/f-69-fixed.png`; w1:pA 재검토 대기.**
 
 ## 현재 작업 — 이슈 #1·#2 (2026-10-22)
 
@@ -13,7 +13,7 @@
 
 - **2026-10-23 최종:** #2 구현·총괄 독립검수·원격 CI·main 통합 완료. PR #3 merge `54d27af`, main CI `39881120567` Node20/22/24+e2e success, local `main`=`origin/main`, worktree clean. 공개 전환·npm 공개·실배포와 보류 플랫폼 구현은 범위 밖으로 유지하며, 후속 후보 추적을 위해 #2 이슈는 열어 둔다.
 - **2026-10-23 데모 영상 갱신:** 60초·1920×1080·30fps·무음 유지. artifact 정적 검사/선택적 production HTTP·선택 보호 preview/apply/restore와 한계 반영, README `DEMO_VIDEO`에 포스터+MP4 상대 링크, `docs/demo.md` 최신화. PR #4 merge `32b5f01`, CI `39887084516` success. GitHub 저장소 MP4 인라인 재생은 지원되지 않아 재생 보장을 주장하지 않으며, 렌더 HTML의 이미지/링크 보존과 raw 자산 인증 200만 확인했다.
-- **2026-10-23 데모 영상 v3(전체 기능):** 85초·1920×1080·30fps·무음 유지, 9씬. ①-⑩(CLI/MCP, 라우트/페이지, 비밀정보, 빌드/기준선/coverage, artifact, opt-in HTTP, 보호, 언어/AI)를 화면에 매핑. `renders/kkomkkom-intro-v3.mp4`(3.9MB)·`...-poster.png`, README `DEMO_VIDEO` v3 링크, `docs/demo.md` 타임스탬프/체크리스트. `npm run check` 0 error, ffprobe 85.000s·2550f·비디오만. PR #5 merge `2238f6c`, CI `39889925302` success, main=local·clean. README 상단 hero 이미지는 w1:pA 별도 담당자 소유로 생성/경로 변경 없음. S8 검수 지적 반영: row02 `--protect-sourcemaps --apply --expected-hash HASH` 전체 표기, row03 AUTO(apply 후 자동 검증)로 정정 후 **재렌더(4,116,074B)**, 69s 실제 프레임 확인.
+- **2026-10-23 데모 영상 v3(전체 기능):** 85초·1920×1080·30fps·무음 유지, 9씬. ①-⑩(CLI/MCP, 라우트/페이지, 비밀정보, 빌드/기준선/coverage, artifact, opt-in HTTP, 보호, 언어/AI)를 화면에 매핑. `renders/kkomkkom-intro-v3.mp4`(3.9MB)·`...-poster.png`, README `DEMO_VIDEO` v3 링크, `docs/demo.md` 타임스탬프/체크리스트. `npm run check` 0 error, ffprobe 85.000s·2550f·비디오만. PR #5 merge `2238f6c`, CI `39889925302` success, main=local·clean. README 상단 hero 이미지는 w1:pA 별도 담당자 소유로 생성/경로 변경 없음. S8 검수 지적 반영: row02 `--protect-sourcemaps --apply --expected-hash HASH` 전체 표기, row03 AUTO(apply 후 자동 검증)로 정정 후 **재렌더(4,116,074B)**, 69s 실제 프레임 확인. **S8 수정 `479c95f`, PR #6 merge `254c6ea`, CI `39891611024` success, hero·영상 main 반영.**
 
 ### 오늘의 시간·모델 제한 및 내일 재개
 
