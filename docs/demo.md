@@ -43,5 +43,5 @@
 - [x] `npm run check` 0 error, 대표 프레임 가독성 확인
 - [x] 새 MP4·포스터를 별도 이름으로 렌더
 - [x] README 상단 포스터·MP4 링크와 `docs/demo.md` 갱신
-- [ ] GitHub 렌더 HTML에서 이미지·링크 확인 (PR 반영 후 실제 응답으로 확인)
-- [ ] 인라인 재생 — GitHub 저장소 MP4는 지원되지 않아 링크 방식 유지 (실제 재생은 접근 권한 있는 브라우저에서 확인)
+- [x] GitHub 렌더 HTML에서 이미지·링크 확인 — 2026-10-23 `gh api .../readme -H "Accept: application/vnd.github.html"`로 `<img src="docs/assets/kkomkkom-intro-v2-poster.png">`와 MP4 링크 보존 확인. `raw.githubusercontent.com` 자산은 인증 요청 200(MP4 2,818,300B, PNG 159,023B).
+- [x] 대체 링크 방식 적용 — GitHub 저장소 MP4 인라인 재생은 지원되지 않아 포스터+링크 유지. 브라우저에서의 실제 인라인 재생은 확인/주장하지 않음.

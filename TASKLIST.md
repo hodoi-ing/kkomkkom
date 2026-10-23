@@ -7,6 +7,7 @@
 최신 지시: **“더 구체적으로 배포할 수 있을 정도로 만들어. 그전까지 나를 부르지마.”** 승인된 #2 계획을 끝까지 자율 실행한다. 완료 기준은 production HTTP·실제 Next/packed CLI·MCP 검증, 보호 preview/apply/restore 및 실패 롤백 검증, 비용·지원 한계·실행/복원 안내, 총괄 독립 검수와 CI 성공, 원격 main/로컬 일치다. 중간 진행/승인 요청으로 멈추지 않는다. 실제 배포·npm 공개·저장소 공개 전환과 보류 플랫폼 구현은 여전히 범위 밖이다.
 
 - **2026-10-23 최종:** #2 구현·총괄 독립검수·원격 CI·main 통합 완료. PR #3 merge `54d27af`, main CI `39881120567` Node20/22/24+e2e success, local `main`=`origin/main`, worktree clean. 공개 전환·npm 공개·실배포와 보류 플랫폼 구현은 범위 밖으로 유지하며, 후속 후보 추적을 위해 #2 이슈는 열어 둔다.
+- **2026-10-23 데모 영상 갱신:** 60초·1920×1080·30fps·무음 유지. artifact 정적 검사/선택적 production HTTP·선택 보호 preview/apply/restore와 한계 반영, README `DEMO_VIDEO`에 포스터+MP4 상대 링크, `docs/demo.md` 최신화. PR #4 merge `32b5f01`, CI `39887084516` success. GitHub 저장소 MP4 인라인 재생은 지원되지 않아 재생 보장을 주장하지 않으며, 렌더 HTML의 이미지/링크 보존과 raw 자산 인증 200만 확인했다.
 
 ### 오늘의 시간·모델 제한 및 내일 재개
 
