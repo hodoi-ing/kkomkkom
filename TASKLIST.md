@@ -13,7 +13,7 @@
 
 - **2026-10-23 최종:** #2 구현·총괄 독립검수·원격 CI·main 통합 완료. PR #3 merge `54d27af`, main CI `39881120567` Node20/22/24+e2e success, local `main`=`origin/main`, worktree clean. 공개 전환·npm 공개·실배포와 보류 플랫폼 구현은 범위 밖으로 유지하며, 후속 후보 추적을 위해 #2 이슈는 열어 둔다.
 - **2026-10-23 데모 영상 갱신:** 60초·1920×1080·30fps·무음 유지. artifact 정적 검사/선택적 production HTTP·선택 보호 preview/apply/restore와 한계 반영, README `DEMO_VIDEO`에 포스터+MP4 상대 링크, `docs/demo.md` 최신화. PR #4 merge `32b5f01`, CI `39887084516` success. GitHub 저장소 MP4 인라인 재생은 지원되지 않아 재생 보장을 주장하지 않으며, 렌더 HTML의 이미지/링크 보존과 raw 자산 인증 200만 확인했다.
-- **2026-10-23 데모 영상 v3(전체 기능):** 85초·1920×1080·30fps·무음 유지, 9씬. ①-⑩(CLI/MCP, 라우트/페이지, 비밀정보, 빌드/기준선/coverage, artifact, opt-in HTTP, 보호, 언어/AI)를 화면에 매핑. `renders/kkomkkom-intro-v3.mp4`(3.9MB)·`...-poster.png`, README `DEMO_VIDEO` v3 링크, `docs/demo.md` 타임스탬프/체크리스트. `npm run check` 0 error, ffprobe 85.000s·2550f·비디오만. PR #5 merge `2238f6c`, CI `39889925302` success, main=local·clean. README 상단 hero 이미지는 w1:pA 별도 담당자 소유로 생성/경로 변경 없음.
+- **2026-10-23 데모 영상 v3(전체 기능):** 85초·1920×1080·30fps·무음 유지, 9씬. ①-⑩(CLI/MCP, 라우트/페이지, 비밀정보, 빌드/기준선/coverage, artifact, opt-in HTTP, 보호, 언어/AI)를 화면에 매핑. `renders/kkomkkom-intro-v3.mp4`(3.9MB)·`...-poster.png`, README `DEMO_VIDEO` v3 링크, `docs/demo.md` 타임스탬프/체크리스트. `npm run check` 0 error, ffprobe 85.000s·2550f·비디오만. PR #5 merge `2238f6c`, CI `39889925302` success, main=local·clean. README 상단 hero 이미지는 w1:pA 별도 담당자 소유로 생성/경로 변경 없음. S8 검수 지적 반영: row02 `--protect-sourcemaps --apply --expected-hash HASH` 전체 표기, row03 AUTO(apply 후 자동 검증)로 정정 후 **재렌더(4,116,074B)**, 69s 실제 프레임 확인.
 
 ### 오늘의 시간·모델 제한 및 내일 재개
 

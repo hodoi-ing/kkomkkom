@@ -21,7 +21,7 @@
 | 31–42s | s5-build | **⑤⑥** production build JS 무게, 기준선 new/fixed/changed, `--update`/`--fast`, coverage·strict·JSON, exit 0/1/2 |
 | 42–53s | s6-artifacts | **⑦** `--artifacts` 정적 검사: source map·민감 파일·클라이언트 비밀 흔적·서버 경계, unsupported/coverage incomplete |
 | 53–61s | s7-http | **⑧** opt-in loopback HTTP: 선택 파일 raw bytes 일치, SPA/redirect/404·CDN·프로젝트 신원 미확인, `--fresh` 빌드 부수효과 |
-| 61–75s | s8-protect | **⑨** preview → apply+hash → production 검증 → hash-safe restore, private backup·Git 제외·후속 편집 거부·진단 정보 감소·lock 정리 실패 보고·MCP 보호 없음·Windows/macOS 미검증 |
+| 61–75s | s8-protect | **⑨** preview → apply+hash → production 검증 → hash-safe restore, private backup·Git 제외·후속 편집 거부·진단 정보 감소·lock 정리 실패 보고·MCP 보호 없음·Windows/macOS 미검증. row02는 `--protect-sourcemaps --apply --expected-hash HASH` 전체 표기, row03은 apply 후 자동 검증(AUTO) |
 | 75–85s | s9-close | **⑩①** 5개 언어, 선택 로컬 AI 설명과 외부 agent 호환성 미보장, 로컬 빌드 4단계, npm 미공개 |
 
 ## 기능 커버리지 체크리스트
@@ -54,6 +54,7 @@
 - 렌더: `renders/kkomkkom-intro-v3.mp4`, 3.9MB, 1m 47s 소요, screenshot capture(software gpu).
 - `ffprobe`: 1920×1080, 30/1 fps, 2550 frames, **85.000000s**, 비디오 스트림만(오디오 없음).
 - 대표 프레임: 4s(훅), 10s(소개), 18s(라우트), 27s(비밀정보), 36s(빌드), 47s(배포물), 57s(HTTP), 69s(보호), 80s(언어·시작)을 추출해 텍스트 겹침·잘림·가독성을 확인했습니다.
+- S8 명령 조합 수정(검수 지적): row02에 필수 `--protect-sourcemaps`를 포함한 `--protect-sourcemaps --apply --expected-hash HASH` 전체를 표시하고, row03은 실행 명령이 아니라 apply 후 자동 검증(AUTO)임을 명시했습니다. 수정 후 재렌더 4,116,074B, 69s 프레임 (`/tmp/opencode/kk-video-frames/v3/f-69-fixed.png`) 직접 확인.
 - 프레임 0은 배경만 보이는 진입 구간이며, README 포스터는 4초 프레임을 사용합니다. (검사 경고로 기록)
 - 기존 `renders/kkomkkom-intro.mp4`(v1), `kkomkkom-intro-v2.mp4`는 덮어쓰지 않았습니다.
 
