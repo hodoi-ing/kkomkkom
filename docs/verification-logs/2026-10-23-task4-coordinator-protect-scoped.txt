@@ -23,6 +23,6 @@
 ✔ protection packed consumer: restore refuses later user edits
 ✔ protection packed consumer: restore is byte-exact and preserves unrelated source/env/baseline
 ✔ protection packed consumer: result does not claim generated build output was restored
-  · packed 92800 bytes; consumer install 538 ms
+  · packed 92800 bytes; consumer install 707 ms
 
 all checks passed
