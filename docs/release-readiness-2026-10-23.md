@@ -4,7 +4,7 @@
 |---|---|
 | 기본 배포물 검사·명시적 local production HTTP | Task2/2.1/3 총괄 승인. Task3 snapshot의 Node20/22/24 + e2e CI 성공: [39878058305](https://github.com/hodoi-ing/kkomkkom/actions/runs/39878058305) |
 | 보호 preview/apply/restore·실패 복원 | Task4 구현, 독립 리뷰 지적 수정, focused·실제 Next/packed 검증 기록 확보. [독립 검수](review-2026-10-23-task4.md), [구현 기록](verification-2026-10-23-task4.md) |
-| 마지막 수정·최종 통합 | 코드 `c6f9009`의 선택 로드 신규 회귀까지 총괄 직접 PASS. 최종 HEAD CI·main 동기화는 아직 완료 전 |
+| 마지막 수정·최종 통합 | 코드 `c6f9009`·이식성 수정 `3765ef2` 포함 PR #3 merge `54d27af`; main CI `39881120567` Node20/22/24+e2e success; local `main` = `origin/main`, clean |
 | 실제 공개·배포 | 수행하지 않음. 저장소 비공개·npm 미공개 유지 |
 
 ## 요구사항과 검증 근거
