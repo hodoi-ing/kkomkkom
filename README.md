@@ -1,5 +1,9 @@
 <div align="center">
 
+<p>
+  <img src="docs/assets/kkomkkom-hero.png" alt="꼼꼼 — 추측 말고, 근거. Next.js 배포 전 점검 CLI·MCP. 리포트 그래픽은 예시입니다." width="1200">
+</p>
+
 # 🐯 꼼꼼 <sub>kkomkkom</sub>
 
 **Next.js 앱의 인증·비밀정보·페이지 오류·JS 크기를 배포 전에 점검하는 CLI · MCP 도구.**
