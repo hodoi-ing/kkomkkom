@@ -273,6 +273,8 @@ async function applyLocked(root: string, directory: string, file: string, expect
   const transaction = join(directory, transactionId);
   await mkdir(transaction, { mode: 0o700 });
   await privateDirectory(transaction, false);
+  await exclusiveFile(join(transaction, ".gitignore"), Buffer.from("*\n"));
+  await syncDirectory(transaction);
   const original = current.content.bytes;
   const applied = changedBytes(original, current.preview);
   const rootStat = await safePath(root, true);

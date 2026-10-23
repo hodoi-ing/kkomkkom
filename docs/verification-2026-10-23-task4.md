@@ -1,5 +1,24 @@
 # Task4 protection — implementation ledger
 
+## Additional security condition: exclude private backups from ordinary Git staging
+
+User-required hardening after implementation handoff; this does not reopen approved Task3 or claim a new whole-suite PASS.
+
+- Before writing any original config bytes, a newly owned unique transaction exclusively creates its own private `.gitignore` containing `*\n`, fsyncs that file, then syncs the transaction directory. Existing root/project ignore files and global Git settings are not modified. Existing transactions are not rewritten.
+- All five preview languages identify `.kkomkkom/protection/<TRANSACTION_ID>/`, warn that the backup may contain credentials/secrets, explain ordinary Git staging exclusion and warn against force-add/sharing. No surrounding config, new digest or secret value is printed.
+- New real temporary Git fixture regression covers both absent and existing user root `.gitignore`. After apply, `git ls-files --others --exclude-standard`, `git add --dry-run -A`, and actual `git add -A` exclude every transaction file (backup, metadata and internal ignore). Restore still preserves exact backup bytes and leaves the transaction excluded. The user ignore stays byte-identical, or remains absent.
+- New CLI regression checks preview JSON in en/ko/ja/zh/es for location and credential warnings, sentinel non-disclosure and no preview writes.
+
+Commands and results (logs `/tmp/opencode/kk-task4-git-backup.JWGGG0/`):
+
+1. `node --test --test-name-pattern='^protection backup ' test/protect.test.js` → **RED, exit 1, 0 pass / 2 fail** (`red.log`). Real failures: private transaction was a staging candidate; preview lacked the transaction-local location/warning.
+2. `npm run build` → **exit 0** (`build.log`).
+3. Same new-test command → **GREEN, exit 0, 2 pass / 0 fail** (`green.log`).
+4. Extended the new CLI case to all five languages; `node --test --test-name-pattern='^protection backup |^every language has every message' test/protect.test.js test/i18n.test.js` → **exit 0, 3 pass / 0 fail** (`focused.log`).
+5. `git diff --check` → **exit 0**.
+
+No old goldens, Task3 tests, full test/verify, production builds or packed installs repeated. No real user project application, push/main/publish/deployment. `.gitignore` is an accidental-staging guard, not a barrier to `git add -f`, removal of that file or a same-permission process. The private backup remains sensitive. Task4 remains unchecked pending coordinator independent review.
+
 Plan: `docs/superpowers/plans/2026-10-22-issue2-artifacts.md`, Task4; approved safety contract `8d7b1f4`. Starting HEAD `5666c4d`, branch `issue2/artifacts`.
 
 ## Safety engine checkpoint

@@ -89,6 +89,46 @@ test("protection apply has durable private exact backup, preserves mode, and has
   await assert.rejects(engine.restoreProtection(root, result.transactionId));
 });
 
+test("protection backup Git exclusion prevents ordinary staging without changing user ignore files", async (t) => {
+  for (const existingIgnore of [false, true]) {
+    const root = await fixture(t);
+    const ignore = join(root, ".gitignore");
+    const userIgnore = "# user-owned\nuser-cache/\n";
+    if (existingIgnore) {
+      await writeFile(ignore, userIgnore);
+      git(root, "add", ".gitignore");
+      git(root, "commit", "-qm", "user ignore");
+    }
+    const applied = await engine.applyProtection(root, hash(original));
+    const relative = `.kkomkkom/protection/${applied.transactionId}/`;
+    for (const args of [["ls-files", "--others", "--exclude-standard"], ["add", "--dry-run", "-A"]]) {
+      assert.equal(git(root, ...args).toString().includes(relative), false, "private transaction must not be a staging candidate");
+    }
+    git(root, "add", "-A");
+    assert.equal(git(root, "ls-files", "--", relative).length, 0, "no backup, metadata or ignore file is staged");
+    await engine.restoreProtection(root, applied.transactionId);
+    assert.equal(git(root, "ls-files", "--others", "--exclude-standard").toString().includes(relative), false);
+    assert.deepEqual(await readFile(join(root, relative, "original")), original);
+    if (existingIgnore) assert.equal(await readFile(ignore, "utf8"), userIgnore);
+    else await assert.rejects(readFile(ignore), { code: "ENOENT" });
+  }
+});
+
+test("protection backup preview warns about sensitive private transaction storage without disclosure", async (t) => {
+  const root = await fixture(t);
+  await writeFile(join(root, "package.json"), JSON.stringify({ dependencies: { next: "*" } }));
+  const cli = new URL("../dist/cli.js", import.meta.url).pathname;
+  for (const lang of ["en", "ko", "ja", "zh", "es"]) {
+    const output = execFileSync(process.execPath, [cli, "--protect-sourcemaps", "--json", "--lang", lang], { cwd: root, encoding: "utf8" });
+    const preview = JSON.parse(output);
+    assert.match(preview.notes.join("\n"), /\.kkomkkom\/protection\/<TRANSACTION_ID>\//);
+    assert.match(preview.notes.join("\n"), /credentials|인증정보|認証情報|凭据|credenciales/);
+    assert.match(preview.notes.join("\n"), /Git/);
+    assert.doesNotMatch(output, /MUST_NOT_PRINT|DO_NOT_PRINT|PRIVATE/);
+  }
+  assert.equal((await readdir(root)).includes(".kkomkkom"), false);
+});
+
 test("protection preserves all original Unix permission bits across apply and restore", async (t) => {
   const root = await fixture(t);
   const target = join(root, "next.config.js");
