@@ -14,14 +14,14 @@
 
 </div>
 
-<!-- DEMO_VIDEO: 60초 소개 영상 — GitHub는 저장소 내 MP4를 README에서 인라인 재생하지 않으므로 포스터 이미지 + MP4 링크로 제공합니다. 편집 기준: docs/demo.md -->
+<!-- DEMO_VIDEO: 85초 전체 기능 소개 영상 — GitHub는 저장소 내 MP4를 README에서 인라인 재생하지 않으므로 포스터 이미지 + MP4 링크로 제공합니다. 편집 기준: docs/demo.md -->
 
 <p align="center">
-  <a href="docs/assets/kkomkkom-intro-v2.mp4" title="60초 소개 영상 보기">
-    <img src="docs/assets/kkomkkom-intro-v2-poster.png" alt="꼼꼼 60초 소개 영상 — AI가 만든 코드를 실제로 확인하는 CLI·MCP" width="960">
+  <a href="docs/assets/kkomkkom-intro-v3.mp4" title="85초 전체 기능 소개 영상 보기">
+    <img src="docs/assets/kkomkkom-intro-v3-poster.png" alt="꼼꼼 85초 소개 영상 — 검사, 배포물, 선택형 보호의 전체 기능" width="960">
   </a>
   <br>
-  <sub><a href="docs/assets/kkomkkom-intro-v2.mp4">60초 소개 영상 보기</a> (MP4 · 2.7MB · 소리 없음) · 화면은 예시 데이터입니다.</sub>
+  <sub><a href="docs/assets/kkomkkom-intro-v3.mp4">85초 전체 기능 소개 영상 보기</a> (MP4 · 3.9MB · 소리 없음) · 화면은 예시 데이터입니다.</sub>
 </p>
 
 ![꼼꼼 보고서 예시: git에 추적된 .env와 인증 확인이 필요한 쓰기 API를 표시합니다.](docs/assets/report-preview.svg)
