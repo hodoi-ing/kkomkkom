@@ -1,5 +1,7 @@
 .env*
 !.env.example
+.npmrc
+.netrc
 node_modules/
 dist/
 .next/

@@ -27,7 +27,7 @@
 사용자 지시: 영상 제작·검수 완료 뒤 API 키·개인정보·내부 설정 포함 여부를 점검한다. 공개 전환은 사용자가 이후 결정하며 자동 실행하지 않는다. 비밀 원문 출력·외부 업로드·실제 키 유효성 요청·자동 키 교체·Git 이력 재작성은 하지 않는다.
 
 - [x] 현행 추적 파일·설정·문서·로그·첨부 자산과 Git 이력/refs 점검. 원격 main `56bc7f8` 기준 추적 117개·blob 493개(17.8MB)·커밋 89개·원격 ref 25개, 이슈/PR 본문·댓글 10건과 이미지·영상 메타데이터 포함. 실제 API 키·유효 개인키·자격증명 URL 0건. 키 패턴 44건은 `FAKE` 테스트 값, PEM 11개는 파싱 불가 fixture, `artifactClientSecret`/`detailKey`는 오탐. `.env`·`.npmrc`·키 파일은 현재·과거 이력 모두 없음.
-- [x] 개인정보성 항목 기록: 로컬 경로 `/home/dev/...` 9개 파일·이슈 댓글 2건, 작성자 Gmail 1종은 GitHub 공개 프로필과 동일. 상세 보고서 `/tmp/opencode/kkomkkom-public-audit.VrqlFa/REPORT.md`. **정리(2026-10-23, w1:pA): `.gitignore`에 `.env*`/`.npmrc`/`.netrc` 추가, 추적 문서 9개 경로 `<repo>`·`<video-project>` 마스킹, 이슈 댓글 2건 수정. Gmail 이력 재작성·저장소 공개 전환은 하지 않음. 변경은 로컬 커밋 대기.**
+- [x] 개인정보성 항목 기록: 로컬 경로 `<home>/...` 9개 파일·이슈 댓글 2건, 작성자 Gmail 1종은 GitHub 공개 프로필과 동일. 상세 보고서 `/tmp/opencode/kkomkkom-public-audit.VrqlFa/REPORT.md`. **정리(2026-10-23, w1:pA): `.gitignore`에 `.env*`/`.npmrc`/`.netrc` 추가, 추적 문서 9개 경로 `<repo>`·`<video-project>` 마스킹, 이슈 댓글 2건 수정. Gmail 이력 재작성·저장소 공개 전환은 하지 않음. 변경은 로컬 커밋 대기.**
 
 ## 현재 작업 — README 대표 이미지·영상 검수 (2026-10-23)
 
