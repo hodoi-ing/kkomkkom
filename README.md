@@ -37,7 +37,7 @@
 
 <p align="center"><sub>현재 보고서 렌더러에 고정된 예시 데이터를 넣어 생성한 화면입니다. 실제 앱 검사 녹화는 아닙니다.</sub></p>
 
-**개발 중 · v0.1.0 npm 공개.** `npx kkomkkom`으로 바로 실행할 수 있습니다. 검사 결과는 검토할 신호이며, 취약점이나 배포 안전 전체를 보증하지 않습니다.
+**개발 중 · v0.1.1 npm 공개.** `npx kkomkkom`으로 바로 실행할 수 있습니다. 검사 결과는 검토할 신호이며, 취약점이나 배포 안전 전체를 보증하지 않습니다.
 
 ## 빠른 시작
 
@@ -308,7 +308,7 @@ kkomkkom --explain          # 설치된 AI CLI로 추가 설명 요청
 | 배포물·로컬 production HTTP 검사 | `--artifacts`/MCP `artifacts`, opt-in `production-url`/`productionUrl`. Linux/WSL 임시 production fixture와 packed consumer CLI/MCP 연결 검증(2026-10-22). 외부 배포·CDN·프로젝트 신원은 미검증 |
 | 플랫폼 | Linux/WSL에서만 검증. **Windows·macOS는 미검증** |
 | 에이전트별 검증 | **보류**. OpenCode·Codex 등 개별 클라이언트 호환성 완료를 보장하지 않음 |
-| 배포 | npm `kkomkkom@0.1.0` 공개(2026-10-24). `npx kkomkkom`으로 실행하며 소스 빌드도 가능 |
+| 배포 | npm `kkomkkom@0.1.1` 공개(2026-10-24). `npx kkomkkom`으로 실행하며 소스 빌드도 가능 |
 | 제한된 설정 보호 | 단일 직접 source-map 설정의 preview/명시 apply/hash-safe restore 구현·Linux/WSL 로컬 검증·총괄 독립검수·PR #3/main CI 완료(2026-10-23). Windows/macOS는 미검증. 일반 앱 변환·난독화는 미지원 |
 
 ### 현재 한계

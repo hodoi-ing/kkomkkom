@@ -1,6 +1,6 @@
 {
   "name": "kkomkkom",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Pre-commit check for Next.js: find API routes open without auth and pages that got heavier",
   "type": "module",
   "bin": {
