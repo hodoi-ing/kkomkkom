@@ -9,6 +9,7 @@
 - [x] `docs/case-studies/` 13개 익명 문서 그대로 반영 — 원본 검사일 2026-10-23·도구 SHA와 2026-10-24 적용일·새 공식 커밋은 구분해 기록.
 - [x] 변경분 정적 검수 — 제품 코드·테스트·패키지·fixtures·workflow·assets/영상 diff 0, private 연구 링크·프로젝트 실명 URL/SHA·credential·개인 메일 0, 상대 링크·diff check.
 - [x] commit/push — `5f09bd8` 정상 fast-forward push(2026-10-24). 새 head 자동 CI `40064633178` success(Node20/22/24+e2e). 이 항목의 후속 기록 커밋은 별도다.
+- 2026-10-24 후속: 다른 세션의 정상 ff 2커밋(`ceeebe8` npm 0.1.0 안내, `d8b38b5` 0.1.1 버전 범프)을 `--ff-only`로 인수했다. 그 과정에서 빠진 README 익명 사례 요약·`AGENTS.md` 안내 2문단만 원래 자리에 복구했다. 사용자 Public 전환 확인과 CI 근거는 비공개 연구 후속 기록에 둔다.
 - [ ] patina 문구 검증 미완료 — `backend_auth_missing`(backend 호출 없음), 수동 rewrite 없음. 새 실행 task가 아닌 미검증 한계다.
 - [ ] 설치 스크립트 사전 검토 증빙 미보존 — 현재 검증 불가한 한계이며 새 실행 task가 아니다.
 

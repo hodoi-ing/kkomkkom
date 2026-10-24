@@ -311,6 +311,8 @@ kkomkkom --explain          # 설치된 AI CLI로 추가 설명 요청
 | 배포 | npm `kkomkkom@0.1.1` 공개(2026-10-24). `npx kkomkkom`으로 실행하며 소스 빌드도 가능 |
 | 제한된 설정 보호 | 단일 직접 source-map 설정의 preview/명시 apply/hash-safe restore 구현·Linux/WSL 로컬 검증·총괄 독립검수·PR #3/main CI 완료(2026-10-23). Windows/macOS는 미검증. 일반 앱 변환·난독화는 미지원 |
 
+**익명 사례 연구 (2026-10-23, Project A–E).** 공개 Next.js 프로젝트 5개를 격리 환경에서 자체 검증했습니다. build 5/5, 전체 검사 5/5 exit 0 (coverage incomplete), 페이지 측정 3/5 (2/5 도구 측정 버그), artifact 설정 미지원 5/5. 외부 도입 실적이나 보안 보증이 아니며, 개별 보안 판정·근거는 내부에만 있습니다. [익명 사례 연구](docs/case-studies/README.md)
+
 ### 현재 한계
 
 - 인증·쓰기 API 판정은 가벼운 소스 분석이라 문자열·간접 호출·메서드별 인증을 잘못 해석할 수 있습니다.
@@ -340,6 +342,8 @@ node scripts/verify.mjs --protect-only
 ```
 
 root `npm ci`가 lockfile의 tarball을 캐시했더라도, 소비자 설치가 runtime range를 해석할 registry 메타데이터까지 있다고 보장하지 않습니다. `npm cache add`는 현재 runtime 의존성인 TypeScript의 range 메타데이터와 선택된 tarball을 함께 준비합니다. 캐시 부족을 숨기는 `prefer-offline` 네트워크 폴백은 사용하지 않습니다.
+
+저장소 루트의 [`AGENTS.md`](AGENTS.md)는 OpenCode V2와 Codex의 기본 프로젝트 지침 파일입니다. 실제 로딩은 아직 확인하지 않았고, 클라이언트 설정에 따라 제외될 수 있습니다.
 
 오탐·누락을 발견했다면 실제 비밀값을 제거한 최소 예제와 명령, 예상 결과, 실제 결과를 [이슈](https://github.com/hodoi-ing/kkomkkom/issues)에 남겨주세요.
 
