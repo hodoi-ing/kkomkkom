@@ -44,7 +44,7 @@ Local tarball install into a fresh consumer with `--omit=dev --ignore-scripts --
 
 ## Fixed-fixture check cost
 
-Commands were run as `node <repo>/dist/cli.js … --json` from a unique copy of `fixtures/mini-app`. The fixture contains a dynamic `/api/orders/[id]` route without `sampleParams`, so both normal modes report `api-auth failed/sample-missing` and `coverage.status=incomplete`; that is fixture behaviour, not a new failure.
+Commands were run as `node /home/dev/workspace/next-preflight/dist/cli.js … --json` from a unique copy of `fixtures/mini-app`. The fixture contains a dynamic `/api/orders/[id]` route without `sampleParams`, so both normal modes report `api-auth failed/sample-missing` and `coverage.status=incomplete`; that is fixture behaviour, not a new failure.
 
 | Mode | Command | Wall | Max RSS | Exit | Result |
 |---|---|---:|---:|---:|---|
