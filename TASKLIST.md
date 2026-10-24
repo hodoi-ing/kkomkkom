@@ -8,7 +8,7 @@
 - [x] `README.md` `## 개발과 참여`에 AGENTS 안내 1문단 추가 — 해당 문단 제거 시 직전 README byte 동일 assert 통과.
 - [x] `docs/case-studies/` 13개 익명 문서 그대로 반영 — 원본 검사일 2026-10-23·도구 SHA와 2026-10-24 적용일·새 공식 커밋은 구분해 기록.
 - [x] 변경분 정적 검수 — 제품 코드·테스트·패키지·fixtures·workflow·assets/영상 diff 0, private 연구 링크·프로젝트 실명 URL/SHA·credential·개인 메일 0, 상대 링크·diff check.
-- [ ] commit/push — 총괄 검수 PASS, 실행 대기. 원격 push 후 새 head 자동 CI만 관찰하고 수동 재실행은 하지 않음.
+- [x] commit/push — `5f09bd8` 정상 fast-forward push(2026-10-24). 새 head 자동 CI `40064633178` success(Node20/22/24+e2e). 이 항목의 후속 기록 커밋은 별도다.
 - [ ] patina 문구 검증 미완료 — `backend_auth_missing`(backend 호출 없음), 수동 rewrite 없음. 새 실행 task가 아닌 미검증 한계다.
 - [ ] 설치 스크립트 사전 검토 증빙 미보존 — 현재 검증 불가한 한계이며 새 실행 task가 아니다.
 
