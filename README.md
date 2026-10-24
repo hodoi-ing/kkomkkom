@@ -13,6 +13,7 @@
 [![Tests](https://github.com/hodoi-ing/kkomkkom/actions/workflows/test.yml/badge.svg)](https://github.com/hodoi-ing/kkomkkom/actions/workflows/test.yml)
 [![Node 20+](https://img.shields.io/badge/Node-%E2%89%A520-5FA04E?logo=node.js&logoColor=white)](package.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-2f6f4f.svg)](LICENSE)
+[![npm](https://img.shields.io/npm/v/kkomkkom.svg)](https://www.npmjs.com/package/kkomkkom)
 
 [빠른 시작](#빠른-시작) · [에이전트 연결](#에이전트-연결-mcp) · [검사 항목](#무엇을-검사하나요) · [지원·검증 상태](#지원검증-상태) · [English](#english)
 
@@ -36,50 +37,42 @@
 
 <p align="center"><sub>현재 보고서 렌더러에 고정된 예시 데이터를 넣어 생성한 화면입니다. 실제 앱 검사 녹화는 아닙니다.</sub></p>
 
-**개발 중 · npm 미공개.** 현재는 저장소에 접근할 수 있는 사용자가 소스에서 빌드해 사용합니다. 검사 결과는 검토할 신호이며, 취약점이나 배포 안전 전체를 보증하지 않습니다.
+**개발 중 · v0.1.0 npm 공개.** `npx kkomkkom`으로 바로 실행할 수 있습니다. 검사 결과는 검토할 신호이며, 취약점이나 배포 안전 전체를 보증하지 않습니다.
 
 ## 빠른 시작
 
-Node.js 20 이상과 의존성이 설치된 Next.js 프로젝트가 필요합니다. 아래 명령은 bash 환경(예: WSL Ubuntu) 기준입니다.
+Node.js 20 이상과 의존성이 설치된 Next.js 프로젝트가 필요합니다. 검사할 Next.js 프로젝트 폴더에서 바로 실행하세요.
 
-**1. 꼼꼼을 받아 빌드합니다.**
+```bash
+cd /absolute/path/to/your-next-app
+npx kkomkkom --fast --lang ko
+```
+
+패키지는 npm에 공개되어 있습니다([npmjs.com/package/kkomkkom](https://www.npmjs.com/package/kkomkkom)). 전역 설치를 선호하면 `npm i -g kkomkkom` 후 `kkomkkom --fast --lang ko`로 실행합니다.
+
+`--fast`는 새 빌드와 JS 크기 측정을 생략합니다. HTTP·소스 검사는 실행하며, 필요한 경우 개발 서버를 시작합니다. 빌드까지 검사하려면 `--fast`를 빼세요. 일반 검사는 기준선을 저장하지 않습니다. 기준선 생성·교체는 `--update`를 붙였고 검사가 완전할 때만 일어납니다.
+
+<details>
+<summary>소스에서 빌드하기</summary>
+
+저장소를 클론해 직접 빌드할 수도 있습니다. 빌드 후 `npm link`로 명령을 연결하거나 `node dist/cli.js`로 실행합니다.
 
 ```bash
 git clone https://github.com/hodoi-ing/kkomkkom.git
 cd kkomkkom
 npm ci
 npm run build
-```
-
-**2. 검사할 Next.js 프로젝트 폴더에서 실행합니다.** 두 경로를 자신의 실제 경로로 바꾸세요.
-
-```bash
-cd /absolute/path/to/your-next-app
-node /absolute/path/to/kkomkkom/dist/cli.js --fast --lang ko
-```
-
-`--fast`는 새 빌드와 JS 크기 측정을 생략합니다. HTTP·소스 검사는 실행하며, 필요한 경우 개발 서버를 시작합니다. 빌드까지 검사하려면 `--fast`를 빼세요. 일반 검사는 기준선을 저장하지 않습니다. 기준선 생성·교체는 `--update`를 붙였고 검사가 완전할 때만 일어납니다.
-
-<details>
-<summary>짧은 kkomkkom 명령으로 실행하기</summary>
-
-빌드한 꼼꼼 저장소에서 `npm link`를 실행하면 이 컴퓨터에 CLI 명령이 연결됩니다. 이후 검사할 앱 폴더에서 실행하세요.
-
-```bash
-# 꼼꼼 저장소에서
-npm link
+npm link   # 선택: kkomkkom 명령 연결
 
 # 검사할 Next.js 프로젝트에서
 kkomkkom --fast --lang ko
 ```
 
-현재 안내에서는 npm에 공개되지 않은 패키지를 `npx`로 받지 않습니다.
-
 </details>
 
 ## 에이전트 연결 (MCP)
 
-직접 명령을 실행하는 대신 에이전트가 같은 검사 엔진을 호출할 수 있습니다. 로컬에서 빌드한 stdio MCP 서버를 사용합니다.
+직접 명령을 실행하는 대신 에이전트가 같은 검사 엔진을 호출할 수 있습니다. stdio로 통신하는 MCP 서버를 사용합니다. `npm i -g kkomkkom`으로 설치했다면 `command`를 `kkomkkom-mcp`로 두고 `args` 없이 실행할 수 있습니다.
 
 아래는 `mcpServers` 형식을 사용하는 클라이언트의 설정 예시입니다. `args`의 파일 경로를 바꾸세요. 클라이언트마다 설정 위치와 형식이 다를 수 있습니다.
 
@@ -186,7 +179,7 @@ kkomkkom --restore TRANSACTION_ID --lang ko
 
 ## 자주 쓰는 명령
 
-아래는 `npm link`로 명령을 연결한 경우입니다. 연결하지 않았다면 `kkomkkom`을 `node /absolute/path/to/kkomkkom/dist/cli.js`로 바꾸세요.
+아래는 `npx kkomkkom` 또는 `npm i -g kkomkkom`으로 실행하는 경우입니다. 소스에서 빌드했다면 `kkomkkom`을 `node /absolute/path/to/kkomkkom/dist/cli.js`로 바꾸세요.
 
 ```bash
 kkomkkom --fast --lang ko   # 새 빌드 없이 검사
@@ -315,10 +308,8 @@ kkomkkom --explain          # 설치된 AI CLI로 추가 설명 요청
 | 배포물·로컬 production HTTP 검사 | `--artifacts`/MCP `artifacts`, opt-in `production-url`/`productionUrl`. Linux/WSL 임시 production fixture와 packed consumer CLI/MCP 연결 검증(2026-10-22). 외부 배포·CDN·프로젝트 신원은 미검증 |
 | 플랫폼 | Linux/WSL에서만 검증. **Windows·macOS는 미검증** |
 | 에이전트별 검증 | **보류**. OpenCode·Codex 등 개별 클라이언트 호환성 완료를 보장하지 않음 |
-| 배포 | npm 미공개. 저장소 접근 권한과 로컬 빌드 필요 |
+| 배포 | npm `kkomkkom@0.1.0` 공개(2026-10-24). `npx kkomkkom`으로 실행하며 소스 빌드도 가능 |
 | 제한된 설정 보호 | 단일 직접 source-map 설정의 preview/명시 apply/hash-safe restore 구현·Linux/WSL 로컬 검증·총괄 독립검수·PR #3/main CI 완료(2026-10-23). Windows/macOS는 미검증. 일반 앱 변환·난독화는 미지원 |
-
-**익명 사례 연구 (2026-10-23, Project A–E).** 공개 Next.js 프로젝트 5개를 격리 환경에서 자체 검증했습니다. build 5/5, 전체 검사 5/5 exit 0 (coverage incomplete), 페이지 측정 3/5 (2/5 도구 측정 버그), artifact 설정 미지원 5/5. 외부 도입 실적이나 보안 보증이 아니며, 개별 보안 판정·근거는 내부에만 있습니다. [익명 사례 연구](docs/case-studies/README.md)
 
 ### 현재 한계
 
@@ -350,8 +341,6 @@ node scripts/verify.mjs --protect-only
 
 root `npm ci`가 lockfile의 tarball을 캐시했더라도, 소비자 설치가 runtime range를 해석할 registry 메타데이터까지 있다고 보장하지 않습니다. `npm cache add`는 현재 runtime 의존성인 TypeScript의 range 메타데이터와 선택된 tarball을 함께 준비합니다. 캐시 부족을 숨기는 `prefer-offline` 네트워크 폴백은 사용하지 않습니다.
 
-저장소 루트의 [`AGENTS.md`](AGENTS.md)는 OpenCode V2와 Codex의 기본 프로젝트 지침 파일입니다. 실제 로딩은 아직 확인하지 않았고, 클라이언트 설정에 따라 제외될 수 있습니다.
-
 오탐·누락을 발견했다면 실제 비밀값을 제거한 최소 예제와 명령, 예상 결과, 실제 결과를 [이슈](https://github.com/hodoi-ing/kkomkkom/issues)에 남겨주세요.
 
 [데모 영상 편집·삽입 가이드](docs/demo.md) · [MIT 라이선스](LICENSE)
@@ -362,7 +351,7 @@ root `npm ci`가 lockfile의 tarball을 캐시했더라도, 소비자 설치가 
 
 **kkomkkom** is a local CLI and stdio MCP tool for checking Next.js apps before a commit or deployment. It combines unauthenticated HTTP GET probes, source-based auth and secret signals, page error checks, and JS size comparisons against a saved baseline.
 
-The package is not published to npm. Clone an accessible copy of this repository, run `npm ci` and `npm run build`, then run `node /absolute/path/to/kkomkkom/dist/cli.js --fast` from your Next.js app. Replace the absolute path with your local checkout. Remove `--fast` to build and measure JS size. A normal check never writes the baseline; pass `--update` to save a complete result. Incomplete coverage, build failures and missing page measurements are refused, and the existing baseline stays byte-identical.
+The package is published on npm: run `npx kkomkkom --fast` from your Next.js app, or install it globally with `npm i -g kkomkkom`. To build from source instead, clone the repository, run `npm ci` and `npm run build`, then run `node /absolute/path/to/kkomkkom/dist/cli.js --fast`. Remove `--fast` to build and measure JS size. A normal check never writes the baseline; pass `--update` to save a complete result. Incomplete coverage, build failures and missing page measurements are refused, and the existing baseline stays byte-identical.
 
 For repository e2e verification, explicitly run `npm ci --prefix fixtures/mini-app --no-audit --no-fund`, then the `npm cache add` command in the development section before `npm run verify`. These preparation steps may use the registry. Root `npm ci` alone can leave a tarball-only cache without runtime-range metadata. Verification never installs into the fixture, and its temporary packed consumer uses `--offline` with no network fallback; cache priming covers the current TypeScript runtime range and the selected tarball.
 
