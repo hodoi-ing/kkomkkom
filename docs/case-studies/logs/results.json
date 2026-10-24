@@ -1,0 +1,57 @@
+{
+  "tool": { "name": "kkomkkom", "version": "0.1.0" },
+  "runDate": "2026-10-23",
+  "platform": "Linux (WSL2)",
+  "anonymized": true,
+  "publicPolicy": "Measurements and non-identifying classification only. Individual security judgments, evidence and attack preconditions are kept only in the internal archive outside Git.",
+  "changeBoundary": {
+    "productAndUpstream": "unchanged",
+    "originalFiveClones": "unchanged",
+    "followupDisposableClone": "scoped inspection config and synthetic payload added, then deleted; performed before the latest code-freeze instruction"
+  },
+  "projects": [
+    {
+      "id": "A",
+      "build": "success",
+      "full": { "exitCode": 0, "coverage": "incomplete", "pages": 0, "routes": 19, "findings": { "warning": 16 } },
+      "fast": { "exitCode": 0, "coverage": "incomplete", "routes": 19, "findings": { "warning": 16 } },
+      "artifacts": { "exitCode": 1, "coverage": "incomplete", "status": "unsupported", "reason": "config-wrapper" }
+    },
+    {
+      "id": "B",
+      "build": "success",
+      "full": { "exitCode": 0, "coverage": "incomplete", "pages": 4, "routes": 18, "findings": { "warning": 7 } },
+      "fast": { "exitCode": 0, "coverage": "incomplete", "routes": 18, "findings": { "warning": 7 } },
+      "artifacts": { "exitCode": 1, "coverage": "incomplete", "status": "unsupported", "reason": "config-wrapper" }
+    },
+    {
+      "id": "C",
+      "build": "success",
+      "full": { "exitCode": 0, "coverage": "incomplete", "pages": 5, "routes": 30, "findings": { "info": 30 } },
+      "fast": { "exitCode": 0, "coverage": "incomplete", "routes": 30, "findings": { "info": 30 } },
+      "artifacts": { "exitCode": 1, "coverage": "incomplete", "status": "unsupported", "reason": "config-wrapper" }
+    },
+    {
+      "id": "D",
+      "build": "success",
+      "full": { "exitCode": 0, "coverage": "incomplete", "pages": 7, "routes": 13, "findings": { "warning": 11 } },
+      "fast": { "exitCode": 0, "coverage": "incomplete", "routes": 13, "findings": { "warning": 11 } },
+      "artifacts": { "exitCode": 1, "coverage": "incomplete", "status": "unsupported", "reason": "config-wrapper" }
+    },
+    {
+      "id": "E",
+      "build": "success",
+      "full": { "exitCode": 0, "coverage": "incomplete", "pages": 0, "routes": 1, "findings": { "info": 1 } },
+      "fast": { "exitCode": 0, "coverage": "incomplete", "routes": 1, "findings": { "info": 1 } },
+      "artifacts": { "exitCode": 1, "coverage": "incomplete", "status": "unsupported", "reason": "config-wrapper" }
+    }
+  ],
+  "aggregate": {
+    "buildSuccess": "5/5",
+    "fullExitZero": "5/5",
+    "fullCoverage": "5/5 incomplete",
+    "artifactsUnsupported": "5/5",
+    "pageMeasurement": "3/5 success, 2/5 tool bug"
+  },
+  "followup": { "case": "B", "file": "followup-b.json" }
+}

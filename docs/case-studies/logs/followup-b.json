@@ -1,0 +1,51 @@
+{
+  "project": "B",
+  "generatedAt": "2026-10-23",
+  "publicPolicy": "Measurements and non-identifying classification only. Individual security judgments, evidence and attack preconditions are kept only in the internal archive outside Git.",
+  "note": "Public derived follow-up summary. Exact baseline bytes/hash, scope patterns and internal commands are kept in the internal archive.",
+  "baseline": {
+    "firstRun": true,
+    "scope": "four patterns explicitly excluded from route checks",
+    "scopeExcluded": 4,
+    "coverage": "complete",
+    "counts": { "checked": 20, "ignored": 8, "static-only": 7, "failed": 0, "unsupported": 0 },
+    "passwordConfigured": false,
+    "caveat": "complete means the reduced check scope ran; excluded routes and existing findings remain. Not a security pass."
+  },
+  "unchangedCompare": {
+    "exitCode": 0,
+    "firstRun": false,
+    "buildFailed": false,
+    "coverage": "complete",
+    "pagesComparable": 4,
+    "deltaBytes": 0,
+    "heavy": false
+  },
+  "syntheticGrowth": {
+    "payloadChars": 500000,
+    "deltaBytes": 500119,
+    "deltaPercent": 55.3608056844233,
+    "homeComparable": true,
+    "homeHeavy": true,
+    "homeMethods": ["manifest-file", "manifest-file"],
+    "baselineBytesUnchanged": true,
+    "allFourPagesIncreased": true,
+    "note": "Synthetic client payload detection only. Not a real vulnerability, transfer-size or performance regression. The payload landed in a shared chunk, so all four measured pages increased by the same amount."
+  },
+  "authHttp": {
+    "checks": 17,
+    "passed": 16,
+    "furtherReview": 1,
+    "evidence": "internal",
+    "secretsLogged": false,
+    "externalRequests": 0,
+    "note": "The additional review item is not a confirmed vulnerability and is not detailed publicly."
+  },
+  "limitations": [
+    "Synthetic payload is a detection test, not a real-world degradation.",
+    "Scope exclusions mean coverage complete is not a full-scope pass.",
+    "Only Linux/WSL2 and one loopback server were tested.",
+    "No rate-limit, CSRF, CORS, privilege-escalation or expiry-boundary tests.",
+    "Install/build script pre-review records were not preserved; sufficiency is unverified."
+  ]
+}

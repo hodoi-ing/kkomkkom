@@ -1,5 +1,17 @@
 # TASKLIST — kkomkkom
 
+## 현재 작업 — 공식 AGENTS·README·익명 사례 반영 (2026-10-24)
+
+사용자 승인(2026-10-24): 직전 총괄 질문 "공식 kkomkkom도 변경안 적용→검수→commit/push 진행할까?"에 "ㅇㅇ 진행해"로 승인했다. docs-only 로컬 적용과 정적 검수는 완료했고 **총괄 diff 검수 PASS(2026-10-24)**. 아래 commit/push 항목은 실제 push·CI 확인 전까지 완료로 쓰지 않는다. 공개 전환·npm 발행·배포·OpenAI 신청 제출·외부 issue/PR·제품 기능 변경은 계속 금지다.
+
+- [x] 루트 `AGENTS.md` 신규 적용 — 연구 제안 본문 2,849B 그대로(sha256 일치). fixture `AGENTS.md`·상위/전역 규칙은 변경하지 않음.
+- [x] `README.md` `## 개발과 참여`에 AGENTS 안내 1문단 추가 — 해당 문단 제거 시 직전 README byte 동일 assert 통과.
+- [x] `docs/case-studies/` 13개 익명 문서 그대로 반영 — 원본 검사일 2026-10-23·도구 SHA와 2026-10-24 적용일·새 공식 커밋은 구분해 기록.
+- [x] 변경분 정적 검수 — 제품 코드·테스트·패키지·fixtures·workflow·assets/영상 diff 0, private 연구 링크·프로젝트 실명 URL/SHA·credential·개인 메일 0, 상대 링크·diff check.
+- [ ] commit/push — 총괄 검수 PASS, 실행 대기. 원격 push 후 새 head 자동 CI만 관찰하고 수동 재실행은 하지 않음.
+- [ ] patina 문구 검증 미완료 — `backend_auth_missing`(backend 호출 없음), 수동 rewrite 없음. 새 실행 task가 아닌 미검증 한계다.
+- [ ] 설치 스크립트 사전 검토 증빙 미보존 — 현재 검증 불가한 한계이며 새 실행 task가 아니다.
+
 ## 현재 작업 — 공개 전 민감정보 점검 (2026-10-23)
 
 사용자 지시: 영상 제작·검수 완료 뒤 API 키·개인정보·내부 설정 포함 여부를 점검한다. 공개 전환은 사용자가 이후 결정하며 자동 실행하지 않는다. 비밀 원문 출력·외부 업로드·실제 키 유효성 요청·자동 키 교체·Git 이력 재작성은 하지 않는다.
@@ -107,6 +119,34 @@
   - 2026-10-23: `docs/release-readiness-2026-10-23.md`가 요구사항 A–D·선택 보호·비용·CLI/CI/MCP·후속 확장을 근거에 매핑하고, 공개/배포 미수행과 Windows/macOS·전원차단·동일권한 경쟁 한계를 기록했다. PR #3(merge `54d27af`) main CI `39881120567` **success**(Node20/22/24+e2e), `git rev-parse HEAD origin/main` 동일·worktree clean, 원격 `issue2/artifacts`도 동일 tip. Task4 `[x]`·원격 CI 게이트 완료. #2 이슈는 공개/배포·보류 플랫폼 후속을 위해 open 유지.
 
 에이전트별 실제 연결 검증은 #2의 보류 결정을 유지한다. MCP 자체 tools/call 자동 검증은 수행한다. 구현자는 검수 전 원격 push/main 반영하지 않는다.
+
+## 2026-10-23 실전 검증 — 공개 Next.js 5개
+
+> 2026-10-23 당시 기록이다. 아래 "원격 push 안 함"·"untracked, 커밋 안 함"은 그 시점 상태이며, 2026-10-24 승인 적용 이후의 현재 원격 상태와 다르다.
+
+- [x] 공개 전 민감정보 점검: 원격 main `56bc7f8` 기준 추적 117개·blob 493개·커밋 89개, 이슈/PR 10건, 이미지/영상 메타데이터 확인. 실제 키·유효 개인키·자격증명 URL 0건. `.gitignore` 보강·문서 9개 경로 마스킹·이슈 댓글 2건 수정. 로컬 커밋 `ff6cc75`, **원격 push 안 함**.
+- [x] 5개 공개 Next.js 프로젝트 격리 검증 — 익명 사례 A–E. 5/5 프로덕션 빌드 성공, 5/5 full/fast/artifacts 실행. Node 20.20.2/22.23.2/26.10.0 사용.
+- [x] 공개용 익명 보고서 신규 작성: `docs/case-studies/` README·methodology·limitations·project-a–e·logs. 실제 이름/URL/SHA/고유 경로와 민감한 내부 상세는 넣지 않았다. 원본과 A–E 매핑은 Git 작업 트리 밖 내부 자료에 byte-exact 보존(0700/0600, manifest 일치). **untracked, 커밋 안 함.**
+- [x] 공개판은 도구 측정·비식별 분류만 기록. 개별 보안 판정과 근거는 내부 원본에만 보존. 사례별 취약 판정/예외 표기는 공개하지 않음.
+- [x] 도구 이슈: 2/5 `build: failed measure`(퍼센트 인코딩 동적 라우트 청크), 5/5 artifact `config-wrapper`/`count-limit`/`alias-import`로 미지원. 페이지 무게는 비압축 raw 바이트라 Next gzip 표와 직접 비교 불가.
+- [x] 사례 B 후속(별도): 범위 축소 기준선(4패턴 제외, checked20/ignored8/static-only7, complete는 검사범위만), 무변경 비교 delta0, 합성 500,119B(+55.36%) heavy, 인증 HTTP 17검사 중 16통과·1추가검토(근거 내부). 합성 증가는 실제 취약점/전송량/성능 회귀 아님. 추가검토는 취약점 확정 아님.
+- [x] 사례 B 설치/빌드: Node22 npm ci 약 11s, build 약 26s. 최초 Node26/npm12 `EALLOWREMOTE` 실패 로그는 성공 로그로 덮여 보존되지 않음. 추가 설치 스크립트 없음. 설치 스크립트 사전 검토 기록은 보존되지 않아 충분성 미검증.
+- [x] 설치물 삭제 완료(2026-10-23): 이번 후속 `$WORK` 전체와 nvm Node 22.23.2 삭제, 기본 Node 26.10.0 유지. 공개 보고서·정제 로그만 저장소에 두고 원본/후속 로그는 Git 밖 내부 보존.
+- [x] **공개용 익명 초안 작성 완료** (R1–R4 재작업 반영).
+- [x] **총괄 독립 기술검수 완료** (익명 정책·집계·변경 경계). README는 후속 승인 범위 내 요약 추가, 원격 변경은 없음.
+
+### 2026-10-23 후속 Task4 — 원격 대조·README 요약
+
+- [x] R3 `limitations.md` 라이선스 문장 수정: 최초 5개 clone 소스 불변, 후속 disposable clone에서만 범위 config·합성 payload 추가 후 삭제, 제품/upstream 재배포 없음. 내부 원본 불변.
+- [x] 원격 read-only 대조 (2026-10-23 KST): origin `hodoi-ing/kkomkkom` 확인, `git fetch --no-tags origin main`; local HEAD `ff6cc75`, remote main `56bc7f8`, merge-base `56bc7f8`, ahead 1 / behind 0. local ahead는 docs/measurement·docs/demo·TASKLIST·.gitignore뿐이며 src/scripts/fixtures/package/workflow 변경 없음. worktree를 덮어쓰지 않음.
+- [x] 검사시점 도구 SHA: 내부 results `tool.commit=ff6cc75`. remote main `56bc7f8`는 재검사하지 않았고, 기록된 검사 시점 범위로만 표기.
+- [x] 루트 README 최소 검증 요약 삽입 + section 제거 시 byte 동일 검증 (추가 2줄, reversible exact).
+- [x] docs/case-studies README 상대 링크 + `verification-status.md` 추가.
+- [x] 링크/JSON/익명성/diff self-check: 자체 상대 링크 16개 확인·누락 0, 총괄 27 references/26 unique PASS, A–E JSON/17·16·1 유지, 금지 식별단서 0, `git diff --check` 통과.
+- [x] 총괄 독립 기술검수 PASS — 익명 정책·집계·변경 경계, README 2줄 reversible, 링크/앵커 27 references(26 unique), product/assets/.gitignore working 변경 0.
+- [x] 사용자 commit/push 승인(2026-10-24) — 총괄 diff 검수 후 실행. 공개 전환은 미승인으로 분리.
+- [ ] 문구 patina 검증 미완료 — `backend_auth_missing`(backend 호출 없음), 수동 rewrite 없음.
+- [ ] 설치 스크립트 사전 검토 증빙 미보존 — 현재 검증 불가한 한계이며 새 실행 task가 아님.
 
 ## 완료
 
