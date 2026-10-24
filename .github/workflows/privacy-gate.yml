@@ -1,0 +1,20 @@
+name: privacy-gate
+on:
+  push:
+  pull_request:
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan for local paths and usernames
+        shell: bash
+        run: |
+          # 주의: 아래 두 문자열은 이스케이프 상태를 유지한다.
+          # 풀어쓰면 이 파일이 게이트에 자기검출되어 CI가 실패한다.
+          hits=0
+          if git grep -nE '/home/[A-Za-z0-9._-]+/'; then hits=1; fi
+          if git grep -nw $'\x68odol'; then hits=1; fi
+          if git grep -nF $'C:\\Users\\'; then hits=1; fi
+          if [ "$hits" -ne 0 ]; then echo "::error::로컬 경로 또는 사용자명이 남아 있습니다"; exit 1; fi
+          echo clean
