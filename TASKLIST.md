@@ -1,5 +1,14 @@
 # TASKLIST — kkomkkom
 
+## 새 시점 — 자동 CI `pack: consumer CLI runs` 수정 (2026-10-24)
+
+사용자 승인(2026-10-24): `5675d3c`의 자동 CI 실패 1건은 `scripts/verify.mjs`의 하드코딩된 `0.1.0` 기대값과 `package.json` 0.1.1 불일치다. 전체 verify·앱·설치·빌드는 재실행하지 않고 해당 check식만 targeted self-check로 검증한다. 총괄 diff/보고서/소스 추출 self-check 검수 PASS(2026-10-24).
+
+- [x] `scripts/verify.mjs` packed CLI 버전 기대값을 `npm pack` metadata `packed.version`과 비교하도록 1줄 수정 — `packed?.version`, `version.status === 0` 유지.
+- [x] 소스에서 추출한 check식 대상 RED/GREEN self-check — RED 3건 실패(0.1.1·2.3.4 일치, 0.1.0 불일치), GREEN 8/8 PASS. metadata 누락/오류·비0 exit도 false.
+- [x] `node --check` + `git diff --check`/1줄 diff 검수 — 모두 exit 0, diff 1줄. 전체 verify·앱·설치·빌드는 재실행하지 않음.
+- [ ] 공식 원격 반영 확인 — 이 커밋의 push·새 head 자동 CI 결과는 GitHub Checks와 비공개 연구 후속 기록이 기준이다. 원격 결과 확인 전에는 완료로 쓰지 않는다.
+
 ## 현재 작업 — 공식 AGENTS·README·익명 사례 반영 (2026-10-24)
 
 사용자 승인(2026-10-24): 직전 총괄 질문 "공식 kkomkkom도 변경안 적용→검수→commit/push 진행할까?"에 "ㅇㅇ 진행해"로 승인했다. docs-only 로컬 적용과 정적 검수는 완료했고 **총괄 diff 검수 PASS(2026-10-24)**. 아래 commit/push 항목은 실제 push·CI 확인 전까지 완료로 쓰지 않는다. 공개 전환·npm 발행·배포·OpenAI 신청 제출·외부 issue/PR·제품 기능 변경은 계속 금지다.

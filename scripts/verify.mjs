@@ -608,7 +608,7 @@ async function main() {
         const consumerCli = join(consumer, "node_modules", "kkomkkom", "dist", "cli.js");
         const consumerMcp = join(consumer, "node_modules", "kkomkkom", "dist", "mcp.js");
         const version = run(process.execPath, [consumerCli, "--version"], { cwd: consumer });
-        check("pack: consumer CLI runs", version.status === 0 && version.stdout.trim() === "0.1.0", version.stderr);
+        check("pack: consumer CLI runs", version.status === 0 && version.stdout.trim() === packed?.version, version.stderr);
 
         if (!ARTIFACTS_ONLY && !PROTECT_ONLY) {
         const consumerRun = run(
