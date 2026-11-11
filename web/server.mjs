@@ -3,6 +3,7 @@
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { readFile, readdir, realpath } from 'node:fs/promises';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -52,8 +53,40 @@ function cancelCurrent() {
 }
 
 function send(res, status, body, type = 'application/json; charset=utf-8') {
-  res.writeHead(status, { 'content-type': type, 'cache-control': 'no-store' });
+  res.writeHead(status, {
+    'content-type': type,
+    'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
+    'referrer-policy': 'no-referrer',
+    'content-security-policy':
+      "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; " +
+      "script-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'",
+  });
   res.end(body);
+}
+
+// 서버가 뜨면 기본 브라우저로 연다. NO_OPEN=1 또는 CI에서는 열지 않는다.
+function openBrowser(url) {
+  if (process.env.NO_OPEN === '1' || process.env.CI) return;
+  const wsl = existsSync('/proc/version') && /microsoft/i.test(readFileSync('/proc/version', 'utf8'));
+  const candidates = wsl
+    ? [['/mnt/c/Windows/System32/cmd.exe', ['/c', 'start', '', url]], ['wslview', [url]], ['xdg-open', [url]]]
+    : process.platform === 'darwin'
+      ? [['open', [url]]]
+      : process.platform === 'win32'
+        ? [['cmd', ['/c', 'start', '', url]]]
+        : [['xdg-open', [url]]];
+  for (const [cmd, args] of candidates) {
+    if (cmd.startsWith('/') && !existsSync(cmd)) continue;
+    try {
+      const child = spawn(cmd, args, { stdio: 'ignore', detached: true });
+      child.on('error', () => {});
+      child.unref();
+      return;
+    } catch {
+      // 다음 후보로 넘어간다.
+    }
+  }
 }
 
 const CONFIG_RE = /^next\.config\.(js|mjs|cjs|ts)$/;
@@ -153,8 +186,16 @@ function hostOk(req) {
   return name === '127.0.0.1' || name === 'localhost' || name === '[::1]';
 }
 
+// 다른 출처에서 form POST로 검사를 유발하지 못하게 한다.
+function originOk(req) {
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  return /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(String(origin));
+}
+
 const server = createServer(async (req, res) => {
   if (!hostOk(req)) return send(res, 403, JSON.stringify({ error: '허용되지 않은 호스트입니다.' }));
+  if (!originOk(req)) return send(res, 403, JSON.stringify({ error: '허용되지 않은 출처입니다.' }));
 
   const url = new URL(req.url, 'http://127.0.0.1');
 
@@ -164,7 +205,7 @@ const server = createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && url.pathname === '/api/health') {
-    return send(res, 200, JSON.stringify({ ok: true, node: process.version, busy: Boolean(current) }));
+    return send(res, 200, JSON.stringify({ ok: true, busy: Boolean(busy) }));
   }
 
   if (req.method === 'GET' && url.pathname === '/api/projects') {
@@ -183,6 +224,10 @@ const server = createServer(async (req, res) => {
     // 잠금은 첫 await 전에 잡는다. 두 요청이 동시에 통과하면 같은 프로젝트에서 충돌한다.
     busy = true;
     try {
+      const ctype = String(req.headers['content-type'] || '');
+      if (!/^application\/json\b/i.test(ctype)) {
+        return send(res, 415, JSON.stringify({ error: 'Content-Type은 application/json이어야 합니다.' }));
+      }
       let payload;
       try {
         payload = JSON.parse(await readBody(req));
@@ -227,5 +272,7 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, '127.0.0.1', () => {
-  console.log(`꼼꼼 웹 UI  http://127.0.0.1:${PORT}`);
+  const url = `http://127.0.0.1:${PORT}`;
+  console.log(`꼼꼼 웹 UI  ${url}`);
+  openBrowser(url);
 });

@@ -2,6 +2,9 @@ name: privacy-gate
 on:
   push:
   pull_request:
+permissions:
+  contents: read
+
 jobs:
   gate:
     runs-on: ubuntu-latest

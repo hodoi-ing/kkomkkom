@@ -30,6 +30,9 @@
 - 설명이 없는 규칙은 API 경로를 파일처럼 안내하지 않고 일반 안내로 표시
 - 화면에 설명 없는 규칙이 있으면 개수를 함께 표시
 - `npm run verify`가 pack된 tarball의 `web/` 포함과 `kkomkkom-web` bin 실행 가능 여부를 확인
+- 웹 UI 실행 시 기본 브라우저를 자동으로 연다 (`NO_OPEN=1` 또는 CI에서는 열지 않음)
+- 웹 API 보강: `Content-Type: application/json` 요구(415), 로컬 외 `Origin` 거부(403), 보안 헤더(CSP·nosniff·referrer-policy), `/api/health`에서 노드 버전·경로 제거
+- GitHub Actions 워크플로에 `permissions: contents: read` 적용, Dependabot 설정 추가
 
 ### 바뀌지 않은 것
 
