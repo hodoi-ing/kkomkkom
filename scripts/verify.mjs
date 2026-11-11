@@ -589,6 +589,14 @@ async function main() {
             !/package\/(src|test)\//.test(listing.stdout),
           listing.stderr || listing.stdout,
         );
+        check(
+          "pack: tarball carries the web UI",
+          listing.status === 0 &&
+            /package\/web\/server\.mjs/.test(listing.stdout) &&
+            /package\/web\/analyze\.mjs/.test(listing.stdout) &&
+            /package\/web\/index\.html/.test(listing.stdout),
+          listing.stderr || listing.stdout,
+        );
 
         const installStart = Date.now();
         const install = run(
@@ -607,6 +615,17 @@ async function main() {
 
         const consumerCli = join(consumer, "node_modules", "kkomkkom", "dist", "cli.js");
         const consumerMcp = join(consumer, "node_modules", "kkomkkom", "dist", "mcp.js");
+
+        const consumerWeb = join(consumer, "node_modules", "kkomkkom", "web", "server.mjs");
+        const webBin = join(consumer, "node_modules", ".bin", "kkomkkom-web");
+        const webHead = existsSync(consumerWeb)
+          ? (await readFile(consumerWeb, "utf8")).split("\n")[0]
+          : "";
+        check(
+          "pack: consumer ships a runnable kkomkkom-web bin",
+          existsSync(webBin) && webHead.startsWith("#!"),
+          `${webBin}`,
+        );
         const version = run(process.execPath, [consumerCli, "--version"], { cwd: consumer });
         check("pack: consumer CLI runs", version.status === 0 && version.stdout.trim() === packed?.version, version.stderr);
 

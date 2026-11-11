@@ -1,11 +1,13 @@
 # 배포 준비 점검 — 2026-10-23
 
+> **2026-11-11 갱신.** 이 문서의 공개 상태 표기는 작성 시점(2026-10-23) 기준이다. 이후 저장소는 공개로 전환됐고 npm `kkomkkom@0.1.1`이 공개됐다. 0.2.0(로컬 웹 UI)은 발행 대기 중이며, 발행 전까지 npm 설치본에는 `web/`과 `kkomkkom-web` bin이 없다.
+
 | 게이트 | 현재 근거 |
 |---|---|
 | 기본 배포물 검사·명시적 local production HTTP | Task2/2.1/3 총괄 승인. Task3 snapshot의 Node20/22/24 + e2e CI 성공: [39878058305](https://github.com/hodoi-ing/kkomkkom/actions/runs/39878058305) |
 | 보호 preview/apply/restore·실패 복원 | Task4 구현, 독립 리뷰 지적 수정, focused·실제 Next/packed 검증 기록 확보. [독립 검수](review-2026-10-23-task4.md), [구현 기록](verification-2026-10-23-task4.md) |
 | 마지막 수정·최종 통합 | 코드 `c6f9009`·이식성 수정 `3765ef2` 포함 PR #3 merge `54d27af`; main CI `39881120567` Node20/22/24+e2e success; local `main` = `origin/main`, clean |
-| 실제 공개·배포 | 수행하지 않음. 저장소 비공개·npm 미공개 유지 |
+| 실제 공개·배포 | 저장소 공개, npm `0.1.1` 공개(2026-10-24). 0.2.0은 발행 대기 |
 
 ## 요구사항과 검증 근거
 
@@ -22,7 +24,7 @@
 
 ## 로컬 사용 순서
 
-아래 경로는 실제 로컬 경로로 바꾼다. 설치 준비는 registry에 접근할 수 있다. 현재 비공개 저장소 접근 권한이 필요하며 `npx` 공개 배포를 전제로 하지 않는다.
+아래 경로는 실제 로컬 경로로 바꾼다. 설치 준비는 registry에 접근할 수 있다. 저장소와 npm 패키지 모두 공개 상태다. 웹 UI는 0.2.0부터 패키지에 포함된다.
 
 ```sh
 cd /path/to/kkomkkom

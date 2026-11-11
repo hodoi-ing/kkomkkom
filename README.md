@@ -315,13 +315,13 @@ kkomkkom --explain          # 설치된 AI CLI로 추가 설명 요청
 | 항목 | 현재 상태 |
 |---|---|
 | 프레임워크 | Next.js 대상. 다른 프레임워크 지원은 제공하지 않음 |
-| 실행 방식 | CLI와 로컬 stdio MCP 서버 제공 |
+| 실행 방식 | CLI, 로컬 stdio MCP 서버, 로컬 웹 UI(`npm run web` / `kkomkkom-web`, 0.2.0부터) |
 | 자동 검증 구성 | GitHub Actions에 Node 20·22·24 단위 테스트와 실제 Next fixture e2e 구성. 실행 결과는 상단 Tests 배지에서 확인 |
 | production·pack 검증 | 2026-10-22 Linux/WSL에서 실제 `next build`(비 fast), 매니페스트 측정, MCP `tools/call`, npm pack 소비자 CLI/MCP를 확인. 상세 로그는 [검증 기록](docs/verification-2026-10-22.md) |
 | 배포물·로컬 production HTTP 검사 | `--artifacts`/MCP `artifacts`, opt-in `production-url`/`productionUrl`. Linux/WSL 임시 production fixture와 packed consumer CLI/MCP 연결 검증(2026-10-22). 외부 배포·CDN·프로젝트 신원은 미검증 |
 | 플랫폼 | Linux/WSL에서만 검증. **Windows·macOS는 미검증** |
 | 에이전트별 검증 | **보류**. OpenCode·Codex 등 개별 클라이언트 호환성 완료를 보장하지 않음 |
-| 배포 | npm `kkomkkom@0.1.1` 공개(2026-10-24). `npx kkomkkom`으로 실행하며 소스 빌드도 가능 |
+| 배포 | npm `kkomkkom@0.1.1` 공개(2026-10-24). `npx kkomkkom`으로 실행하며 소스 빌드도 가능. 웹 UI를 포함한 0.2.0은 발행 대기 |
 | 제한된 설정 보호 | 단일 직접 source-map 설정의 preview/명시 apply/hash-safe restore 구현·Linux/WSL 로컬 검증·총괄 독립검수·PR #3/main CI 완료(2026-10-23). Windows/macOS는 미검증. 일반 앱 변환·난독화는 미지원 |
 
 **익명 사례 연구 (2026-10-23, Project A–E).** 공개 Next.js 프로젝트 5개를 격리 환경에서 자체 검증했습니다. build 5/5, 전체 검사 5/5 exit 0 (coverage incomplete), 페이지 측정 3/5 (2/5 도구 측정 버그), artifact 설정 미지원 5/5. 외부 도입 실적이나 보안 보증이 아니며, 개별 보안 판정·근거는 내부에만 있습니다. [익명 사례 연구](docs/case-studies/README.md)
@@ -333,6 +333,7 @@ kkomkkom --explain          # 설치된 AI CLI로 추가 설명 요청
 - 개발 서버 HTTP 결과는 production 배포 검증과 다릅니다. 페이지 타임아웃·검사 생략·지원하지 않는 빌드 형식도 확인해야 합니다.
 - JS 크기는 압축 전 파일 크기 합이라 gzip·네트워크 전송량·TTFB와 다릅니다. 페이지 측정값이 하나라도 빠지면 불완전으로 처리하며 0으로 채우지 않습니다.
 - 실제 production 빌드·pack 소비자·MCP 호출 검증은 Linux/WSL에서 수행했습니다. Windows·macOS의 프로세스 종료, 경로, `npm pack` 설치는 미검증입니다.
+- 웹 UI는 `127.0.0.1`에서만 열리며, Linux/WSL에서만 확인했습니다. 브라우저 클릭 동작과 Windows·macOS는 미검증입니다. 웹 화면의 심각도(S1~S4)는 CLI JSON과 별도로 계산되는 표시용 값입니다.
 - `--artifacts`만 실행하면 실제 HTTP 제공은 확인하지 않습니다. 명시적 `--production-url`도 선택한 로컬 파일의 응답 바이트만 확인하며, CDN·프록시·외부 배포·서버 프로젝트 신원은 확인하지 않습니다. custom `distDir`, `export`, standalone, 모노레포 출력은 미지원이며 빌드 신선도는 명시 빌드 없이는 `unknown`입니다. 파일명 신호와 실제 비밀값, 소스맵 설정과 공개 노출을 구분해 읽어야 합니다.
 
 [정확도·오류 처리 개선 #1](https://github.com/hodoi-ing/kkomkkom/issues/1) · [제품 로드맵·검증 재개 체크리스트 #2](https://github.com/hodoi-ing/kkomkkom/issues/2)
