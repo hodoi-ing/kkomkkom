@@ -33,6 +33,7 @@
 - 웹 UI 실행 시 기본 브라우저를 자동으로 연다 (`NO_OPEN=1` 또는 CI에서는 열지 않음)
 - 웹 API 보강: `Content-Type: application/json` 요구(415), 로컬 외 `Origin` 거부(403), 보안 헤더(CSP·nosniff·referrer-policy), `/api/health`에서 노드 버전·경로 제거
 - GitHub Actions 워크플로에 `permissions: contents: read` 적용, Dependabot 설정 추가
+- 수동 실행 발행 워크플로(`publish.yml`) 추가 — 기본은 패키징 확인만, `NPM_TOKEN`이 있으면 provenance와 함께 발행
 
 ### 바뀌지 않은 것
 
