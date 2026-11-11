@@ -18,7 +18,8 @@
     "test": "npm run build && node --test test/*.test.js",
     "verify": "node scripts/verify.mjs",
     "prepublishOnly": "npm run build",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "web": "node web/server.mjs"
   },
   "keywords": [
     "nextjs",

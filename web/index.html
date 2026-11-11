@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>꼼꼼 — 배포 전 검사</title>
+<style>
+  :root {
+    --paper: #faf9f6;
+    --surface: #ffffff;
+    --surface-2: #f5f3ef;
+    --code-bg: #1c1c1a;
+    --code-ink: #ecebe4;
+    --ink: #171715;
+    --ink-2: #45433e;
+    --muted: #78756d;
+    --line: #e6e3dc;
+    --line-strong: #d5d1c8;
+    --accent: #b4552f;
+    --accent-soft: #f6e8e1;
+    --ok: #2f6b4a; --ok-soft: #e9f3ec;
+    --warn: #8a5a12; --warn-soft: #f9efdb;
+    --bad: #a33a32; --bad-soft: #f9e7e4;
+    --shadow: 0 1px 2px rgba(23,23,21,.05);
+    --radius: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #141412; --surface: #1c1c1a; --surface-2: #242420;
+      --code-bg: #0e0e0d; --code-ink: #e6e4dd;
+      --ink: #f1efe9; --ink-2: #cbc8c0; --muted: #918d85;
+      --line: #2c2c28; --line-strong: #3b3b35;
+      --accent: #dd8259; --accent-soft: #33211a;
+      --ok: #86c9a1; --ok-soft: #16251c;
+      --warn: #e0b062; --warn-soft: #2a2214;
+      --bad: #ef8f86; --bad-soft: #2d1917;
+      --shadow: 0 1px 2px rgba(0,0,0,.5);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 15px/1.6 ui-sans-serif, system-ui, -apple-system, "Apple SD Gothic Neo", "Pretendard", "Segoe UI", sans-serif;
+    letter-spacing: -0.011em; -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 720px; margin: 0 auto; padding: 56px 20px 100px; }
+
+  header { display: flex; align-items: center; gap: 11px; }
+  .mark {
+    width: 26px; height: 26px; border-radius: 7px; background: var(--ink); color: var(--paper);
+    display: grid; place-items: center; font-size: 13px; font-weight: 800; letter-spacing: -0.03em;
+  }
+  h1 { font-size: 20px; margin: 0; letter-spacing: -0.03em; font-weight: 700; }
+  .desc { color: var(--muted); margin: 14px 0 30px; font-size: 14px; max-width: 52ch; }
+
+  .panel {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow);
+  }
+  .field-label {
+    display: block; font-size: 11px; font-weight: 600; color: var(--muted);
+    margin-bottom: 8px; letter-spacing: .1em; text-transform: uppercase;
+  }
+  .control { display: flex; align-items: stretch; }
+  select, input[type=text] {
+    flex: 1 1 auto; min-width: 0; appearance: none;
+    background: var(--surface-2); color: var(--ink);
+    border: 1px solid var(--line); border-right: 0;
+    border-radius: var(--radius) 0 0 var(--radius);
+    padding: 13px 14px; font: inherit; font-size: 14.5px;
+  }
+  select {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='%2378756d' stroke-width='2.2' stroke-linecap='round'><path d='M6 9l6 6 6-6'/></svg>");
+    background-repeat: no-repeat; background-position: right 14px center; padding-right: 38px;
+  }
+  select:focus, input[type=text]:focus { outline: none; border-color: var(--ink-2); }
+  button.cta {
+    flex: 0 0 auto; padding: 0 26px; border: 1px solid var(--ink); border-radius: 0 var(--radius) var(--radius) 0;
+    background: var(--ink); color: var(--paper);
+    font: inherit; font-size: 14.5px; font-weight: 650; cursor: pointer;
+    transition: opacity .15s ease;
+  }
+  button.cta:hover:not(:disabled) { opacity: .86; }
+  button.cta:disabled { opacity: .45; cursor: progress; }
+  .tools { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 12px; flex-wrap: wrap; }
+  .link {
+    background: none; border: 0; padding: 0; cursor: pointer; color: var(--muted);
+    font: inherit; font-size: 12.5px; text-decoration: underline; text-underline-offset: 3px;
+    text-decoration-color: var(--line-strong);
+  }
+  .link:hover { color: var(--ink-2); }
+  .check { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+  .check input { accent-color: var(--ink); width: 14px; height: 14px; margin: 0; }
+  #status { margin-top: 10px; font-size: 12.5px; color: var(--muted); min-height: 18px; }
+  #status.err { color: var(--bad); }
+
+  .verdict {
+    border: 1px solid var(--line); border-left: 3px solid var(--line-strong);
+    background: var(--surface); border-radius: var(--radius);
+    padding: 20px 22px; margin-top: 20px;
+  }
+  .verdict.danger { border-left-color: var(--bad); background: var(--bad-soft); }
+  .verdict.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+  .verdict.ok { border-left-color: var(--ok); background: var(--ok-soft); }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+  }
+  .badge::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+  .danger .badge { color: var(--bad); }
+  .warn .badge { color: var(--warn); }
+  .ok .badge { color: var(--ok); }
+  .verdict h2 { font-size: 20px; line-height: 1.35; margin: 9px 0 6px; letter-spacing: -0.025em; font-weight: 700; }
+  .verdict p { margin: 0; color: var(--ink-2); font-size: 14px; }
+
+  h3 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .12em;
+    color: var(--muted); font-weight: 700; margin: 34px 0 10px;
+  }
+
+  details.card {
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--surface); margin-bottom: 8px; overflow: hidden;
+    transition: border-color .15s ease;
+  }
+  details.card[open] { border-color: var(--line-strong); }
+  details.card > summary {
+    list-style: none; cursor: pointer; padding: 15px 18px;
+    display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: start;
+  }
+  details.card > summary::-webkit-details-marker { display: none; }
+  .lead { grid-column: 1; }
+  .num {
+    display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%;
+    background: var(--accent-soft); color: var(--accent); font-size: 11.5px; font-weight: 700;
+  }
+  .head { grid-column: 2; min-width: 0; }
+  .t { font-weight: 650; font-size: 15px; letter-spacing: -0.02em; line-height: 1.45; }
+  .w {
+    color: var(--muted); font-size: 12px; font-family: ui-monospace, SFMono-Regular, monospace;
+    margin-top: 4px; word-break: break-all;
+  }
+  .chev {
+    grid-column: 3; width: 18px; height: 18px; margin-top: 2px; flex: 0 0 auto;
+    border-radius: 50%; display: grid; place-items: center;
+    color: var(--muted); font-size: 14px; line-height: 1;
+    transition: transform .18s ease;
+  }
+  details.card[open] .chev { transform: rotate(90deg); }
+  .body { padding: 0 18px 18px; }
+  .body .plain { margin: 0 0 16px 30px; font-size: 14px; color: var(--ink-2); }
+  .sec { margin-left: 30px; margin-top: 18px; }
+  .sec h4 {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .1em;
+    color: var(--muted); font-weight: 700; margin: 0 0 8px;
+  }
+  .sec p { margin: 0; font-size: 13.8px; color: var(--ink-2); }
+  ol.steps { margin: 0; padding: 0; list-style: none; counter-reset: s; }
+  ol.steps > li { position: relative; padding-left: 26px; counter-increment: s; margin-bottom: 16px; }
+  ol.steps > li::before {
+    content: counter(s); position: absolute; left: 0; top: 1px;
+    width: 17px; height: 17px; border-radius: 50%;
+    background: var(--surface-2); border: 1px solid var(--line);
+    color: var(--muted); font-size: 10.5px; font-weight: 700;
+    display: grid; place-items: center;
+  }
+  ol.steps > li > p { margin: 0 0 8px; font-size: 13.8px; color: var(--ink-2); }
+  .file {
+    display: inline-block; font-family: ui-monospace, SFMono-Regular, monospace;
+    font-size: 11.5px; color: var(--accent); background: var(--accent-soft);
+    padding: 2px 7px; border-radius: 5px; margin-bottom: 7px;
+  }
+  .code-wrap { position: relative; }
+  .code-wrap pre {
+    margin: 0; background: var(--code-bg); color: var(--code-ink);
+    border-radius: 8px; padding: 12px 14px; overflow: auto;
+    font: 11.5px/1.7 ui-monospace, SFMono-Regular, monospace;
+  }
+  .copy {
+    position: absolute; top: 7px; right: 7px;
+    background: rgba(255,255,255,.1); color: var(--code-ink);
+    border: 0; border-radius: 5px; padding: 3px 8px;
+    font-size: 10.5px; cursor: pointer; opacity: 0; transition: opacity .15s ease;
+  }
+  .code-wrap:hover .copy, .copy:focus { opacity: 1; }
+  .check-line {
+    margin-left: 30px; margin-top: 18px; padding-top: 14px;
+    border-top: 1px solid var(--line); font-size: 13px; color: var(--muted);
+  }
+  .check-line b { color: var(--ink-2); font-weight: 650; }
+  .paths { margin: 12px 0 0; padding: 0; list-style: none; }
+  .paths li {
+    font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11.5px;
+    color: var(--muted); padding: 4px 0; border-top: 1px dashed var(--line);
+  }
+
+  .tag {
+    display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: .06em;
+    padding: 3px 7px; border-radius: 5px; margin-right: 7px; vertical-align: 2px;
+  }
+  .tag.S1 { background: var(--bad-soft); color: var(--bad); }
+  .tag.S2 { background: var(--warn-soft); color: var(--warn); }
+  .tag.S3 { background: var(--surface-2); color: var(--muted); }
+  .empty { color: var(--muted); font-size: 13.5px; margin: 0; }
+  .note-card {
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--surface); padding: 16px 18px; font-size: 13.8px; color: var(--ink-2);
+  }
+  .note-card div + div { margin-top: 6px; }
+
+  details.raw { margin-top: 34px; border-top: 1px solid var(--line); padding-top: 16px; }
+  details.raw > summary {
+    cursor: pointer; color: var(--muted); font-size: 12.5px;
+    list-style: none; display: flex; align-items: center; gap: 6px;
+  }
+  details.raw > summary::-webkit-details-marker { display: none; }
+  details.raw > summary::before { content: "›"; font-size: 15px; color: var(--line-strong); }
+  details.raw[open] > summary::before { content: "⌄"; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 14px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+  code { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11.5px; background: var(--surface-2); padding: 2px 5px; border-radius: 4px; }
+  pre.rawjson {
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px; overflow: auto; font-size: 11px; max-height: 380px;
+  }
+  @media (max-width: 560px) {
+    main { padding-top: 36px; }
+    .control { flex-direction: column; }
+    select, input[type=text] { border-right: 1px solid var(--line); border-radius: var(--radius); }
+    button.cta { height: 46px; border-radius: var(--radius); margin-top: 8px; }
+    .body .plain, .sec, .check-line { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="mark">꼼</div>
+    <h1>꼼꼼</h1>
+  </header>
+  <p class="desc">
+    Next.js 앱을 배포하기 전에 API 인증, 비밀키 노출, 페이지 무게를 검사합니다.
+    결과는 고칠 것만 골라서, 쉬운 말로 보여줍니다.
+  </p>
+
+  <div class="panel">
+    <label class="field-label" for="project">검사할 프로젝트</label>
+    <div class="control">
+      <select id="project"></select>
+      <input id="dir" type="text" spellcheck="false" style="display:none" placeholder="/path/to/your-next-app" />
+      <button class="cta" id="run">검사 시작</button>
+    </div>
+    <div class="tools">
+      <button class="link" id="toggleDir">목록에 없어요 · 경로 직접 입력</button>
+      <label class="check"><input type="checkbox" id="build" /> 빌드까지 검사 (느림)</label>
+    </div>
+    <div id="status"></div>
+  </div>
+
+  <div id="out"></div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const projectSel = $('project');
+const dirInput = $('dir');
+let manual = false;
+
+async function loadProjects() {
+  try {
+    const r = await fetch('/api/projects');
+    const { projects } = await r.json();
+    projectSel.innerHTML = projects.length
+      ? projects.map((p) => `<option value="${p}">${p.replace(/^\/home\/[^/]+\//, '~/')}</option>`).join('')
+      : '<option value="">Next.js 프로젝트를 찾지 못했습니다</option>';
+    const saved = localStorage.getItem('kkomkkom.dir');
+    if (saved && projects.includes(saved)) projectSel.value = saved;
+    else if (saved) { projectSel.insertAdjacentHTML('afterbegin', `<option value="${saved}">${saved}</option>`); projectSel.value = saved; }
+  } catch {
+    projectSel.innerHTML = '<option value="">프로젝트 목록을 불러오지 못했습니다</option>';
+  }
+}
+
+$('toggleDir').addEventListener('click', () => {
+  manual = !manual;
+  projectSel.style.display = manual ? 'none' : '';
+  dirInput.style.display = manual ? '' : 'none';
+  $('toggleDir').textContent = manual ? '목록에서 고르기' : '목록에 없어요 · 경로 직접 입력';
+  (manual ? dirInput : projectSel).focus();
+});
+
+$('run').addEventListener('click', async () => {
+  const dir = manual ? dirInput.value.trim() : projectSel.value;
+  const mode = $('build').checked ? 'full' : 'fast';
+  if (!dir) return;
+  localStorage.setItem('kkomkkom.dir', dir);
+
+  const btn = $('run');
+  const status = $('status');
+  btn.disabled = true;
+  status.className = '';
+  status.textContent = mode === 'full' ? '빌드까지 검사하는 중… 1~3분 걸립니다.' : '검사 중…';
+  $('out').innerHTML = '';
+
+  try {
+    const res = await fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ dir, mode }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '검사에 실패했습니다.');
+    status.textContent = `${(data.ms / 1000).toFixed(1)}초 걸렸습니다.`;
+    render(data);
+  } catch (e) {
+    status.className = 'err';
+    status.textContent = e.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function codeBlock(code) {
+  return `<div class="code-wrap"><pre><code>${esc(code)}</code></pre><button class="copy" data-code="${esc(code)}">복사</button></div>`;
+}
+
+function card(f, opts = {}) {
+  const { index = null, open = false, tag = null } = opts;
+  const lead = index !== null
+    ? `<span class="num">${index}</span>`
+    : `<span>${tag ? `<span class="tag ${tag}">${tag}</span>` : ''}</span>`;
+  const paths = (f.paths && f.paths.length > 1)
+    ? `<ul class="paths">${f.paths.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>`
+    : '';
+  return `<details class="card"${open ? ' open' : ''}>
+    <summary>
+      <span class="lead">${lead}</span>
+      <span class="head">
+        <span class="t">${esc(f.title)}</span>
+        ${(f.where || f.path) ? `<span class="w">${esc(f.where || f.path)}</span>` : ''}
+      </span>
+      <span class="chev">›</span>
+    </summary>
+    <div class="body">
+      <p class="plain">${esc(f.plain)}</p>
+      <div class="sec"><h4>왜 위험한가</h4><p>${esc(f.why)}</p></div>
+      <div class="sec">
+        <h4>고치는 순서</h4>
+        <ol class="steps">
+          ${f.steps.map((s) => `<li>
+            <p>${esc(s.do)}</p>
+            ${s.file ? `<div class="file">${esc(s.file)}</div>` : ''}
+            ${s.code ? codeBlock(s.code) : ''}
+          </li>`).join('')}
+        </ol>
+      </div>
+      ${paths}
+      <div class="check-line"><b>확인</b> · ${esc(f.check)}</div>
+    </div>
+  </details>`;
+}
+
+function render(data) {
+  const ui = data.ui;
+  const out = $('out');
+  if (!ui) {
+    out.innerHTML = `<h3>검사 결과를 읽지 못했습니다</h3><pre class="rawjson">${esc(data.stderr || data.stdout || '')}</pre>`;
+    return;
+  }
+
+  const v = ui.verdict;
+  let html = `<div class="verdict ${v.level}">
+    <div class="badge">${esc(v.badge)}</div>
+    <h2>${esc(v.title)}</h2>
+    <p>${esc(v.body)}</p>
+  </div>`;
+
+  html += '<h3>지금 할 일</h3>';
+  html += ui.next.length
+    ? ui.next.map((n, i) => card(n, { index: i + 1, open: i === 0 })).join('')
+    : '<p class="empty">고칠 것이 없습니다.</p>';
+
+  const u = ui.unknown;
+  if (u.routes.length || u.skipped.length || u.incomplete || u.buildFailed) {
+    html += '<h3>확인 못 한 것</h3><div class="note-card">';
+    if (u.buildFailed) html += '<div>빌드가 실패해서 페이지 무게를 재지 못했습니다.</div>';
+    if (u.routes.length) html += `<div>로그인 여부를 알 수 없는 주소 ${u.routes.length}개: ${u.routes.slice(0, 6).map((p) => `<code>${esc(p)}</code>`).join(' ')}</div>`;
+    if (u.skipped.length) html += `<div>검사에서 건너뛴 항목 ${u.skipped.length}개. 전부 확인한 것은 아닙니다.</div>`;
+    if (u.incomplete) html += '<div>검사 범위가 일부 비어 있습니다. 위 목록을 직접 열어 확인하세요.</div>';
+    html += '</div>';
+  }
+
+  if (ui.findings.length) {
+    html += '<h3>발견된 항목 전체</h3>';
+    html += ui.findings.map((f) => card(f, { tag: f.level })).join('');
+  }
+
+  const routes = data.json?.diff?.routes || [];
+  const checks = data.json?.coverage?.checks || [];
+  html += '<details class="raw"><summary>자세히 보기 (라우트 · 검사 범위 · 원본 JSON)</summary>';
+  if (routes.length) {
+    html += '<table><thead><tr><th>주소</th><th>메서드</th><th>로그인</th><th>설명</th></tr></thead><tbody>';
+    html += routes.map((r) => `<tr><td><code>${esc(r.path)}</code></td><td>${esc(r.method || '')}</td><td>${esc(r.auth || '-')}</td><td>${esc(r.detail || '')}</td></tr>`).join('');
+    html += '</tbody></table>';
+  }
+  if (checks.length) {
+    html += '<table><thead><tr><th>규칙</th><th>대상</th><th>상태</th><th>사유</th></tr></thead><tbody>';
+    html += checks.slice(0, 60).map((c) => `<tr><td>${esc(c.rule)}</td><td><code>${esc(c.path)}</code></td><td>${esc(c.status)}</td><td>${esc(c.reason || '')}</td></tr>`).join('');
+    html += '</tbody></table>';
+  }
+  html += `<pre class="rawjson">${esc(JSON.stringify(data.json, null, 2))}</pre></details>`;
+
+  out.innerHTML = html;
+}
+
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.copy');
+  if (!btn) return;
+  const code = btn.getAttribute('data-code') ?? '';
+  navigator.clipboard.writeText(code).then(() => {
+    const old = btn.textContent;
+    btn.textContent = '복사됨';
+    setTimeout(() => { btn.textContent = old; }, 1200);
+  });
+});
+
+loadProjects();
+</script>
+</body>
+</html>
