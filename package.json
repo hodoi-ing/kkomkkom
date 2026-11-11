@@ -5,10 +5,12 @@
   "type": "module",
   "bin": {
     "kkomkkom": "dist/cli.js",
-    "kkomkkom-mcp": "dist/mcp.js"
+    "kkomkkom-mcp": "dist/mcp.js",
+    "kkomkkom-web": "web/server.mjs"
   },
   "files": [
-    "dist"
+    "dist",
+    "web"
   ],
   "engines": {
     "node": ">=20"

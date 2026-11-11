@@ -82,6 +82,13 @@
   }
   button.cta:hover:not(:disabled) { opacity: .86; }
   button.cta:disabled { opacity: .45; cursor: progress; }
+  button.ghost {
+    flex: 0 0 auto; margin-left: 8px; padding: 0 16px;
+    border: 1px solid var(--line-strong); border-radius: var(--radius);
+    background: transparent; color: var(--ink-2);
+    font: inherit; font-size: 13.5px; cursor: pointer;
+  }
+  button.ghost:hover { border-color: var(--ink-2); }
   .tools { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 12px; flex-wrap: wrap; }
   .link {
     background: none; border: 0; padding: 0; cursor: pointer; color: var(--muted);
@@ -250,12 +257,13 @@
       <select id="project"></select>
       <input id="dir" type="text" spellcheck="false" style="display:none" placeholder="/path/to/your-next-app" />
       <button class="cta" id="run">검사 시작</button>
+      <button class="ghost" id="cancel" hidden>취소</button>
     </div>
     <div class="tools">
       <button class="link" id="toggleDir">목록에 없어요 · 경로 직접 입력</button>
       <label class="check"><input type="checkbox" id="build" /> 빌드까지 검사 (느림)</label>
     </div>
-    <div id="status"></div>
+    <div id="status" role="status" aria-live="polite"></div>
   </div>
 
   <div id="out"></div>
@@ -297,8 +305,10 @@ $('run').addEventListener('click', async () => {
   localStorage.setItem('kkomkkom.dir', dir);
 
   const btn = $('run');
+  const cancelBtn = $('cancel');
   const status = $('status');
   btn.disabled = true;
+  cancelBtn.hidden = false;
   status.className = '';
   status.textContent = mode === 'full' ? '빌드까지 검사하는 중… 1~3분 걸립니다.' : '검사 중…';
   $('out').innerHTML = '';
@@ -318,7 +328,19 @@ $('run').addEventListener('click', async () => {
     status.textContent = e.message;
   } finally {
     btn.disabled = false;
+    cancelBtn.hidden = true;
   }
+});
+
+$('cancel').addEventListener('click', async () => {
+  const btn = $('cancel');
+  btn.disabled = true;
+  try {
+    await fetch('/api/cancel', { method: 'POST' });
+  } catch {
+    /* 이미 끝난 경우 무시한다 */
+  }
+  btn.disabled = false;
 });
 
 function esc(s) {
@@ -369,7 +391,14 @@ function render(data) {
   const ui = data.ui;
   const out = $('out');
   if (!ui) {
-    out.innerHTML = `<h3>검사 결과를 읽지 못했습니다</h3><pre class="rawjson">${esc(data.stderr || data.stdout || '')}</pre>`;
+    const f = data.failure || { title: '검사 결과를 읽지 못했습니다.', hint: '다시 실행해 보세요.' };
+    out.innerHTML = `<div class="verdict warn">
+      <div class="badge">검사 중단</div>
+      <h2>${esc(f.title)}</h2>
+      <p>${esc(f.hint)}</p>
+    </div>` + (data.stderr
+      ? `<details class="raw"><summary>자세한 출력</summary><pre class="rawjson">${esc(data.stderr)}</pre></details>`
+      : '');
     return;
   }
 

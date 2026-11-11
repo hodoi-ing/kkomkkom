@@ -167,11 +167,17 @@ const RULES = {
 
 const UNKNOWN_REASONS = new Set(['sample-missing', 'fast', 'source-scan']);
 
+// CLI의 ExtraSeverity는 critical | warning | info 다.
+const SEVERITY_LEVEL = { critical: 'S1', warning: 'S2', info: 'S3' };
+
+export function knownRuleIds() {
+  return Object.keys(RULES);
+}
+
 function levelOf(item) {
-  const id = String(item.id || '');
-  const base = id.split(':')[0];
+  const base = String(item.id || '').split(':')[0];
   if (RULES[base]) return RULES[base].level;
-  return item.severity === 'error' ? 'S1' : item.severity === 'warning' ? 'S2' : 'S3';
+  return SEVERITY_LEVEL[item.severity] || 'S3';
 }
 
 function ruleOf(item) {
@@ -198,6 +204,9 @@ function describe(item) {
 
 export function analyze(json, meta = {}) {
   const findings = (json.extra || []).map(describe);
+  const unmapped = [...new Set((json.extra || [])
+    .map((x) => String(x.id || '').split(':')[0])
+    .filter((base) => base && !RULES[base]))];
   const routes = json.diff?.routes || [];
   const checks = json.coverage?.checks || [];
 
@@ -276,6 +285,7 @@ export function analyze(json, meta = {}) {
       buildFailed: Boolean(json.buildFailed),
     },
     counts: { s1: s1.length, s2: s2.length, s3: s3.length, total: findings.length },
+    unmapped,
     meta,
   };
 }
