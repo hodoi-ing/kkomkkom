@@ -429,6 +429,10 @@ function render(data) {
     html += ui.findings.map((f) => card(f, { tag: f.level })).join('');
   }
 
+  if (ui.unmapped && ui.unmapped.length) {
+    html += `<p class="empty" style="margin-top:8px">설명이 아직 없는 검사 규칙 ${ui.unmapped.length}개(${ui.unmapped.slice(0, 4).map((x) => `<code>${esc(x)}</code>`).join(' ')}). 결과는 표시되지만 안내 문구는 일반형입니다.</p>`;
+  }
+
   const routes = data.json?.diff?.routes || [];
   const checks = data.json?.coverage?.checks || [];
   html += '<details class="raw"><summary>자세히 보기 (라우트 · 검사 범위 · 원본 JSON)</summary>';

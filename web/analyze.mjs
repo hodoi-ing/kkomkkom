@@ -195,7 +195,7 @@ function describe(item) {
     plain: rule?.plain || item.message || '',
     why: rule?.why || item.message || '이 항목은 자동으로 판정하지 못했습니다. 직접 확인해 주세요.',
     steps: rule?.steps || [
-      { do: '해당 파일을 열어 실제 동작을 확인하세요.', file: path || undefined },
+      { do: '이 항목은 아직 화면에 설명이 없습니다. 원본 메시지와 해당 경로를 직접 확인하세요.' },
     ],
     check: rule?.check || '수정한 뒤 다시 검사하세요.',
     raw: item.message || '',

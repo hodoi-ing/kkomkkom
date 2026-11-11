@@ -23,6 +23,7 @@ const MODES = {
 
 // 한 번에 한 검사만 돌린다. 같은 프로젝트에 dev 서버·빌드가 겹치면 포트가 충돌한다.
 let current = null;
+let busy = false;
 
 function runCli(cwd, args) {
   return new Promise((done) => {
@@ -176,45 +177,50 @@ const server = createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/scan') {
-    if (current) {
+    if (busy) {
       return send(res, 409, JSON.stringify({ error: '이미 검사가 실행 중입니다. 끝나거나 취소한 뒤 다시 시도하세요.' }));
     }
-
-    let payload;
+    // 잠금은 첫 await 전에 잡는다. 두 요청이 동시에 통과하면 같은 프로젝트에서 충돌한다.
+    busy = true;
     try {
-      payload = JSON.parse(await readBody(req));
-    } catch {
-      return send(res, 400, JSON.stringify({ error: '요청 본문이 올바른 JSON이 아닙니다.' }));
-    }
+      let payload;
+      try {
+        payload = JSON.parse(await readBody(req));
+      } catch {
+        return send(res, 400, JSON.stringify({ error: '요청 본문이 올바른 JSON이 아닙니다.' }));
+      }
 
-    const { dir, mode } = payload ?? {};
-    const args = MODES[mode];
-    if (!args) return send(res, 400, JSON.stringify({ error: '알 수 없는 검사 모드입니다.' }));
-    if (typeof dir !== 'string' || !dir.trim()) {
-      return send(res, 400, JSON.stringify({ error: '프로젝트 경로를 입력하세요.' }));
-    }
+      const { dir, mode } = payload ?? {};
+      const args = MODES[mode];
+      if (!args) return send(res, 400, JSON.stringify({ error: '알 수 없는 검사 모드입니다.' }));
+      if (typeof dir !== 'string' || !dir.trim()) {
+        return send(res, 400, JSON.stringify({ error: '프로젝트 경로를 입력하세요.' }));
+      }
 
-    const target = await resolveTarget(dir.trim());
-    if (target.error) return send(res, 400, JSON.stringify({ error: target.error }));
+      const target = await resolveTarget(dir.trim());
+      if (target.error) return send(res, 400, JSON.stringify({ error: target.error }));
 
-    const result = await runCli(target.dir, args);
-    let json = null;
-    try {
-      json = JSON.parse(result.out);
-    } catch {
-      json = null;
+      const result = await runCli(target.dir, args);
+      let json = null;
+      try {
+        json = JSON.parse(result.out);
+      } catch {
+        json = null;
+      }
+      return send(res, 200, JSON.stringify({
+        dir: target.dir,
+        mode,
+        exitCode: result.code,
+        ms: result.ms,
+        json,
+        ui: json ? analyze(json, { dir: target.dir, mode, ms: result.ms }) : null,
+        failure: json ? null : failureReason(result),
+        stderr: result.err.slice(0, 4000),
+        stdout: json ? undefined : result.out.slice(0, 4000),
+      }));
+    } finally {
+      busy = false;
     }
-    return send(res, 200, JSON.stringify({
-      dir: target.dir,
-      mode,
-      exitCode: result.code,
-      ms: result.ms,
-      json,
-      ui: json ? analyze(json, { dir: target.dir, mode, ms: result.ms }) : null,
-      failure: json ? null : failureReason(result),
-      stderr: result.err.slice(0, 4000),
-      stdout: json ? undefined : result.out.slice(0, 4000),
-    }));
   }
 
   send(res, 404, JSON.stringify({ error: 'not found' }));
